@@ -192,6 +192,36 @@ target selection, slider signals, programmatic updates, native key handling,
 invalid config and restoration. Horizontal mixer layouts, live source rename
 and theme changes under knob sizing need further real runtime testing.
 
+## Integrated knob meters
+
+Knob-enabled mixer channels now default to a combined rotary control rather
+than a knob alongside a tall native meter. The inner ring shows gain, the
+outer ring shows actual peak dB from the source's libobs volmeter. Metering
+continues even with decorative Motion disabled. Native nominal, warning and
+error colors are reused, with -60 to 0 dB scale, -20/-9 dB thresholds, a
+one-second peak marker, clip flash and 30 dB/s release.
+
+![Integrated peak rings on the actual OBS mixer](docs/screenshots/knob-meter-active.png)
+
+The native meter is hidden only when paired with the supported knob and
+source can be resolved. It is restored if the binding is unavailable or
+the effect is disabled. Disable **Integrate peak meter into knob** in
+Tools → UI Augment Inspector → Gradients… to retain the full native meter.
+The corresponding JSON key is `gradient.knobMeters` (default true).
+The compact control requests a 68-pixel minimum and 76-pixel maximum height
+subject to native constraints. The OBS setting for sample/true peak is used.
+
+This is a combined maximum-channel peak display, not a reproduction of the
+full multichannel OBS meter, magnitude and input-peak indicators. Use the
+native meter for detailed stereo/monitoring work, particularly when checking
+levels against the scale or custom threshold settings. The ring does not
+modify source gain; the existing inner gain control continues to operate the
+original slider. Real vertical mixer verification: one selected knob
+replaced only its paired meter, mute cleared the outer ring without moving
+gain, both knobs could be selected, and dragging changed the real dB label
+from -1.9 to 0.0 dB. Live disable restored the original meter.
+Horizontal layout and rebuilding/renaming tracks remain unverified.
+
 ## Collapsible panels
 
 Middle-click a visible dock's title bar to collapse it to its header. Middle-click

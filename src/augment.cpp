@@ -508,6 +508,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     return true;
 }
 }
+void Controller::setMeterProvider(MeterProvider provider) {state->gradients.setMeterProvider(std::move(provider));}
 void Controller::setAudioProvider(AudioProvider provider,AudioReset reset) {
     state->gradients.setAudioProvider(std::move(provider),std::move(reset));
 }

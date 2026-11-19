@@ -5,6 +5,8 @@
 #include <optional>
 class QWidget;
 namespace augment {
+struct MeterReading { float peakDb=-100; bool muted=false; float magnitude=0; };
+using MeterProvider = std::function<std::optional<MeterReading>(const QWidget *)>;
 using AudioProvider = std::function<std::optional<float>(const QWidget *)>;
 using AudioReset = std::function<void()>;
 inline float audioLevelFromDb(float db) {

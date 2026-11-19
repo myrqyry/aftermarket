@@ -41,3 +41,21 @@ and Expand all. Qt panel regression covers width, height, original content,
 gesture, tab guard and close restore. No rule config changes. Remaining:
 animated height transitions, header affordance, collapse persistence if desired,
 more complicated layouts, horizontal sibling behavior and broader platform tests.
+
+## Slice 8 — integrated rotary peak meter (2026-11-19)
+
+Outcome: eliminate the separate tall native meter for knob-enabled sources by
+drawing a separate outer peak ring around the existing rotary gain control.
+Reads max channel peak (dB) and sample/true peak mode via public libobs API,
+uses native nominal/warning/error color properties, -60..0 dB scale,
+-20/-9 thresholds, 1s peak/clip hold and 30 dB/s fall. Independent of decorative
+motion. Default on for knob-enabled channels, opt out via gradient.knobMeters.
+Only paired VolumeMeter in volMeterFrame is hidden and restored; if binding
+fails use native meter. Tests verify fallback, real paint differences, warning
+color, slider value/size preservation and motion independence. Real isolated
+OBS 32.2.0 Colorway verified selected knob + original adjacent channel,
+mute changed 567 pixels in knob region with unchanged -1.9 dB gain, native
+meter restored live, both integrated knobs, drag changed native gain to 0 dB.
+Combined peak is not full independent stereo/magnitude/input peak, fixed
+thresholds; horizontal/rebuild/rename/other versions and performance unverified.
+Earlier named tokens and leak attribution still open.

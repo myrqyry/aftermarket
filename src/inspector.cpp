@@ -139,6 +139,11 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
     auto *knobs=new QCheckBox("Replace mixer faders with knobs",dlg);
     knobs->setObjectName("augment-gradient-knobs");knobs->setChecked(spec.knobs);
     layout->addWidget(knobs);
+    auto *knobMeters=new QCheckBox("Integrate peak meter into knob",dlg);
+    knobMeters->setObjectName("augment-knob-meters");knobMeters->setChecked(spec.knobMeters);
+    knobMeters->setEnabled(spec.knobs);
+    QObject::connect(knobs,&QCheckBox::toggled,knobMeters,&QWidget::setEnabled);
+    layout->addWidget(knobMeters);
     auto *form=new QFormLayout;
     auto *colors=new QLineEdit(dlg);colors->setObjectName("augment-gradient-colors");
     colors->setPlaceholderText("Theme palette (or #hex, #hex, …)");
@@ -172,7 +177,7 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
         next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();
         QJsonArray names;
         for(const auto &name:knobSources->text().split(';'))if(!name.trimmed().isEmpty())names.append(name.trimmed());
-        next["knobs"]=knobs->isChecked();next["knobSources"]=names;
+        next["knobs"]=knobs->isChecked();next["knobSources"]=names;next["knobMeters"]=knobMeters->isChecked();
         next["progress"]=progress->isChecked();next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
         QString error;
         if(controller.setGradientSettings(next,&error))

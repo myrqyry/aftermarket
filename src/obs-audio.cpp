@@ -1,5 +1,7 @@
 #include "obs-audio.h"
 #include <obs.h>
+#include <obs-frontend-api.h>
+#include <util/config-file.h>
 #include <obs-audio-controls.h>
 #include <QAbstractButton>
 #include <QTimer>
@@ -17,14 +19,19 @@ qint64 milliseconds() {
 struct Probe {
     obs_weak_source_t *weak=nullptr;
     obs_volmeter_t *meter=nullptr;
-    std::atomic<float> magnitude{0};
+    std::atomic<float> magnitude{0},peakDb{-100};
+    obs_peak_meter_type peakType=SAMPLE_PEAK_METER;
     std::atomic<qint64> updated{0};
     qint64 requested=0;
     static void callback(void *data,const float db[MAX_AUDIO_CHANNELS],
-                        const float[MAX_AUDIO_CHANNELS],const float[MAX_AUDIO_CHANNELS]) {
+                        const float peaks[MAX_AUDIO_CHANNELS],const float[MAX_AUDIO_CHANNELS]) {
         auto *p=static_cast<Probe*>(data);
         float level=0;
         for(size_t i=0;i<MAX_AUDIO_CHANNELS;++i)level=std::max(level,audioLevelFromDb(db[i]));
+        float peak=-100.f;
+        for(size_t i=0;i<MAX_AUDIO_CHANNELS;++i)
+            if(std::isfinite(peaks[i]))peak=std::max(peak,peaks[i]);
+        p->peakDb.store(peak,std::memory_order_relaxed);
         p->magnitude.store(level,std::memory_order_relaxed);
         p->updated.store(milliseconds(),std::memory_order_release);
     }
@@ -75,6 +82,11 @@ ObsAudio::ObsAudio():state(new State) {
 ObsAudio::~ObsAudio(){clear();}
 void ObsAudio::clear(){state->sweep.stop();state->probes.clear();}
 std::optional<float> ObsAudio::level(const QWidget *widget) {
+    const auto r=sample(widget);
+    if(!r)return {};
+    return r->magnitude;
+}
+std::optional<MeterReading> ObsAudio::sample(const QWidget *widget) {
     const auto name=sourceName(widget);
     if(name.isEmpty())return {};
     const auto utf8=name.toUtf8();
@@ -101,10 +113,15 @@ std::optional<float> ObsAudio::level(const QWidget *widget) {
     auto &probe=*it->second;
     const auto now=milliseconds();
     probe.requested=now;
+    if(auto *config=obs_frontend_get_profile_config()) {
+        const auto type=config_get_uint(config,"Audio","PeakMeterType")==1?TRUE_PEAK_METER:SAMPLE_PEAK_METER;
+        if(probe.peakType!=type){obs_volmeter_set_peak_meter_type(probe.meter,type);probe.peakType=type;}
+    }
     auto *source=obs_weak_source_get_source(probe.weak);
-    const bool active=source&&!obs_source_removed(source)&&!obs_source_muted(source)&&obs_source_audio_active(source);
+    const bool muted=source&&obs_source_muted(source);
+    const bool active=source&&!obs_source_removed(source)&&obs_source_audio_active(source);
     if(source)obs_source_release(source);
-    if(!active||now-probe.updated.load(std::memory_order_acquire)>450)return 0.f;
-    return probe.magnitude.load(std::memory_order_relaxed);
+    if(!active||muted||now-probe.updated.load(std::memory_order_acquire)>450)return MeterReading{-100.f,muted,0.f};
+    return MeterReading{probe.peakDb.load(std::memory_order_relaxed),false,probe.magnitude.load(std::memory_order_relaxed)};
 }
 }

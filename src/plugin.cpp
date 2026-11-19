@@ -30,7 +30,7 @@ static void cleanupUi() {
 static void frontendEvent(enum obs_frontend_event event, void *) {
     if (event==OBS_FRONTEND_EVENT_EXIT) {
         cleanupUi();
-        if(controller)controller->setAudioProvider({});
+        if(controller){controller->setMeterProvider({});controller->setAudioProvider({});}
         audio.reset();
     }
 }
@@ -50,6 +50,7 @@ MODULE_EXPORT bool obs_module_load(void) {
     audio=std::make_unique<augment::ObsAudio>();
     controller->setAudioProvider([](const QWidget *w){return audio?audio->level(w):std::optional<float>{};},
         []{if(audio)audio->clear();});
+    controller->setMeterProvider([](const QWidget *w){return audio?audio->sample(w):std::optional<augment::MeterReading>{};});
     toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
     if (toolsAction) QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if (!inspector) inspector=new augment::Inspector(*controller,

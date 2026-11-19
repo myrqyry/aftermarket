@@ -10,7 +10,7 @@
 class QWidget;
 namespace augment {
 struct GradientSpec {
-    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false, knobs=false;
+    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false, knobs=false, knobMeters=true;
     QStringList knobSources;
     int period=1800;
     QVector<QColor> colors;
@@ -21,6 +21,7 @@ class GradientController final: public QObject {
 public:
     explicit GradientController(QObject *parent=nullptr);
     ~GradientController() override;
+    void setMeterProvider(MeterProvider);
     void setAudioProvider(AudioProvider,AudioReset);
     void configure(const GradientSpec &,bool motion);
 protected:

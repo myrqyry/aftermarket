@@ -23,7 +23,7 @@ bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     if(value.isUndefined()) {out=next;return true;}
     if(!value.isObject())return false;
     const auto o=value.toObject();
-    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs"})
+    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs","knobMeters"})
         if(o.contains(k)&&!o.value(k).isBool())return false;
     next.enabled=o.value("enabled").toBool(false);
     next.sliders=o.value("sliders").toBool(true);
@@ -31,6 +31,7 @@ bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     next.audioReactive=o.value("audioReactive").toBool(false);
     next.meters=o.value("meters").toBool(false);
     next.knobs=o.value("knobs").toBool(false);
+    next.knobMeters=o.value("knobMeters").toBool(true);
     if(o.contains("knobSources")) {
         const auto names=o.value("knobSources");
         if(!names.isArray()||names.toArray().size()>256)return false;
@@ -154,6 +155,61 @@ public:
     int startValue=0;
     int paintedPosition=0,paintedMin=0,paintedMax=0;
     bool paintedInverted=false;
+    QPointer<QWidget> nativeMeter;
+    bool integrated=false;
+    QSize meterMin,meterMax,appliedMeterMin,appliedMeterMax;
+    float peakDb=-60,holdDb=-60;
+    qint64 holdUntil=0,clipUntil=0,previousMeterFrame=-1;
+    bool meterMuted=false;
+    void restoreMeter() {
+        if(!integrated)return;
+        integrated=false;
+        if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
+            s->setProperty("_obsUiAugmentIntegratedMeter",QVariant());
+            if(s->maximumSize()==appliedMeterMax)s->setMaximumSize(meterMax);
+            if(s->minimumSize()==appliedMeterMin)s->setMinimumSize(meterMin);
+            s->updateGeometry();
+        }
+        if(nativeMeter){nativeMeter->show();nativeMeter.clear();}
+        update();
+    }
+    void updateMeter(const std::optional<MeterReading> &reading,qint64 now) {
+        auto *s=qobject_cast<QSlider*>(parentWidget());
+        if(!s||!knob||!spec.knobMeters||!reading) {restoreMeter();return;}
+        if(integrated&&(!nativeMeter||nativeMeter->parentWidget()!=s->parentWidget()))restoreMeter();
+        if(!integrated) {
+            // Scope the replacement to the native meter paired with this slider.
+            auto *frame=s->parentWidget();
+            if(!frame||frame->objectName()!="volMeterFrame")return;
+            for(auto *widget:frame->findChildren<QWidget*>(QString(),Qt::FindDirectChildrenOnly))
+                if(widget->inherits("VolumeMeter")&&!widget->isHidden()){nativeMeter=widget;break;}
+            if(!nativeMeter)return;
+            meterMin=s->minimumSize();meterMax=s->maximumSize();
+            integrated=true;
+            s->setProperty("_obsUiAugmentIntegratedMeter",true);
+            const QSize requested(qMin(68,meterMax.width()),qMin(68,meterMax.height()));
+            s->setMinimumSize(meterMin.expandedTo(requested));
+            s->setMaximumHeight(qMax(s->minimumHeight(),qMin(76,meterMax.height())));
+            appliedMeterMin=s->minimumSize();appliedMeterMax=s->maximumSize();
+            nativeMeter->hide();s->updateGeometry();
+            peakDb=holdDb=-60;holdUntil=clipUntil=0;previousMeterFrame=-1;
+            update();
+        }
+        const float target=reading->muted||!std::isfinite(reading->peakDb)?-60.f:std::clamp(reading->peakDb,-60.f,0.f);
+        const double dt=previousMeterFrame<0?0.:std::clamp((now-previousMeterFrame)/1000.,0.,.25);
+        previousMeterFrame=now;
+        const auto oldPeak=peakDb,oldHold=holdDb;
+        const bool oldMuted=meterMuted;const auto oldClip=clipUntil;
+        meterMuted=reading->muted;
+        peakDb=meterMuted?-60.f:std::max(target,peakDb-float(30*dt));
+        if(meterMuted){holdDb=-60;holdUntil=clipUntil=0;}
+        else {
+            if(target>=holdDb||now>=holdUntil){holdDb=target;holdUntil=now+1000;}
+            if(reading->peakDb>=0)clipUntil=now+1000;
+            else if(now>=clipUntil)clipUntil=0;
+        }
+        if(oldPeak!=peakDb||oldHold!=holdDb||oldMuted!=meterMuted||oldClip!=clipUntil)update();
+    }
     void finishDrag() {
         if(!dragging)return;
         dragging=false;
@@ -171,7 +227,7 @@ public:
             s->setMinimumSize(appliedMinimum);
             appliedMinimum=s->minimumSize();
         } else {
-            finishDrag();knob=false;
+            restoreMeter();finishDrag();knob=false;
             s->setProperty("_obsUiAugmentKnob",QVariant());
             // Do not undo newer constraints written by a theme/layout owner.
             QSize current=s->minimumSize();
@@ -182,7 +238,7 @@ public:
         s->updateGeometry();s->update();update();
     }
     QRectF knobRect() const {
-        const qreal side=qMin(48,qMin(width(),height()))-6;
+        const qreal side=qMin(integrated?68:48,qMin(width(),height()))-6;
         if(side<8)return {};
         return QRectF((width()-side)/2.,(height()-side)/2.,side,side);
     }
@@ -223,7 +279,35 @@ public:
         const auto f=s->invertedAppearance()?1.-fraction:fraction;
         paintedPosition=s->sliderPosition();paintedMin=s->minimum();paintedMax=s->maximum();paintedInverted=s->invertedAppearance();
         p.setOpacity(s->isEnabled()?1.:.48);
-        const QRectF arc=r.adjusted(2,2,-2,-2);
+        if(integrated) {
+            const QRectF meterArc=r.adjusted(2,2,-2,-2);
+            auto color=[&](const char *key,const QColor &fallback){
+                auto value=nativeMeter?nativeMeter->property(key).value<QColor>():QColor{};
+                return value.isValid()?value:fallback;
+            };
+            const auto nominal=color("foregroundNominalColor",pal.color(group,QPalette::Highlight));
+            const auto warning=color("foregroundWarningColor",QColor("#e9b44c"));
+            const auto error=color("foregroundErrorColor",QColor("#e25858"));
+            const auto pos=[](float db){return qBound(0.,(db+60.)/60.,1.);};
+            auto section=[&](double from,double to,QColor c){
+                if(to<=from)return;
+                p.setPen(QPen(c,3.5,Qt::SolidLine,Qt::FlatCap));
+                p.drawArc(meterArc,int((225-270*from)*16),int(-270*(to-from)*16));
+            };
+            section(0,1,pal.color(group,QPalette::Mid));
+            const double level=pos(peakDb);
+            section(0,qMin(level,pos(-20)),nominal);
+            section(pos(-20),qMin(level,pos(-9)),warning);
+            section(pos(-9),level,error);
+            if(clipUntil) section(0,1,error);
+            if(holdDb>-60) {
+                const double mark=pos(holdDb);
+                section(qMax(0.,mark-.016),qMin(1.,mark+.016),
+                    holdDb>=-9?error:holdDb>=-20?warning:nominal);
+            }
+            // The inner arc continues to indicate gain, not signal level.
+        }
+        const QRectF arc=r.adjusted(integrated?10:2,integrated?10:2,integrated?-10:-2,integrated?-10:-2);
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(pal.color(group,QPalette::Mid),3.,Qt::SolidLine,Qt::RoundCap));
         p.drawArc(arc,225*16,-270*16);
@@ -234,7 +318,7 @@ public:
         } else {auto c=pal.color(group,QPalette::Highlight);g.setColorAt(0,c);g.setColorAt(1,c);}
         p.setPen(QPen(QBrush(g),3.5,Qt::SolidLine,Qt::RoundCap));
         if(f>0)p.drawArc(arc,225*16,int(-270*16*f));
-        const auto face=r.adjusted(8,8,-8,-8);
+        const auto face=r.adjusted(integrated?16:8,integrated?16:8,integrated?-16:-8,integrated?-16:-8);
         if(face.isValid()) {
             p.setPen(QPen(pal.color(group,QPalette::Mid),1));
             p.setBrush(pal.color(group,QPalette::Button));p.drawEllipse(face);
@@ -290,6 +374,7 @@ struct GradientController::State {
     struct Meter {QColor base,last;float energy=0;};
     QHash<QWidget*,Meter> meters;
     AudioProvider provider;
+    MeterProvider meterProvider;
     AudioReset reset;
     qint64 lastFrame=0;
     QTimer timer;
@@ -322,6 +407,11 @@ GradientController::~GradientController() {
         if(auto layer=state->layers.take(w)){layer->setKnob(false);delete layer.data();}
     }
 }
+void GradientController::setMeterProvider(MeterProvider provider) {
+    state->meterProvider=std::move(provider);
+    for(auto *w:state->layers.keys())sync(w,true);
+    refreshClock();
+}
 void GradientController::setAudioProvider(AudioProvider provider,AudioReset reset) {
     if(state->reset)state->reset();
     state->provider=std::move(provider);state->reset=std::move(reset);
@@ -334,9 +424,9 @@ void GradientController::setAudioProvider(AudioProvider provider,AudioReset rese
 void GradientController::configure(const GradientSpec &spec,bool motion) {
     const auto &old=state->spec;
     if(old.enabled==spec.enabled&&old.sliders==spec.sliders&&old.progress==spec.progress&&
-       old.period==spec.period&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobSources==spec.knobSources&&state->motion==motion)return;
+       old.period==spec.period&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
     state->spec=spec;state->motion=motion;
-    if(!motion||!spec.enabled||!spec.audioReactive)if(state->reset)state->reset();
+    if((!motion||!spec.enabled||!spec.audioReactive)&&!(spec.knobs&&spec.knobMeters))if(state->reset)state->reset();
     for(auto *w:state->meters.keys())if(!motion||!eligibleMeter(w,spec))removeMeter(w);
     if(motion&&spec.enabled&&spec.audioReactive&&spec.meters&&state->provider)
         for(auto *w:QApplication::allWidgets())if(eligibleMeter(w,spec))reconcileMeter(w);
@@ -372,8 +462,13 @@ void GradientController::reconcile(QWidget *w) {
 void GradientController::sync(QWidget *w,bool frame) {
     auto l=state->layers.value(w);
     if(!l)return;
+    if(!state->meterProvider||!l->knob||!state->spec.knobMeters)l->restoreMeter();
     const auto fill=l->knob?w->rect():gradientFill(w);
     if(!w->isVisible()||!fill.isValid()) {if(l->isVisible())l->hide();return;}
+    if(frame||!state->meterProvider||!l->knob||!state->spec.knobMeters) {
+        const auto reading=l->knob&&state->spec.knobMeters&&state->meterProvider?state->meterProvider(w):std::optional<MeterReading>{};
+        l->updateMeter(reading,state->elapsed.elapsed());
+    }
     const bool changed=l->geometry()!=fill;
     if(changed)l->setGeometry(fill);
     const bool newlyVisible=!l->isVisible();
@@ -432,6 +527,8 @@ void GradientController::refreshClock() {
     bool active=false;
     if(state->spec.enabled&&state->motion)
         for(const auto &layer:state->layers)if(layer&&layer->isVisible()){active=true;break;}
+    if(!active&&state->spec.knobs&&state->spec.knobMeters&&state->meterProvider)
+        for(const auto &layer:state->layers)if(layer&&layer->knob&&layer->isVisible()){active=true;break;}
     if(!active&&state->motion&&state->spec.enabled&&state->spec.audioReactive)
         for(auto *w:state->meters.keys())if(w->isVisible()){active=true;break;}
     if(active&&!state->timer.isActive()){state->lastFrame=state->elapsed.elapsed();state->timer.start();}

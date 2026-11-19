@@ -8,6 +8,7 @@ class ObsAudio final : public QObject {
 public:
     ObsAudio();
     ~ObsAudio() override;
+    std::optional<MeterReading> sample(const QWidget *);
     std::optional<float> level(const QWidget *);
     void clear();
 private:

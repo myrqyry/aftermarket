@@ -19,6 +19,7 @@ public:
     explicit Controller(QString rulesFile, QObject *parent = nullptr, Logger logger = {});
     ~Controller() override;
     // Returns false without overwriting an invalid or unreadable file.
+    void setMeterProvider(MeterProvider);
     void setAudioProvider(AudioProvider provider,AudioReset reset={});
     QJsonObject gradientSettings() const;
     bool setGradientSettings(const QJsonObject &, QString *error = nullptr);

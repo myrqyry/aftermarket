@@ -128,6 +128,8 @@ int main(int argc,char **argv) {
         auto *knobs=dialog->findChild<QCheckBox*>("augment-gradient-knobs");
         auto *knobSources=dialog->findChild<QLineEdit*>("augment-knob-sources");
         REQUIRE(knobs&&knobSources);knobs->setChecked(true);knobSources->setText("Mic; Music");
+        auto *knobMeters=dialog->findChild<QCheckBox*>("augment-knob-meters");
+        REQUIRE(knobMeters&&knobMeters->isChecked());knobMeters->setChecked(false);
         reactive->setChecked(true);meters->setChecked(true);
         enable->setChecked(true);colors->setText("#31748f, #c4a7e7, #9ccfd8");period->setValue(2300);
         apply->click();
@@ -137,6 +139,7 @@ int main(int argc,char **argv) {
         REQUIRE(c.gradientSettings().value("audioReactive").toBool());
         REQUIRE(c.gradientSettings().value("meters").toBool());
         REQUIRE(c.gradientSettings().value("knobs").toBool());
+        REQUIRE(c.gradientSettings().contains("knobMeters")&&!c.gradientSettings().value("knobMeters").toBool());
         REQUIRE(c.gradientSettings().value("knobSources").toArray()==QJsonArray({"Mic","Music"}));
         colors->setText("invalid");apply->click();
         REQUIRE(c.gradientSettings().value("colors").toArray().size()==3);
