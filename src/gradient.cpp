@@ -16,6 +16,8 @@
 #include <QVariant>
 #include <QAbstractButton>
 #include <QMouseEvent>
+#include <QCursor>
+#include <QtMath>
 #include <cmath>
 namespace augment {
 bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
@@ -90,32 +92,114 @@ bool eligible(const QWidget *w,const GradientSpec &spec) {
     return knobTarget(w,spec)||(spec.enabled&&((spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
 }
 }
+namespace {
+QStyleOptionSlider sliderOption(const QSlider *s) {
+    QStyleOptionSlider opt;opt.initFrom(s);
+    opt.orientation=s->orientation();opt.minimum=s->minimum();opt.maximum=s->maximum();
+    opt.sliderPosition=s->sliderPosition();opt.sliderValue=s->value();
+    opt.singleStep=s->singleStep();opt.pageStep=s->pageStep();opt.tickPosition=s->tickPosition();opt.tickInterval=s->tickInterval();
+    const bool h=horizontal(s);
+    if(h)opt.state|=QStyle::State_Horizontal;else opt.state&=~QStyle::State_Horizontal;
+    opt.upsideDown=h?(s->invertedAppearance()!=(s->layoutDirection()==Qt::RightToLeft)):!s->invertedAppearance();
+    opt.direction=Qt::LeftToRight;
+    opt.subControls=QStyle::SC_All;
+    if(s->isSliderDown()) {opt.state|=QStyle::State_Sunken;opt.activeSubControls=QStyle::SC_SliderHandle;}
+    else if(s->underMouse())opt.activeSubControls=s->style()->hitTestComplexControl(QStyle::CC_Slider,&opt,s->mapFromGlobal(QCursor::pos()),s);
+    return opt;
+}
+struct SliderTrack {
+    QRect groove,handle,fill;
+};
+struct ThumbPage {
+    QPainterPath exposed;
+    QImage edge;
+};
+ThumbPage exposedThumbPage(const QSlider *s,const QStyleOptionSlider &opt,const QRect &patch,const QRect &handle) {
+    ThumbPage page;
+    if(!patch.isValid())return page;
+    const qreal dpr=s->devicePixelRatioF();
+    const QSize size(qCeil(patch.width()*dpr),qCeil(patch.height()*dpr));
+    auto render=[&](const QStyleOptionSlider &o){
+        QImage image(size,QImage::Format_ARGB32_Premultiplied);
+        image.setDevicePixelRatio(dpr);image.fill(Qt::transparent);
+        QPainter painter(&image);painter.translate(-patch.topLeft());
+        s->style()->drawComplexControl(QStyle::CC_Slider,&o,&painter,s);
+        return image;
+    };
+    // The stylesheet backend draws sub/add pages even for SC_SliderHandle.
+    // Compare the current native rendering to the same page with the handle
+    // moved beyond this patch, preserving native handle pixels (including AA).
+    auto reference=opt;
+    reference.sliderPosition=reference.sliderValue=opt.maximum;
+    auto far=s->style()->subControlRect(QStyle::CC_Slider,&reference,QStyle::SC_SliderHandle,s);
+    if(far.intersects(patch)) {
+        const bool h=opt.orientation==Qt::Horizontal;
+        const int extra=2*(h?handle.width():handle.height())+4;
+        if(h) {
+            if(opt.upsideDown)reference.rect.adjust(-extra,0,0,0);
+            else reference.rect.adjust(0,0,extra,0);
+        } else {
+            if(opt.upsideDown)reference.rect.adjust(0,-extra,0,0);
+            else reference.rect.adjust(0,0,0,extra);
+        }
+        far=s->style()->subControlRect(QStyle::CC_Slider,&reference,QStyle::SC_SliderHandle,s);
+    }
+    if(far.intersects(patch))return page; // safe fallback: protect entire handle
+    const auto native=render(opt),base=render(reference);
+    page.edge=QImage(size,QImage::Format_ARGB32_Premultiplied);
+    page.edge.setDevicePixelRatio(dpr);page.edge.fill(Qt::transparent);
+    const QPoint center(qBound(0,qFloor((handle.center().x()-patch.x()+.5)*dpr),size.width()-1),
+                        qBound(0,qFloor((handle.center().y()-patch.y()+.5)*dpr),size.height()-1));
+    const QColor face=native.pixelColor(center);
+    // A solid native handle's antialias pixels are a mixture of its face
+    // and the old page. Recover coverage only when the observed RGB fits
+    // that blend. More complex/shaded handles keep their original pixels.
+    auto coverage=[&](QRgb a,QRgb b)->int {
+        if(qAlpha(a)!=255||qAlpha(b)!=255||face.alpha()!=255)return -1;
+        const double dr=face.red()-qRed(b),dg=face.green()-qGreen(b),db=face.blue()-qBlue(b);
+        const double norm=dr*dr+dg*dg+db*db;
+        if(norm<1600)return -1;
+        const double t=((qRed(a)-qRed(b))*dr+(qGreen(a)-qGreen(b))*dg+(qBlue(a)-qBlue(b))*db)/norm;
+        if(t<=0||t>=.995)return -1;
+        if(std::abs(qRed(a)-qRed(b)-t*dr)>2||std::abs(qGreen(a)-qGreen(b)-t*dg)>2||std::abs(qBlue(a)-qBlue(b)-t*db)>2)return -1;
+        return qBound(1,qRound(t*255),254);
+    };
+    for(int y=0;y<size.height();++y) {
+        const auto *a=reinterpret_cast<const QRgb*>(native.constScanLine(y));
+        const auto *b=reinterpret_cast<const QRgb*>(base.constScanLine(y));
+        for(int x=0;x<size.width();++x) {
+            if(a[x]!=b[x]) {
+                const int alpha=coverage(a[x],b[x]);
+                if(alpha<0)continue;
+                QColor edge=face;edge.setAlpha(alpha);page.edge.setPixelColor(x,y,edge);
+            }
+            page.exposed.addRect(QRectF(patch.x()+x/dpr,patch.y()+y/dpr,1/dpr,1/dpr));
+        }
+    }
+    return page;
+}
+
+SliderTrack sliderTrack(const QSlider *s) {
+    if(!s||!s->isEnabled()||s->maximum()<=s->minimum()||s->sliderPosition()<=s->minimum())return {};
+    const auto opt=sliderOption(s);
+    SliderTrack track;
+    track.groove=s->style()->subControlRect(QStyle::CC_Slider,&opt,QStyle::SC_SliderGroove,s).intersected(s->rect());
+    track.handle=s->style()->subControlRect(QStyle::CC_Slider,&opt,QStyle::SC_SliderHandle,s);
+    if(!track.groove.isValid()||!track.handle.isValid())return {};
+    track.fill=track.groove;
+    if(horizontal(s)) {
+        if(opt.upsideDown)track.fill.setLeft(qMax(track.groove.left(),track.handle.center().x()));
+        else track.fill.setRight(qMin(track.groove.right(),track.handle.center().x()));
+    } else {
+        if(opt.upsideDown)track.fill.setTop(qMax(track.groove.top(),track.handle.center().y()));
+        else track.fill.setBottom(qMin(track.groove.bottom(),track.handle.center().y()));
+    }
+    return track;
+}
+}
 QRect gradientFill(const QWidget *w) {
     if(!w||!w->isEnabled())return {};
-    if(auto *s=qobject_cast<const QSlider*>(w)) {
-        if(s->maximum()<=s->minimum()||s->sliderPosition()<=s->minimum())return {};
-        QStyleOptionSlider opt;opt.initFrom(s);
-        opt.orientation=s->orientation();opt.minimum=s->minimum();opt.maximum=s->maximum();
-        opt.sliderPosition=s->sliderPosition();opt.sliderValue=s->value();
-        opt.singleStep=s->singleStep();opt.pageStep=s->pageStep();opt.tickPosition=s->tickPosition();opt.tickInterval=s->tickInterval();
-        const bool h=horizontal(s);
-        if(h)opt.state|=QStyle::State_Horizontal;else opt.state&=~QStyle::State_Horizontal;
-        opt.upsideDown=h ? (s->invertedAppearance()!=(s->layoutDirection()==Qt::RightToLeft)) : !s->invertedAppearance();
-        opt.direction=Qt::LeftToRight;
-        opt.subControls=QStyle::SC_All;
-        auto groove=s->style()->subControlRect(QStyle::CC_Slider,&opt,QStyle::SC_SliderGroove,s).intersected(s->rect());
-        const auto handle=s->style()->subControlRect(QStyle::CC_Slider,&opt,QStyle::SC_SliderHandle,s);
-        if(!groove.isValid()||!handle.isValid())return {};
-        // Preserve the native thumb and leave a pixel of breathing room.
-        if(h) {
-            if(opt.upsideDown)groove.setLeft(qMax(groove.left(),handle.right()+1));
-            else groove.setRight(qMin(groove.right(),handle.left()-1));
-        } else {
-            if(opt.upsideDown)groove.setTop(qMax(groove.top(),handle.bottom()+1));
-            else groove.setBottom(qMin(groove.bottom(),handle.top()-1));
-        }
-        return groove.isValid()?groove:QRect{};
-    }
+    if(auto *s=qobject_cast<const QSlider*>(w))return sliderTrack(s).fill;
     if(auto *p=qobject_cast<const QProgressBar*>(w)) {
         if(p->maximum()<=p->minimum()||p->value()<=p->minimum())return {};
         const bool h=horizontal(p);
@@ -155,6 +239,25 @@ public:
     int startValue=0;
     int paintedPosition=0,paintedMin=0,paintedMax=0;
     bool paintedInverted=false;
+    QRect maskHandle,maskPatch,maskWidget;
+    QStyle::State maskState;
+    QStyle::SubControls maskActive;
+    const QStyle *maskStyle=nullptr;
+    qint64 maskPalette=0;
+    qreal maskDpr=0;
+    ThumbPage maskPage;
+    bool maskReverse=false;
+    Qt::Orientation maskOrientation=Qt::Horizontal;
+    void invalidateThumb(){maskStyle=nullptr;}
+    const ThumbPage &pageUnderThumb(QSlider *s,const QStyleOptionSlider &opt,const QRect &patch,const QRect &handle) {
+        if(maskStyle!=s->style()||maskHandle!=handle||maskPatch!=patch||maskWidget!=s->rect()||
+           maskOrientation!=opt.orientation||maskReverse!=opt.upsideDown||maskState!=opt.state||maskActive!=opt.activeSubControls||maskPalette!=s->palette().cacheKey()||maskDpr!=s->devicePixelRatioF()) {
+            maskHandle=handle;maskPatch=patch;maskWidget=s->rect();maskState=opt.state;maskOrientation=opt.orientation;maskReverse=opt.upsideDown;maskActive=opt.activeSubControls;
+            maskStyle=s->style();maskPalette=s->palette().cacheKey();maskDpr=s->devicePixelRatioF();
+            maskPage=exposedThumbPage(s,opt,patch,handle);
+        }
+        return maskPage;
+    }
     QPointer<QWidget> nativeMeter;
     bool integrated=false;
     QSize meterMin,meterMax,appliedMeterMin,appliedMeterMax;
@@ -400,6 +503,32 @@ public:
                                  h?QPointF(wavelength-offset,0):QPointF(0,wavelength-offset));
         gradient.setSpread(QGradient::RepeatSpread);
         for(int i=0;i<colors.size();++i)gradient.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+        if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
+            const auto track=sliderTrack(s);
+            if(!track.fill.isValid())return;
+            painter.save();
+            painter.translate(-pos());
+            // Keep the native slider painting intact. Cover the page right
+            // up to the actual painted thumb silhouette, not its bounding box.
+            QPainterPath clip;
+            const auto patch=track.fill.intersected(track.handle);
+            QRegion outside(track.fill);outside-=QRegion(track.handle);
+            for(const auto &r:outside)clip.addRect(QRectF(r));
+            const auto &thumbPage=pageUnderThumb(s,sliderOption(s),patch,track.handle);
+            clip.addPath(thumbPage.exposed);
+            painter.setClipPath(clip);
+            QPainterPath path;
+            const auto radius=qMin(track.groove.width(),track.groove.height())/2.;
+            path.addRoundedRect(QRectF(track.groove),radius,radius);
+            gradient.setStart(gradient.start()+pos());gradient.setFinalStop(gradient.finalStop()+pos());
+            painter.fillPath(path,gradient);
+            if(!thumbPage.edge.isNull()) {
+                painter.setClipPath(path,Qt::IntersectClip);
+                painter.drawImage(patch.topLeft(),thumbPage.edge);
+            }
+            painter.restore();
+            return;
+        }
         QPainterPath path;
         const auto radius=qMin(width(),height())/2.;
         path.addRoundedRect(QRectF(rect()),radius,radius);
@@ -504,6 +633,7 @@ void GradientController::sync(QWidget *w,bool frame) {
     if(!l)return;
     if(!state->meterProvider||!l->knob||!state->spec.knobMeters)l->restoreMeter();
     auto fill=l->knob?w->rect():gradientFill(w);
+
     if(!w->isVisible()||!fill.isValid()) {if(l->isVisible())l->hide();return;}
     if(frame||!state->meterProvider||!l->knob||!state->spec.knobMeters) {
         const auto reading=l->knob&&state->spec.knobMeters&&state->meterProvider?state->meterProvider(w):std::optional<MeterReading>{};
@@ -622,7 +752,7 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
         if(state->layers.contains(w)) {
             sync(w);
             if(e->type()==QEvent::PaletteChange||e->type()==QEvent::StyleChange||e->type()==QEvent::EnabledChange)
-                if(auto l=state->layers.value(w))l->update();
+                if(auto l=state->layers.value(w)){l->invalidateThumb();l->update();}
             refreshClock();
         }
         break;

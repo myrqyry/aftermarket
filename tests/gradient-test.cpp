@@ -64,6 +64,38 @@ int main(int argc,char **argv) {
     std::cout<<"Stylesheet fill "<<styledFill.width()<<"x"<<styledFill.height()<<" @ "<<styledFill.x()<<","<<styledFill.y()<<"\n";
     REQUIRE(styledFill.isValid() && styledFill.height()==14);
     REQUIRE(colored(slider->grab().toImage(),styledFill)>10);
+    // Match Colorway: a round white handle on a cyan native filled page.
+    slider->setStyleSheet("QSlider::groove:horizontal { background:#29233a; height:14px; border-radius:7px; } QSlider::sub-page:horizontal { background:#00ffff; border-top-left-radius:7px; border-bottom-left-radius:7px; } QSlider::add-page:horizontal { background:#29233a; border-top-right-radius:7px; border-bottom-right-radius:7px; } QSlider::handle:horizontal { background:white; width:14px; height:14px; margin:0px; border-radius:7px; }");
+    auto checkJoin=[&](QSlider *target,int value,bool reverse) {
+        target->setValue(value);wait(40);
+        QStyleOptionSlider opt;opt.initFrom(target);opt.orientation=target->orientation();
+        const bool h=opt.orientation==Qt::Horizontal;
+        if(h)opt.state|=QStyle::State_Horizontal;
+        opt.minimum=target->minimum();opt.maximum=target->maximum();opt.sliderPosition=value;opt.sliderValue=value;
+        opt.upsideDown=reverse;opt.direction=Qt::LeftToRight;opt.subControls=QStyle::SC_All;
+        auto thumb=target->style()->subControlRect(QStyle::CC_Slider,&opt,QStyle::SC_SliderHandle,target);
+        auto joined=target->grab().toImage();
+        const auto filled=augment::gradientFill(target);
+        auto zone=thumb.adjusted(h&&!reverse?-6:0,!h&&!reverse?-6:0,h&&reverse?6:0,!h&&reverse?6:0).intersected(filled);
+        // Exclude the physical groove's outer cap, not the thumb's corners.
+        if(h)zone=zone.intersected(target->rect().adjusted(7,1,-7,-1));
+        else zone=zone.intersected(target->rect().adjusted(1,7,-1,-7));
+        int cyan=0;
+        for(int y=zone.top();y<=zone.bottom();++y)for(int x=zone.left();x<=zone.right();++x) {
+            const auto c=joined.pixelColor(x,y);
+            if(c.red()<80&&c.green()>170&&c.blue()>170)++cyan;
+        }
+        std::cout<<"Native cyan seam pixels ("<<value<<", "<<h<<", "<<reverse<<"): "<<cyan<<"\n";
+        return cyan==0&&joined.pixelColor(thumb.center())==QColor(Qt::white);
+    };
+    for(int value:{5,50,95,100})REQUIRE(checkJoin(slider,value,false));
+    slider->setInvertedAppearance(true);
+    slider->setStyleSheet("QSlider::groove:horizontal { background:#29233a; height:14px; border-radius:7px; } QSlider::sub-page:horizontal { background:#29233a; } QSlider::add-page:horizontal { background:#00ffff; border-top-right-radius:7px; border-bottom-right-radius:7px; } QSlider::handle:horizontal { background:white; width:14px; height:14px; margin:0px; border-radius:7px; }");
+    REQUIRE(checkJoin(slider,50,true));
+    slider->setInvertedAppearance(false);slider->setLayoutDirection(Qt::RightToLeft);
+    REQUIRE(checkJoin(slider,50,true));
+    vertical->setStyleSheet("QSlider::groove:vertical { background:#29233a; width:14px; border-radius:7px; } QSlider::sub-page:vertical { background:#29233a; } QSlider::add-page:vertical { background:#00ffff; border-bottom-left-radius:7px; border-bottom-right-radius:7px; } QSlider::handle:vertical { background:white; width:14px; height:14px; margin:0px; border-radius:7px; }");
+    REQUIRE(checkJoin(vertical,55,true));
     REQUIRE(controller.setGradientSettings(QJsonObject{{"enabled",false}}));wait(40);
     REQUIRE(!slider->findChild<QWidget*>("obs-ui-augment-gradient"));
     REQUIRE(!progress->findChild<QWidget*>("obs-ui-augment-gradient"));

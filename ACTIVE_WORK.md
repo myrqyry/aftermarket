@@ -98,3 +98,24 @@ dark palette covered by Qt regression, not verified on live user session
 with audio. Do not claim user TTS signal path repaired until exercised.
 Current user config untouched. Open: full stereo meter, named OBS theme
 tokens, rename/rebuild stress, generic widget targeting and profiling.
+
+## Slice 11 — slider thumb/gradient seam (2026-11-19)
+
+User screenshot of Synthwave84 filter property sliders showed cyan native
+sub-page wedges between the animated rounded cap and white thumb. Reproduced
+24 native cyan seam pixels with Colorway-like Qt stylesheet. The old renderer
+ended before the thumb bounding box, then rounded both ends; Qt stylesheet
+SC_SliderHandle alone also redraws the native page (confirmed Qt source).
+Fixed by clipping a full-groove gradient at the thumb center, comparing
+native style paint with the handle moved away in a small cached patch,
+preserving the genuine handle silhouette and recompositing identifiable
+solid-color antialias edge pixels. Complex ambiguous pixels remain native.
+Regression: zero cyan seams at values 5, 50, 95, 100, inverted/RTL and
+vertical, white thumb center retained. Full 8 CTests passed. Actual isolated
+OBS 32.2.0 color correction filter property sliders with contrasting orange
+gradient showed clean joins, native saturation drag 0.25 to 3.40; vertical
+mixer faders also visible. The isolated instance still used its existing
+Colorway palette despite requested Synthwave84 ID, so exact user variant
+and plugin filter dialog not directly exercised. No changes to live settings,
+theme or user OBS session. Higher-DPI and complex image/shaded thumb styles
+need broader verification. Earlier gaps remain tracked above.
