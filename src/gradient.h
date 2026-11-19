@@ -4,12 +4,14 @@
 #include <QRect>
 #include <QVector>
 #include <QJsonObject>
+#include <QStringList>
 #include <memory>
 #include "audio-motion.h"
 class QWidget;
 namespace augment {
 struct GradientSpec {
-    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false;
+    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false, knobs=false;
+    QStringList knobSources;
     int period=1800;
     QVector<QColor> colors;
     static bool parse(const QJsonValue &,GradientSpec &);

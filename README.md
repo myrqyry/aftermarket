@@ -151,6 +151,47 @@ base updates and configuration persistence. This first slice is magnitude-driven
 not beat detection or FFT. OBS named-token resolution and full gradient painting
 inside meter bars remain future work.
 
+## Rotary mixer knobs
+
+Open **Tools → UI Augment Inspector → Gradients…** and check
+**Replace mixer faders with knobs**. Leave Knob sources blank to replace every
+mixer fader, or enter exact mixer source names separated by semicolons (e.g.
+`Mic; Music`). Apply without restarting OBS. For now this is limited to mixer
+sliders, not seek bars or arbitrary settings controls.
+
+Click and drag a knob up/right to increase volume, down/left to decrease.
+There is no value jump on initial press. The original QSlider stays in the
+layout and owns range, tracking, value, slider signals, focus, and existing
+keyboard/wheel behavior. Its native paint is suppressed while a mouse-transparent
+child draws a rotary ring and pointer. Enough minimum size is requested to
+fit the knob, subject to the native maximum and surrounding layout constraints.
+
+Knobs work independently of Enable gradient tracks, using native palette colors.
+With Sliders and gradient tracks enabled, the ring uses the same configured
+palette, motion and optional per-source audio-reactivity as faders.
+Toggle knobs off to restore the native slider and its original size constraints
+where those have not been changed by another owner. The current volume is preserved.
+
+```json
+{
+  "knobs": true,
+  "knobSources": ["Mic", "Music"]
+}
+```
+
+Merge these keys into the existing gradient object. Source names are scoped
+exactly, not durable source UUIDs; the text UI uses semicolons as delimiters.
+
+![One real mixer fader replaced with a rotary knob](docs/screenshots/knob-mixer.png)
+
+Verified in isolated OBS 32.2.0 with Colorway Rosé Pine: Tone test switched to
+a knob, Silent test remained a fader; the reactive ring animated (242 changed
+pixels, silent fader zero); native volume moved from -12.0 dB to -3.5 dB after
+a drag; disabling knobs restored the slider at -3.5 dB. Qt regressions cover
+target selection, slider signals, programmatic updates, native key handling,
+invalid config and restoration. Horizontal mixer layouts, live source rename
+and theme changes under knob sizing need further real runtime testing.
+
 ## Live rules
 
 The file is re-read just before a menu opens. Close and reopen the menu after editing it; there is no OBS restart or theme replacement. Invalid or partially written JSON keeps the last valid rules.

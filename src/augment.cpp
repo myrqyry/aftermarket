@@ -433,7 +433,7 @@ struct Controller::State {
     GradientController gradients;
     QFileSystemWatcher watcher;
     QTimer reload;
-    void refreshGradients(){auto spec=rules.gradient;spec.enabled &= rules.enabled;gradients.configure(spec,rules.motion);}
+    void refreshGradients(){auto spec=rules.gradient;spec.enabled &= rules.enabled;spec.knobs &= rules.enabled;gradients.configure(spec,rules.motion);}
     explicit State(QString path, Logger logger):rules(std::move(path), std::move(logger)) {}
 };
 Controller::Controller(QString rulesFile, QObject *parent, Logger logger):QObject(parent),state(new State(std::move(rulesFile), std::move(logger))) {

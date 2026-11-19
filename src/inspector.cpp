@@ -116,7 +116,7 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
     dlg->setObjectName("obs-ui-augment-gradient-settings");
     dlg->setWindowTitle("UI Augment · Gradient tracks");
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->setModal(false);dlg->resize(500,280);
+    dlg->setModal(false);dlg->resize(520,345);
     const auto raw=controller.gradientSettings();
     GradientSpec spec;GradientSpec::parse(raw,spec);
     auto *layout=new QVBoxLayout(dlg);
@@ -136,12 +136,21 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
     meters->setEnabled(spec.audioReactive);
     QObject::connect(reactive,&QCheckBox::toggled,meters,&QWidget::setEnabled);
     layout->addWidget(reactive);layout->addWidget(meters);
+    auto *knobs=new QCheckBox("Replace mixer faders with knobs",dlg);
+    knobs->setObjectName("augment-gradient-knobs");knobs->setChecked(spec.knobs);
+    layout->addWidget(knobs);
     auto *form=new QFormLayout;
     auto *colors=new QLineEdit(dlg);colors->setObjectName("augment-gradient-colors");
     colors->setPlaceholderText("Theme palette (or #hex, #hex, …)");
     QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());
     colors->setText(hex.join(", "));
     form->addRow("Colors",colors);
+    auto *knobSources=new QLineEdit(dlg);knobSources->setObjectName("augment-knob-sources");
+    knobSources->setPlaceholderText("All mixer sources (or exact names; separated by semicolons)");
+    knobSources->setText(spec.knobSources.join("; "));
+    knobSources->setEnabled(spec.knobs);
+    QObject::connect(knobs,&QCheckBox::toggled,knobSources,&QWidget::setEnabled);
+    form->addRow("Knob sources",knobSources);
     auto *period=new QSpinBox(dlg);period->setObjectName("augment-gradient-period");
     period->setRange(400,12000);period->setSingleStep(100);period->setSuffix(" ms");period->setValue(spec.period);
     form->addRow("Loop duration",period);
@@ -161,11 +170,14 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
         if(!colors->text().trimmed().isEmpty())
             for(const auto &c:colors->text().split(','))palette.append(c.trimmed());
         next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();
+        QJsonArray names;
+        for(const auto &name:knobSources->text().split(';'))if(!name.trimmed().isEmpty())names.append(name.trimmed());
+        next["knobs"]=knobs->isChecked();next["knobSources"]=names;
         next["progress"]=progress->isChecked();next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
         QString error;
         if(controller.setGradientSettings(next,&error))
             note->setText(enable->isChecked() ? (controller.motionEnabled()?
-                "Applied. Visible tracks are now animated.":"Applied. Enable Motion to animate.") : "Gradient tracks disabled.");
+                "Applied. Visible tracks are now animated.":"Applied. Enable Motion to animate.") : (knobs->isChecked()?"Applied. Mixer knobs use the theme palette.":"Gradient tracks and knobs disabled."));
         else note->setText("Not saved: use 2–6 opaque colors, or leave blank for the theme palette. "+error);
     });
     dlg->show();

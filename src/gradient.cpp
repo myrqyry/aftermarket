@@ -14,6 +14,8 @@
 #include <QEvent>
 #include <QMetaProperty>
 #include <QVariant>
+#include <QAbstractButton>
+#include <QMouseEvent>
 #include <cmath>
 namespace augment {
 bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
@@ -21,13 +23,22 @@ bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     if(value.isUndefined()) {out=next;return true;}
     if(!value.isObject())return false;
     const auto o=value.toObject();
-    for(auto k:{"enabled","sliders","progress","audioReactive","meters"})
+    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs"})
         if(o.contains(k)&&!o.value(k).isBool())return false;
     next.enabled=o.value("enabled").toBool(false);
     next.sliders=o.value("sliders").toBool(true);
     next.progress=o.value("progress").toBool(true);
     next.audioReactive=o.value("audioReactive").toBool(false);
     next.meters=o.value("meters").toBool(false);
+    next.knobs=o.value("knobs").toBool(false);
+    if(o.contains("knobSources")) {
+        const auto names=o.value("knobSources");
+        if(!names.isArray()||names.toArray().size()>256)return false;
+        for(const auto &name:names.toArray()) {
+            if(!name.isString()||name.toString().isEmpty())return false;
+            next.knobSources.append(name.toString());
+        }
+    }
     if(o.contains("period")) {
         auto d=o.value("period").toDouble(-1);
         if(!std::isfinite(d)||d<400||d>12000||std::floor(d)!=d)return false;
@@ -60,11 +71,22 @@ bool eligibleMeter(const QWidget *w,const GradientSpec &spec) {
     return index>=0 && w->metaObject()->property(index).isWritable() &&
         w->metaObject()->property(index).metaType()==QMetaType::fromType<QColor>();
 }
+bool knobTarget(const QWidget *w,const GradientSpec &spec) {
+    if(!spec.knobs||!qobject_cast<const QSlider*>(w))return false;
+    for(auto *p=w;p;p=p->parentWidget()) {
+        if(!p->inherits("VolumeControl"))continue;
+        if(spec.knobSources.isEmpty())return true;
+        for(auto *button:p->findChildren<QAbstractButton*>())
+            if(button->inherits("VolumeName"))return spec.knobSources.contains(button->text());
+        return false;
+    }
+    return false;
+}
 bool eligible(const QWidget *w,const GradientSpec &spec) {
-    if(!spec.enabled||!w)return false;
+    if((!spec.enabled&&!spec.knobs)||!w)return false;
     for(auto *p=w;p;p=p->parentWidget())
         if(p->objectName().startsWith("obs-ui-augment-"))return false;
-    return (spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w));
+    return knobTarget(w,spec)||(spec.enabled&&((spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
 }
 }
 QRect gradientFill(const QWidget *w) {
@@ -126,6 +148,106 @@ public:
     double phase=0;
     float energy=0;
     qint64 lastFrame=-1;
+    bool knob=false,dragging=false;
+    QSize originalMinimum,appliedMinimum;
+    QPointF start;
+    int startValue=0;
+    int paintedPosition=0,paintedMin=0,paintedMax=0;
+    bool paintedInverted=false;
+    void finishDrag() {
+        if(!dragging)return;
+        dragging=false;
+        if(auto *s=qobject_cast<QSlider*>(parentWidget()))s->setSliderDown(false);
+    }
+    void setKnob(bool enabled) {
+        if(knob==enabled)return;
+        auto *s=qobject_cast<QSlider*>(parentWidget());
+        if(!s)return;
+        if(enabled) {
+            originalMinimum=s->minimumSize();appliedMinimum=originalMinimum.expandedTo(QSize(
+                qMin(44,s->maximumWidth()),qMin(44,s->maximumHeight())));
+            knob=true;
+            s->setProperty("_obsUiAugmentKnob",true);
+            s->setMinimumSize(appliedMinimum);
+            appliedMinimum=s->minimumSize();
+        } else {
+            finishDrag();knob=false;
+            s->setProperty("_obsUiAugmentKnob",QVariant());
+            // Do not undo newer constraints written by a theme/layout owner.
+            QSize current=s->minimumSize();
+            if(current.width()==appliedMinimum.width())current.setWidth(originalMinimum.width());
+            if(current.height()==appliedMinimum.height())current.setHeight(originalMinimum.height());
+            s->setMinimumSize(current);
+        }
+        s->updateGeometry();s->update();update();
+    }
+    QRectF knobRect() const {
+        const qreal side=qMin(48,qMin(width(),height()))-6;
+        if(side<8)return {};
+        return QRectF((width()-side)/2.,(height()-side)/2.,side,side);
+    }
+    bool handleMouse(QSlider *s,QEvent *event) {
+        if(event->type()==QEvent::UngrabMouse||event->type()==QEvent::WindowDeactivate) {finishDrag();return false;}
+        auto *e=static_cast<QMouseEvent*>(event);
+        if(event->type()==QEvent::MouseButtonPress||event->type()==QEvent::MouseButtonDblClick) {
+            if(e->button()!=Qt::LeftButton&&e->button()!=Qt::MiddleButton)return false;
+            if(!s->isEnabled()||!knobRect().adjusted(-3,-3,3,3).contains(e->position()))return true;
+            if(dragging)return true;
+            dragging=true;start=e->globalPosition();startValue=s->sliderPosition();
+            if(s->focusPolicy()!=Qt::NoFocus)s->setFocus(Qt::MouseFocusReason);
+            s->setSliderDown(true);e->accept();return true;
+        }
+        if(event->type()==QEvent::MouseMove) {
+            if(dragging) {
+                if(!(e->buttons()&(Qt::LeftButton|Qt::MiddleButton))) {finishDrag();return true;}
+                const auto delta=e->globalPosition()-start;
+                double movement=(delta.x()-delta.y())/150.;
+                if(s->invertedControls())movement=-movement;
+                const double span=double(s->maximum())-s->minimum();
+                s->setSliderPosition(int(std::round(qBound(double(s->minimum()),startValue+movement*span,double(s->maximum())))));
+            }
+            e->accept();return true;
+        }
+        if(event->type()==QEvent::MouseButtonRelease&&(e->button()==Qt::LeftButton||e->button()==Qt::MiddleButton)) {
+            finishDrag();e->accept();return true;
+        }
+        return false;
+    }
+    void paintKnob(QPainter &p,QVector<QColor> colors) {
+        auto *s=qobject_cast<QSlider*>(parentWidget());if(!s)return;
+        const auto r=knobRect();if(!r.isValid())return;
+        const auto pal=s->palette();const auto center=r.center();
+        const auto group=s->isEnabled()?QPalette::Active:QPalette::Disabled;
+        const double span=double(s->maximum())-s->minimum();
+        const auto fraction=span>0?qBound(0.,(s->sliderPosition()-double(s->minimum()))/span,1.):0.;
+        const auto f=s->invertedAppearance()?1.-fraction:fraction;
+        paintedPosition=s->sliderPosition();paintedMin=s->minimum();paintedMax=s->maximum();paintedInverted=s->invertedAppearance();
+        p.setOpacity(s->isEnabled()?1.:.48);
+        const QRectF arc=r.adjusted(2,2,-2,-2);
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(pal.color(group,QPalette::Mid),3.,Qt::SolidLine,Qt::RoundCap));
+        p.drawArc(arc,225*16,-270*16);
+        QConicalGradient g(center,225+phase*360);
+        if(spec.enabled&&spec.sliders) {
+            if(colors.first()!=colors.last())colors.append(colors.first());
+            for(int i=0;i<colors.size();++i)g.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+        } else {auto c=pal.color(group,QPalette::Highlight);g.setColorAt(0,c);g.setColorAt(1,c);}
+        p.setPen(QPen(QBrush(g),3.5,Qt::SolidLine,Qt::RoundCap));
+        if(f>0)p.drawArc(arc,225*16,int(-270*16*f));
+        const auto face=r.adjusted(8,8,-8,-8);
+        if(face.isValid()) {
+            p.setPen(QPen(pal.color(group,QPalette::Mid),1));
+            p.setBrush(pal.color(group,QPalette::Button));p.drawEllipse(face);
+            const auto rad=(225-270*f)*3.141592653589793/180.;
+            const QPointF direction(std::cos(rad),-std::sin(rad));
+            p.setPen(QPen(pal.color(group,QPalette::ButtonText),2.,Qt::SolidLine,Qt::RoundCap));
+            p.drawLine(center+direction*(face.width()*.13),center+direction*(face.width()*.37));
+        }
+        if(s->hasFocus()) {
+            p.setBrush(Qt::NoBrush);p.setPen(QPen(pal.color(group,QPalette::Highlight),1,Qt::DotLine));
+            p.drawEllipse(r.adjusted(-2,-2,2,2));
+        }
+    }
     explicit Layer(QWidget *w):QWidget(w) {
         setObjectName("obs-ui-augment-gradient");
         setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -144,6 +266,7 @@ public:
             colors={a,b,c,a};
         }
         if(energy>0)for(auto &color:colors)color=color.lighter(100+int(energy*25));
+        if(knob){paintKnob(painter,colors);return;}
         // A periodic gradient with identical endpoints has no seam when its phase wraps.
         if(colors.first()!=colors.last())colors.append(colors.first());
         const bool h=horizontal(parentWidget());
@@ -196,7 +319,7 @@ GradientController::~GradientController() {
     const auto keys=state->layers.keys();
     for(auto *w:keys) {
         QObject::disconnect(w,nullptr,this,nullptr);
-        if(auto layer=state->layers.take(w))delete layer.data();
+        if(auto layer=state->layers.take(w)){layer->setKnob(false);delete layer.data();}
     }
 }
 void GradientController::setAudioProvider(AudioProvider provider,AudioReset reset) {
@@ -211,7 +334,7 @@ void GradientController::setAudioProvider(AudioProvider provider,AudioReset rese
 void GradientController::configure(const GradientSpec &spec,bool motion) {
     const auto &old=state->spec;
     if(old.enabled==spec.enabled&&old.sliders==spec.sliders&&old.progress==spec.progress&&
-       old.period==spec.period&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&state->motion==motion)return;
+       old.period==spec.period&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobSources==spec.knobSources&&state->motion==motion)return;
     state->spec=spec;state->motion=motion;
     if(!motion||!spec.enabled||!spec.audioReactive)if(state->reset)state->reset();
     for(auto *w:state->meters.keys())if(!motion||!eligibleMeter(w,spec))removeMeter(w);
@@ -219,7 +342,7 @@ void GradientController::configure(const GradientSpec &spec,bool motion) {
         for(auto *w:QApplication::allWidgets())if(eligibleMeter(w,spec))reconcileMeter(w);
     const auto keys=state->layers.keys();
     for(auto *w:keys)reconcile(w);
-    if(spec.enabled)for(auto *w:QApplication::allWidgets())
+    if(spec.enabled||spec.knobs)for(auto *w:QApplication::allWidgets())
         if(eligible(w,spec))reconcile(w);
     refreshClock();
 }
@@ -227,7 +350,7 @@ void GradientController::reconcile(QWidget *w) {
     if(!eligible(w,state->spec)) {
         if(state->layers.contains(w)) {
             QObject::disconnect(w,nullptr,this,nullptr);
-            if(auto layer=state->layers.take(w))delete layer.data();
+            if(auto layer=state->layers.take(w)){layer->setKnob(false);delete layer.data();}
         }
         return;
     }
@@ -236,20 +359,20 @@ void GradientController::reconcile(QWidget *w) {
         state->layers.insert(w,layer);
         connect(w,&QObject::destroyed,this,[this,w]{state->layers.remove(w);refreshClock();});
         if(auto *s=qobject_cast<QSlider*>(w)) {
-            connect(s,&QSlider::valueChanged,this,[this,w]{sync(w);refreshClock();});
-            connect(s,&QSlider::sliderMoved,this,[this,w]{sync(w);refreshClock();});
+            connect(s,&QSlider::valueChanged,this,[this,w]{sync(w);if(auto l=state->layers.value(w);l&&l->knob)l->update();refreshClock();});
+            connect(s,&QSlider::sliderMoved,this,[this,w]{sync(w);if(auto l=state->layers.value(w);l&&l->knob)l->update();refreshClock();});
             connect(s,&QSlider::rangeChanged,this,[this,w]{sync(w);refreshClock();});
         }
         if(auto *p=qobject_cast<QProgressBar*>(w))
             connect(p,&QProgressBar::valueChanged,this,[this,w]{sync(w);refreshClock();});
     }
-    if(auto layer=state->layers.value(w)) {layer->spec=state->spec;layer->update();}
+    if(auto layer=state->layers.value(w)) {layer->spec=state->spec;layer->setKnob(knobTarget(w,state->spec));layer->update();}
     sync(w);
 }
 void GradientController::sync(QWidget *w,bool frame) {
     auto l=state->layers.value(w);
     if(!l)return;
-    const auto fill=gradientFill(w);
+    const auto fill=l->knob?w->rect():gradientFill(w);
     if(!w->isVisible()||!fill.isValid()) {if(l->isVisible())l->hide();return;}
     const bool changed=l->geometry()!=fill;
     if(changed)l->setGeometry(fill);
@@ -259,7 +382,7 @@ void GradientController::sync(QWidget *w,bool frame) {
     // schedule another animated paint (which would create a busy loop).
     double phase=l->phase;
     float energy=l->energy;
-    if(!state->motion) {phase=0;energy=0;l->lastFrame=-1;}
+    if(!state->motion||!state->spec.enabled) {phase=0;energy=0;l->lastFrame=-1;}
     else if(frame||newlyVisible) {
         const auto now=state->elapsed.elapsed();
         const double dt=l->lastFrame<0||newlyVisible?0.:std::clamp(double(now-l->lastFrame)/1000.,0.,.25);
@@ -315,10 +438,12 @@ void GradientController::refreshClock() {
     else if(!active)state->timer.stop();
 }
 bool GradientController::eventFilter(QObject *o,QEvent *e) {
-    if(!state->spec.enabled)return false;
+    if(!state->spec.enabled&&!state->spec.knobs)return false;
     switch(e->type()) {
     case QEvent::Show:case QEvent::Hide:case QEvent::Resize:case QEvent::EnabledChange:
-    case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:break;
+    case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:
+    case QEvent::MouseButtonPress:case QEvent::MouseButtonDblClick:case QEvent::MouseMove:case QEvent::MouseButtonRelease:
+    case QEvent::UngrabMouse:case QEvent::WindowDeactivate:case QEvent::FocusIn:case QEvent::FocusOut:break;
     default:return false;
     }
     auto *w=qobject_cast<QWidget*>(o);
@@ -328,6 +453,18 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
             QTimer::singleShot(0,this,[this,safe]{if(safe){reconcileMeter(safe);refreshClock();}});
         } else if(e->type()==QEvent::Hide) {removeMeter(w);refreshClock();}
         return false;
+    }
+    auto layer=state->layers.value(w);
+    if(layer&&layer->knob) {
+        if(auto *slider=qobject_cast<QSlider*>(w)) {
+            switch(e->type()) {
+            case QEvent::MouseButtonPress:case QEvent::MouseButtonDblClick:case QEvent::MouseMove:case QEvent::MouseButtonRelease:
+            case QEvent::UngrabMouse:case QEvent::WindowDeactivate:return layer->handleMouse(slider,e);
+            case QEvent::FocusIn:case QEvent::FocusOut:layer->update();return false;
+            case QEvent::Hide:case QEvent::EnabledChange:if(!w->isVisible()||!w->isEnabled())layer->finishDrag();layer->update();break;
+            default:break;
+            }
+        }
     }
     if(!eligible(w,state->spec))return false;
     switch(e->type()) {
@@ -346,11 +483,20 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
         // unchanged static layer from this path.
         if(state->layers.contains(w)) {
             sync(w);
-            if(e->type()==QEvent::PaletteChange)if(auto l=state->layers.value(w))l->update();
+            if(e->type()==QEvent::PaletteChange||e->type()==QEvent::StyleChange||e->type()==QEvent::EnabledChange)
+                if(auto l=state->layers.value(w))l->update();
             refreshClock();
         }
         break;
     default:break;
+    }
+    // The child paints only the rotary presentation; OBS's original QSlider
+    // remains the actual control. Suppress its native groove and thumb.
+    if(e->type()==QEvent::Paint&&layer&&layer->knob&&layer->isVisible()) {
+        if(auto *s=qobject_cast<QSlider*>(w))
+            if(layer->paintedPosition!=s->sliderPosition()||layer->paintedMin!=s->minimum()||
+                layer->paintedMax!=s->maximum()||layer->paintedInverted!=s->invertedAppearance())layer->update();
+        return true;
     }
     return false;
 }
