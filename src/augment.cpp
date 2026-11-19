@@ -19,6 +19,7 @@
 #include <QSvgRenderer>
 #include <QWidgetAction>
 #include <QDebug>
+#include <algorithm>
 #include <vector>
 
 namespace augment {
@@ -79,7 +80,9 @@ const QHash<QString, QString> shapes = {
     {"monitor", "<rect x='3' y='4' width='18' height='13' rx='2'/><path d='M12 17v4M8 21h8'/>"}
 };
 
-QString normalized(QString text) {
+} // namespace
+
+QString normalizeActionText(QString text) {
     text = text.section('\t', 0, 0);
     text.replace("&&", "\x01");
     text.remove('&');
@@ -90,7 +93,53 @@ QString normalized(QString text) {
     return text.trimmed().toCaseFolded();
 }
 
-struct Rule { QString text, objectName, menuObjectName, icon; QColor color; bool replaceExisting = false; };
+QStringList iconNames() {
+    auto names = shapes.keys();
+    names.sort();
+    return names;
+}
+namespace {
+QByteArray iconSvg(const QString &name, const QColor &color) {
+    return QString("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%1' stroke-opacity='%2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>%3</svg>")
+        .arg(color.name(), QString::number(color.alphaF()), shapes.value(name)).toUtf8();
+}
+QStringList normalizedLabels(const QStringList &labels) {
+    QStringList result;
+    for (const auto &label : labels) {
+        auto n=normalizeActionText(label);
+        if (!n.isEmpty() && !result.contains(n)) result.append(n);
+    }
+    result.sort();
+    return result;
+}
+QStringList anchorLabels(const QJsonObject &o) {
+    QStringList a;
+    for (const auto &v : o.value("menuContains").toArray()) a.append(v.toString());
+    return normalizedLabels(a);
+}
+QJsonObject canonicalSelector(const QJsonObject &o) {
+    QJsonObject result;
+    auto text=normalizeActionText(o.value("text").toString());
+    if (!text.isEmpty()) result["text"]=text;
+    for (const auto *key: {"objectName","menuObjectName"})
+        if (!o.value(key).toString().isEmpty()) result[key]=o.value(key);
+    const auto anchors=anchorLabels(o);
+    if (!anchors.isEmpty()) result["menuContains"]=QJsonArray::fromStringList(anchors);
+    return result;
+}
+struct Rule {
+    QString text, objectName, menuObjectName, icon;
+    QColor color;
+    bool replaceExisting = false;
+    QStringList anchors;
+    QJsonObject raw;
+    bool matches(const QString &label, const QString &id, const QString &menuId, const QStringList &labels) const {
+        if ((!menuObjectName.isEmpty() && menuObjectName!=menuId) ||
+            (!objectName.isEmpty() && objectName!=id) ||
+            (!text.isEmpty() && normalizeActionText(label)!=text)) return false;
+        return std::all_of(anchors.begin(), anchors.end(), [&labels](const QString &a){return labels.contains(a);});
+    }
+};
 struct Rules {
     QString path;
     Logger logger;
@@ -120,15 +169,20 @@ struct Rules {
         for (const auto &v : root.value("rules").toArray()) {
             if (!v.isObject()) return false;
             auto o = v.toObject();
-            Rule r{normalized(o.value("text").toString()), o.value("objectName").toString(),
+            Rule r{normalizeActionText(o.value("text").toString()), o.value("objectName").toString(),
                    o.value("menuObjectName").toString(), o.value("icon").toString(),
-                   QColor(o.value("color").toString()), o.value("replaceExisting").toBool(false)};
+                   QColor(o.value("color").toString()), o.value("replaceExisting").toBool(false), anchorLabels(o), o};
             if ((r.text.isEmpty() && r.objectName.isEmpty()) || !shapes.contains(r.icon) ||
                 (o.contains("color") && !r.color.isValid()) ||
                 (o.contains("replaceExisting") && !o.value("replaceExisting").isBool()) ||
                 (o.contains("menuObjectName") && !o.value("menuObjectName").isString()) ||
                 (o.contains("text") && !o.value("text").isString()) ||
                 (o.contains("objectName") && !o.value("objectName").isString())) return false;
+            if (o.contains("menuContains")) {
+                if (!o.value("menuContains").isArray()) return false;
+                for (const auto &v : o.value("menuContains").toArray())
+                    if (!v.isString() || normalizeActionText(v.toString()).isEmpty()) return false;
+            }
             next.push_back(std::move(r));
         }
         enabled = root.value("enabled").toBool(true);
@@ -145,13 +199,13 @@ struct Rules {
         if (bytes.size()>256*1024 || !parse(bytes))
             log("Invalid rules; retaining last valid configuration");
     }
-    const Rule *match(const QAction *a, const QMenu *menu) const {
+    const Rule *matchNormalized(const QString &text, const QString &id, const QString &menuId, const QStringList &labels) const {
         for (const auto &r : entries)
-            if ((!r.menuObjectName.isEmpty() && menu->objectName()!=r.menuObjectName) ||
-                (!r.objectName.isEmpty() && a->objectName()!=r.objectName) ||
-                (!r.text.isEmpty() && normalized(a->text())!=r.text)) continue;
-            else return &r;
+            if (r.matches(text,id,menuId,labels)) return &r;
         return nullptr;
+    }
+    const Rule *matchTarget(const QString &text, const QString &id, const QString &menuId, const QStringList &labels) const {
+        return matchNormalized(text,id,menuId,normalizedLabels(labels));
     }
 };
 
@@ -189,19 +243,24 @@ public:
                 s.action->setIconVisibleInMenu(s.originallyVisible);
             }
             s.action->setProperty("_obsUiAugmentReservation",QVariant());
+            s.action->setProperty("_obsUiAugmentOriginalIcon",QVariant());
         }
     }
     void prepare(Rules &rules) {
         if (prepared_) return;
         prepared_ = true;
         const auto actions = menu->actions();
+        QStringList menuLabels;
+        for (auto *action : actions)
+            if (action->isVisible() && !action->isSeparator()) menuLabels.append(action->text());
+        const auto labels=normalizedLabels(menuLabels);
         for (auto *a : actions) {
             if (rules.inspect)
                 rules.log(QString("menu=%1 action=%2 text=%3").arg(menu->objectName(), a->objectName(), a->text()));
             if (!rules.enabled) continue;
             if (!a->isVisible() || a->isSeparator() || a->isCheckable() ||
                 qobject_cast<QWidgetAction *>(a)) continue;
-            const auto *r = rules.match(a, menu);
+            const auto *r = rules.matchNormalized(a->text(),a->objectName(),menu->objectName(),labels);
             if (!r || (!a->icon().isNull() && !r->replaceExisting) ||
                 a->property("_obsUiAugmentReservation").toBool()) continue;
             int extent = qBound(12,menu->style()->pixelMetric(QStyle::PM_SmallIconSize,nullptr,menu),32);
@@ -209,6 +268,7 @@ public:
             blank.fill(Qt::transparent);
             QIcon reservation(blank);
             slots_.push_back({a,reservation.cacheKey(),a->icon(),a->isIconVisibleInMenu(),r->icon,r->color});
+            a->setProperty("_obsUiAugmentOriginalIcon",!a->icon().isNull());
             a->setProperty("_obsUiAugmentReservation",true);
             a->setIcon(reservation);
             a->setIconVisibleInMenu(true);
@@ -236,9 +296,7 @@ protected:
             const QRect target(x,row.center().y()-size/2,size,size);
             QColor color = s.color.isValid() ? s.color : menu->palette().color(QPalette::Text);
             if (!s.action->isEnabled()) color.setAlpha(100);
-            const auto svg = QString("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%1' stroke-opacity='%2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'>%3</svg>")
-                .arg(color.name(),QString::number(color.alphaF()),shapes.value(s.icon));
-            QSvgRenderer renderer(svg.toUtf8());
+            QSvgRenderer renderer(iconSvg(s.icon,color));
             p.save();
             p.setClipRect(row);
             renderer.render(&p,target);
@@ -246,6 +304,17 @@ protected:
         }
     }
 };
+}
+
+QIcon previewIcon(const QString &name, const QColor &color) {
+    if (!shapes.contains(name) || !color.isValid()) return {};
+    QPixmap pixmap(24,24);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    QSvgRenderer svg(iconSvg(name,color));
+    svg.render(&painter);
+    painter.end();
+    return QIcon(pixmap);
 }
 
 struct Controller::State {
@@ -264,6 +333,62 @@ Controller::~Controller() {
     const auto overlays=state->menus.values();
     state->menus.clear();
     for (auto *overlay : overlays) delete overlay;
+}
+namespace {
+constexpr qint64 maxRuleBytes=256*1024;
+bool fail(QString *error, const QString &message) {
+    if (error) *error=message;
+    return false;
+}
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error) {
+    // Read the actual latest file, not the controller's last-good cache.
+    QFile in(current.path);
+    if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
+    auto before=in.read(maxRuleBytes+1);
+    in.close();
+    Rules validator=current;
+    if (before.size()>maxRuleBytes || !validator.parse(before))
+        return fail(error,"Invalid rules.json; fix the file before editing.");
+    auto selector=canonicalSelector(entry);
+    if (!selector.contains("text") && !selector.contains("objectName"))
+        return fail(error,"No valid action selector.");
+    auto root=QJsonDocument::fromJson(before).object();
+    QJsonArray next;
+    if (!remove) next.append(entry); // narrow overrides win over broader rules
+    bool found=false;
+    for (const auto &value : root.value("rules").toArray()) {
+        if (canonicalSelector(value.toObject())==selector) {found=true; continue;}
+        next.append(value);
+    }
+    if (remove && !found) return fail(error,"No exact override exists for this selector.");
+    root["rules"]=next;
+    auto after=QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (after.size()>maxRuleBytes || !validator.parse(after))
+        return fail(error,"Invalid rule; nothing was written.");
+    // Do not overwrite an edit made while the rule was being prepared.
+    QFile check(current.path);
+    if (!check.open(QIODevice::ReadOnly) || check.read(maxRuleBytes+1)!=before)
+        return fail(error,"rules.json changed; try again.");
+    check.close();
+    QSaveFile out(current.path);
+    if (!out.open(QIODevice::WriteOnly) || out.write(after)!=after.size() || !out.commit())
+        return fail(error,"Could not atomically save rules.json.");
+    current.refresh();
+    if (error) error->clear();
+    return true;
+}
+}
+bool Controller::saveRule(const QJsonObject &entry, QString *error) {
+    return editRules(state->rules,entry,false,error);
+}
+bool Controller::removeRule(const QJsonObject &selector, QString *error) {
+    return editRules(state->rules,selector,true,error);
+}
+QJsonObject Controller::effectiveRule(const QJsonObject &target, const QStringList &labels) const {
+    state->rules.refresh();
+    const auto *r=state->rules.matchTarget(target.value("text").toString(),target.value("objectName").toString(),
+        target.value("menuObjectName").toString(),labels);
+    return r ? r->raw : QJsonObject{};
 }
 void Controller::attach(QMenu *menu) {
     if (state->menus.contains(menu)) return;

@@ -10,10 +10,10 @@ Real OBS 32.2.0, Qt 6.4.2, Colorway Rosé Pine — Pine, isolated X11 test profi
 
 ## Install locally (Linux)
 
-Requires OBS's matching libobs development package, Qt 6 Widgets and SVG, CMake and a C++17 compiler. Use the CMake package for the libobs actually loaded by the installed OBS executable.
+Requires the matching libobs and OBS frontend API development packages, Qt 6 Widgets and SVG, CMake and a C++17 compiler. Use the CMake package for the libobs actually loaded by the installed OBS executable.
 
 ```sh
-cmake -S . -B build -G Ninja -Dlibobs_DIR=/usr/local/lib/cmake/libobs
+cmake -S . -B build -G Ninja -Dlibobs_DIR=/usr/local/lib/cmake/libobs -Dobs-frontend-api_DIR=/usr/local/lib/cmake/obs-frontend-api
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./scripts/install.sh
@@ -22,6 +22,18 @@ ctest --test-dir build --output-on-failure
 Restart OBS (or open it if closed). The module creates its rules file at
 `~/.config/obs-studio/plugin_config/obs-ui-augment/rules.json` by default.
 If XDG_CONFIG_HOME is set, use that configuration root.
+
+## Native inspector
+
+Open **Tools → UI Augment Inspector**. Click **Pick target · 4s**; the inspector hides while you move the pointer over an OBS control, or open a context menu and hover an action. After four seconds it snapshots the target and returns.
+
+![Menu inspector in real OBS](docs/screenshots/inspector-menu.png)
+
+The left pane lists the captured action labels and Qt object names. Choose an icon and optional color on the right. The generated JSON shows exactly what will match. Scope the rule to the captured menu (default), or uncheck that option to target the action across menus. Save, dismiss the inspector if needed, and reopen the menu. Existing native icons require explicit replacement. Remove exact rule deletes only the identical selector and leaves broader rules intact. Saving prepends the new priority override and replaces rules with the identical selector, without rewriting unrelated rule entries or root fields. Invalid JSON is never overwritten by the inspector.
+
+The inspector also captures arbitrary widget class names, ancestry, accessibility names and geometry, but **editing is currently menu-action only**. For example, the Sources dock's actual label is an OBSSourceLabel under SourceTreeItem.
+
+![Source widget identity](docs/screenshots/inspector-widget.png)
 
 ## Live rules
 
@@ -44,6 +56,7 @@ Example of a complete replacement rules file:
 - `text`: exact action label, ignoring mnemonic ampersands, trailing ellipses, case, and shortcut suffixes.
 - `objectName`: exact Qt action identifier. Prefer it when available; many OBS menu actions are created without one.
 - `menuObjectName`: optional exact menu identifier. If both action selectors are provided, both must match. First matching rule wins.
+- `menuContains`: optional array of neighboring action labels that must all be visible in the target menu. Used to scope otherwise anonymous popups. Matches normalized labels, not order. This is a contextual heuristic, not a unique persistent menu ID; it may not match after menu layout or language changes.
 - `icon`: one of plus, pencil, trash, copy, clipboard, move, order, group, sliders, gear, pointer, monitor, camera, palette, layers, arrow-in, arrow-out, resize.
 - `color`: optional literal color; without it the icon uses the menu text palette. Disabled entries are dimmed.
 - `replaceExisting`: opt in to covering a pre-existing icon with an invisible slot and our own drawing, then restoring it on close. The stock Remove rule uses this to give destructive actions their own color.
@@ -65,7 +78,7 @@ The extension is local to UI rendering, not the OBS video compositor.
 
 The first slice is intentionally declarative JSON, not arbitrary code execution.
 It does not implement a complete custom menu renderer, custom icon file imports,
-a graphical rule editor, general widget styling, or runtime scripts.
+general widget styling, or runtime scripts.
 
 ## Verification
 
@@ -73,6 +86,12 @@ a graphical rule editor, general widget styling, or runtime scripts.
 - OBS 32.2.0 isolated Xvfb profile: 22 source context-menu actions augmented, then disabled and re-enabled without restarting OBS. Screenshots above were captured from the actual enabled and disabled popup in the same session.
 - Clicked rendered Rename item in the real popup and verified native inline editing. See [native rename receipt](docs/screenshots/native-rename.png).
 - Isolated OBS exited via Ctrl+Q. No crash observed. The OBS log reported 3 memory leaks at shutdown; their ownership was not established. No claim of leak-free operation.
+
+Inspector slice verification (same isolated OBS configuration):
+- Captured an actual source widget and displayed its ancestry.
+- Captured Sources context menu from pointer position, selected Scale Filtering, saved a scoped color override from the GUI, reopened the menu and programmatically counted 12 magenta pixels in the actual popup.
+- Removed that exact override from the GUI and confirmed the original broader rule remained.
+- Added regression tests for scoped matching, escaped ampersands, snapshot lifetime, preserving unknown root fields and unrelated rules, refusing invalid JSON, duplicate override replacement, real rendered pixels, and GUI rule saves.
 
 Only Linux/X11, this OBS/Qt version and this theme have been tested in real OBS.
 Fixed 16-pixel artwork and a six-pixel inset suit the tested menu, but additional themes,

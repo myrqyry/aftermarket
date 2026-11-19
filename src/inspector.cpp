@@ -1,0 +1,278 @@
+#include "inspector.h"
+#include "augment.h"
+#include <QAction>
+#include <QApplication>
+#include <QCheckBox>
+#include <QClipboard>
+#include <QColorDialog>
+#include <QComboBox>
+#include <QCursor>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMenu>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QSignalBlocker>
+#include <QSplitter>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidgetAction>
+#include <algorithm>
+
+namespace augment {
+namespace {
+QString identity(const QWidget *w) {
+    const auto type=QString::fromLatin1(w->metaObject()->className());
+    return w->objectName().isEmpty() ? type : type+" #"+w->objectName();
+}
+QJsonObject targetFor(const WidgetSnapshot &s,int row) {
+    if (row<0 || row>=s.actions.size()) return {};
+    const auto &a=s.actions.at(row);
+    return {{"text",a.text},{"objectName",a.objectName},{"menuObjectName",s.menuObjectName}};
+}
+}
+bool ActionSnapshot::eligible() const {
+    return visible && !checkable && !custom &&
+        (!objectName.isEmpty() || !normalizeActionText(text).isEmpty());
+}
+WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
+    WidgetSnapshot s;
+    if (!widget) return s;
+    if (widget->objectName()=="obs-ui-augment-overlay") widget=widget->parentWidget();
+    if (!widget) return s;
+    s.type=QString::fromLatin1(widget->metaObject()->className());
+    s.objectName=widget->objectName();
+    s.accessibility=widget->accessibleName();
+    const auto pos=widget->mapToGlobal(QPoint());
+    s.geometry=QString("%1 × %2 · screen %3, %4").arg(widget->width()).arg(widget->height()).arg(pos.x()).arg(pos.y());
+    QStringList parents;
+    for (auto *w=widget;w;w=w->parentWidget()) parents.prepend(identity(w));
+    s.ancestry=parents.join("  ›  ");
+    QMenu *menu=nullptr;
+    for (auto *w=widget;w;w=w->parentWidget())
+        if ((menu=qobject_cast<QMenu*>(w))) break;
+    if (!menu) return s;
+    s.isMenu=true;
+    s.menuObjectName=menu->objectName();
+    const auto *hit=menu->actionAt(menu->mapFromGlobal(globalPosition));
+    for (auto *action : menu->actions()) {
+        if (action->isSeparator() || !action->isVisible()) continue;
+        const bool reservation=action->property("_obsUiAugmentReservation").toBool();
+        ActionSnapshot item{action->text(),action->objectName(),action->isCheckable(),
+            qobject_cast<QWidgetAction*>(action)!=nullptr,action->isVisible(),action->isEnabled(),
+            reservation ? action->property("_obsUiAugmentOriginalIcon").toBool() : !action->icon().isNull()};
+        if (action==hit) s.selected=s.actions.size();
+        s.actions.push_back(item);
+        s.menuLabels.append(action->text());
+    }
+    return s;
+}
+WidgetSnapshot inspectAt(const QPoint &globalPosition) {
+    // Menus sometimes have a native popup window separate from the widget under it.
+    if (auto *popup=qobject_cast<QMenu*>(QApplication::activePopupWidget()))
+        if (popup->rect().contains(popup->mapFromGlobal(globalPosition)))
+            return inspectWidget(popup,globalPosition);
+    return inspectWidget(QApplication::widgetAt(globalPosition),globalPosition);
+}
+QJsonObject selectorFor(const WidgetSnapshot &s,int row,bool scopeMenu) {
+    if (!s.isMenu || row<0 || row>=s.actions.size() || !s.actions.at(row).eligible()) return {};
+    const auto &a=s.actions.at(row);
+    QJsonObject selector;
+    if (!a.objectName.isEmpty()) selector["objectName"]=a.objectName;
+    else selector["text"]=a.text;
+    if (!scopeMenu) return selector;
+    if (!s.menuObjectName.isEmpty()) selector["menuObjectName"]=s.menuObjectName;
+    else {
+        // Anonymous menus have no durable Qt ID. Anchor on two other observed labels.
+        QStringList anchors, seen;
+        const auto own=normalizeActionText(a.text);
+        for (const auto &label:s.menuLabels) {
+            const auto normalized=normalizeActionText(label);
+            if (normalized.isEmpty() || normalized==own || seen.contains(normalized)) continue;
+            seen.append(normalized);
+            // Retain the original escaped label. The rule matcher normalizes once.
+            anchors.append(label);
+            if (anchors.size()==2) break;
+        }
+        if (!anchors.isEmpty()) selector["menuContains"]=QJsonArray::fromStringList(anchors);
+    }
+    return selector;
+}
+
+struct Inspector::Ui {
+    Controller &controller;
+    WidgetSnapshot snapshot;
+    QTimer *timer=nullptr;
+    QLabel *type=nullptr,*geometry=nullptr,*status=nullptr,*sample=nullptr,*scopeHint=nullptr;
+    QPlainTextEdit *ancestry=nullptr,*selector=nullptr;
+    QListWidget *actions=nullptr;
+    QComboBox *icons=nullptr;
+    QLineEdit *color=nullptr;
+    QCheckBox *scope=nullptr,*replace=nullptr;
+    QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr;
+    explicit Ui(Controller &c):controller(c){}
+};
+
+Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(new Ui(controller)) {
+    setWindowTitle("UI Augment · Inspector");
+    setObjectName("obs-ui-augment-inspector");
+    setModal(false);
+    resize(780,510);
+    setMinimumSize(570,420);
+    auto *root=new QVBoxLayout(this);
+    root->setContentsMargins(11,11,11,11);root->setSpacing(7);
+    auto *toolbar=new QHBoxLayout;
+    ui->pick=new QPushButton("Pick target · 4s",this);
+    ui->pick->setObjectName("augment-pick");
+    ui->status=new QLabel("Pick any widget or open a context menu and hover an action.",this);
+    ui->status->setWordWrap(true);
+    toolbar->addWidget(ui->pick);toolbar->addWidget(ui->status,1);
+    root->addLayout(toolbar);
+    ui->type=new QLabel("No target captured",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    QFont bold=ui->type->font();bold.setBold(true);ui->type->setFont(bold);
+    root->addWidget(ui->type);
+    ui->geometry=new QLabel(this);ui->geometry->setTextFormat(Qt::PlainText);ui->geometry->setWordWrap(true);root->addWidget(ui->geometry);
+    ui->ancestry=new QPlainTextEdit(this);ui->ancestry->setReadOnly(true);ui->ancestry->setMaximumHeight(64);
+    ui->ancestry->setPlaceholderText("Widget ancestry");root->addWidget(ui->ancestry);
+    auto *split=new QSplitter(Qt::Horizontal,this);split->setChildrenCollapsible(false);root->addWidget(split,1);
+    auto *left=new QWidget(split);auto *ll=new QVBoxLayout(left);ll->setContentsMargins(0,0,5,0);ll->setSpacing(4);
+    ll->addWidget(new QLabel("Menu actions",left));
+    ui->actions=new QListWidget(left);ui->actions->setObjectName("augment-actions");ll->addWidget(ui->actions,1);
+    auto *right=new QWidget(split);auto *rl=new QVBoxLayout(right);rl->setContentsMargins(5,0,0,0);rl->setSpacing(5);
+    auto *iconRow=new QHBoxLayout;
+    ui->sample=new QLabel(right);ui->sample->setFixedSize(32,32);ui->sample->setAlignment(Qt::AlignCenter);
+    ui->icons=new QComboBox(right);ui->icons->setObjectName("augment-icon");ui->icons->setIconSize(QSize(18,18));
+    for (auto name:iconNames()) ui->icons->addItem(previewIcon(name,palette().color(QPalette::Text)),name);
+    iconRow->addWidget(ui->sample);iconRow->addWidget(ui->icons,1);rl->addLayout(iconRow);
+    auto *colorRow=new QHBoxLayout;
+    auto *cl=new QLabel("Color",right);ui->color=new QLineEdit(right);ui->color->setObjectName("augment-color");
+    ui->color->setPlaceholderText("Theme text color");
+    ui->choose=new QPushButton("Pick…",right);
+    colorRow->addWidget(cl);colorRow->addWidget(ui->color,1);colorRow->addWidget(ui->choose);
+    rl->addLayout(colorRow);
+    ui->scope=new QCheckBox("Scope to observed menu",right);ui->scope->setChecked(true);
+    ui->replace=new QCheckBox("Replace existing native icon",right);
+    rl->addWidget(ui->scope);rl->addWidget(ui->replace);
+    ui->scopeHint=new QLabel(right);ui->scopeHint->setWordWrap(true);rl->addWidget(ui->scopeHint);
+    rl->addWidget(new QLabel("Generated rule",right));
+    ui->selector=new QPlainTextEdit(right);ui->selector->setReadOnly(true);ui->selector->setObjectName("augment-selector");
+    ui->selector->setMinimumHeight(95);rl->addWidget(ui->selector,1);
+    auto *buttons=new QHBoxLayout;
+    ui->copy=new QPushButton("Copy JSON",right);
+    ui->remove=new QPushButton("Remove exact rule",right);
+    ui->save=new QPushButton("Save rule",right);ui->save->setObjectName("augment-save");
+    buttons->addWidget(ui->copy);buttons->addWidget(ui->remove);buttons->addWidget(ui->save);
+    rl->addLayout(buttons);split->addWidget(left);split->addWidget(right);split->setSizes({310,420});
+    ui->timer=new QTimer(this);ui->timer->setSingleShot(true);
+    connect(ui->pick,&QPushButton::clicked,this,[this]{startPick();});
+    connect(ui->timer,&QTimer::timeout,this,[this]{
+        auto *under=QApplication::widgetAt(QCursor::pos());
+        const auto snapshot=(under && (under==this || isAncestorOf(under))) ? WidgetSnapshot{} : inspectAt(QCursor::pos());
+        capture(snapshot);
+        // Capture is complete before showing; a window system may dismiss the popup.
+        setAttribute(Qt::WA_ShowWithoutActivating,true);
+        show();
+        setAttribute(Qt::WA_ShowWithoutActivating,false);
+    });
+    connect(ui->actions,&QListWidget::currentRowChanged,this,[this](int row){selectRow(row);});
+    connect(ui->icons,&QComboBox::currentTextChanged,this,[this]{updatePreview();});
+    connect(ui->color,&QLineEdit::textChanged,this,[this]{updatePreview();});
+    connect(ui->scope,&QCheckBox::toggled,this,[this]{updatePreview();});
+    connect(ui->replace,&QCheckBox::toggled,this,[this]{updatePreview();});
+    connect(ui->choose,&QPushButton::clicked,this,[this]{
+        QColor initial(ui->color->text());if(!initial.isValid())initial=palette().color(QPalette::Text);
+        const auto color=QColorDialog::getColor(initial,this,"Icon color");
+        if(color.isValid())ui->color->setText(color.name());
+    });
+    connect(ui->copy,&QPushButton::clicked,this,[this]{QApplication::clipboard()->setText(ui->selector->toPlainText());});
+    connect(ui->save,&QPushButton::clicked,this,[this]{save();});
+    connect(ui->remove,&QPushButton::clicked,this,[this]{
+        const auto selector=selectorFor(ui->snapshot,ui->actions->currentRow(),ui->scope->isChecked());
+        QString error;
+        if(ui->controller.removeRule(selector,&error)) {
+            ui->status->setText("Exact rule removed. Reopen the target menu.");
+            selectRow(ui->actions->currentRow());
+        } else ui->status->setText(error);
+    });
+    selectRow(-1);
+}
+Inspector::~Inspector() =default;
+void Inspector::reject() {
+    ui->timer->stop();
+    QDialog::reject();
+}
+void Inspector::startPick() {
+    if (ui->timer->isActive()) return;
+    hide();ui->timer->start(4000);
+}
+void Inspector::capture(const WidgetSnapshot &snapshot) {
+    ui->snapshot=snapshot;
+    {
+        QSignalBlocker blocker(ui->actions);
+        ui->actions->clear();
+        for (const auto &a:snapshot.actions) {
+            QString label=a.text;
+            if (!a.objectName.isEmpty()) label+="\n#"+a.objectName;
+            auto *item=new QListWidgetItem(label,ui->actions);
+            if (!a.eligible()) item->setToolTip("Not supported by the menu painter.");
+            else if (a.nativeIcon) item->setToolTip("Has a native icon; use Replace existing to override.");
+        }
+        const int row=snapshot.selected>=0 ? snapshot.selected : (snapshot.actions.isEmpty()?-1:0);
+        ui->actions->setCurrentRow(row);
+    }
+    ui->type->setText(snapshot.valid() ? snapshot.type+(snapshot.objectName.isEmpty()?"":"  #"+snapshot.objectName) : "No OBS widget under the pointer");
+    ui->geometry->setText(snapshot.geometry+(snapshot.accessibility.isEmpty()?"":"  ·  "+snapshot.accessibility));
+    ui->ancestry->setPlainText(snapshot.ancestry);
+    ui->status->setText(!snapshot.valid()?"Pick again with the pointer over OBS.":
+        snapshot.isMenu?"Captured native menu. Pick an action to author an override.":
+        "Widget inspected. This slice can edit menu actions; other widgets are read-only.");
+    selectRow(ui->actions->currentRow());
+}
+void Inspector::selectRow(int row) {
+    const auto target=targetFor(ui->snapshot,row);
+    const auto rule=target.isEmpty()?QJsonObject{}:ui->controller.effectiveRule(target,ui->snapshot.menuLabels);
+    const QSignalBlocker a(ui->icons),b(ui->color),c(ui->replace);
+    ui->icons->setCurrentText(rule.value("icon").toString("plus"));
+    ui->color->setText(rule.value("color").toString());
+    ui->replace->setChecked(rule.value("replaceExisting").toBool(false));
+    updatePreview();
+}
+void Inspector::updatePreview() {
+    auto selector=selectorFor(ui->snapshot,ui->actions->currentRow(),ui->scope->isChecked());
+    const bool eligible=!selector.isEmpty();
+    const auto text=ui->color->text().trimmed();
+    QColor color(text);
+    const bool validColor=text.isEmpty()||color.isValid();
+    if(text.isEmpty())color=palette().color(QPalette::Text);
+    ui->sample->setPixmap(previewIcon(ui->icons->currentText(),color).pixmap(24,24));
+    for(auto *w:QList<QWidget*>{ui->icons,ui->color,ui->choose,ui->scope,ui->replace,ui->copy,ui->remove})w->setEnabled(eligible);
+    bool native=false;
+    if(eligible)native=ui->snapshot.actions.at(ui->actions->currentRow()).nativeIcon;
+    ui->save->setEnabled(eligible && validColor && (!native || ui->replace->isChecked()));
+    ui->copy->setEnabled(eligible && validColor);
+    if(!eligible) {ui->selector->clear();ui->scopeHint->setText("Choose an ordinary menu action to edit.");return;}
+    QString hint=selector.contains("menuObjectName")?"Exact menu object name.":
+        selector.contains("menuContains")?"Anonymous menu: matched by two observed labels (when available).":
+        selector.contains("objectName")?"Matches this action ID across menus.":"Matches this label across menus.";
+    if(native&&!ui->replace->isChecked())hint+="  Native icon present: enable replacement to save.";
+    if(!validColor)hint+="  Invalid color.";
+    ui->scopeHint->setText(hint);
+    selector["icon"]=ui->icons->currentText();
+    if(!text.isEmpty())selector["color"]=text;
+    if(ui->replace->isChecked())selector["replaceExisting"]=true;
+    ui->selector->setPlainText(QString::fromUtf8(QJsonDocument(selector).toJson(QJsonDocument::Indented)));
+}
+void Inspector::save() {
+    if(!ui->save->isEnabled())return;
+    const auto rule=QJsonDocument::fromJson(ui->selector->toPlainText().toUtf8()).object();
+    QString error;
+    if(ui->controller.saveRule(rule,&error))
+        ui->status->setText("Saved. Close and reopen the target menu to see your icon.");
+    else ui->status->setText(error);
+}
+}

@@ -1,15 +1,26 @@
 #pragma once
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <QJsonObject>
+#include <QIcon>
+#include <QColor>
 #include <memory>
 #include <functional>
 class QMenu;
 namespace augment {
+QString normalizeActionText(QString text);
+QStringList iconNames();
+QIcon previewIcon(const QString &name, const QColor &color);
 using Logger = std::function<void(const QString &)>;
 class Controller final : public QObject {
 public:
     explicit Controller(QString rulesFile, QObject *parent = nullptr, Logger logger = {});
     ~Controller() override;
+    // Returns false without overwriting an invalid or unreadable file.
+    bool saveRule(const QJsonObject &rule, QString *error = nullptr);
+    bool removeRule(const QJsonObject &selector, QString *error = nullptr);
+    QJsonObject effectiveRule(const QJsonObject &target, const QStringList &menuLabels) const;
 protected:
     bool eventFilter(QObject *, QEvent *) override;
 private:
