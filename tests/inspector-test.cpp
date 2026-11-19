@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QImage>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QSpinBox>
 #include <QLineEdit>
 #include <QListWidget>
 #include <iostream>
@@ -100,8 +102,17 @@ int main(int argc,char **argv) {
         auto *save=inspector.findChild<QPushButton*>("augment-save");
         REQUIRE(list && icons && color && save && list->currentRow()==0);
         icons->setCurrentText("camera");color->setText("#ff00ff");
+        auto *motion=inspector.findChild<QCheckBox*>("augment-motion");
+        auto *preset=inspector.findChild<QComboBox*>("augment-motion-preset");
+        auto *duration=inspector.findChild<QSpinBox*>("augment-motion-duration");
+        REQUIRE(motion && preset && duration);
+        motion->setChecked(true); REQUIRE(c.motionEnabled());
+        preset->setCurrentText("spin");duration->setValue(260);
         REQUIRE(save->isEnabled());save->click();
         REQUIRE(c.effectiveRule(target,snap.menuLabels).value("icon").toString()=="camera");
+        auto animation=c.effectiveRule(target,snap.menuLabels).value("animation").toObject();
+        REQUIRE(animation.value("preset").toString()=="spin" && animation.value("duration").toInt()==260);
+        motion->setChecked(false);REQUIRE(!c.motionEnabled());
         list->setCurrentRow(3); REQUIRE(!save->isEnabled());
         QWidget widget;widget.setObjectName("something");
         QPushButton child("Sample",&widget);child.setObjectName("target");

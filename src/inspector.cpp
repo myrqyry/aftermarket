@@ -6,6 +6,8 @@
 #include <QClipboard>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QSpinBox>
+#include "motion.h"
 #include <QCursor>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -111,9 +113,10 @@ struct Inspector::Ui {
     QLabel *type=nullptr,*geometry=nullptr,*status=nullptr,*sample=nullptr,*scopeHint=nullptr;
     QPlainTextEdit *ancestry=nullptr,*selector=nullptr;
     QListWidget *actions=nullptr;
-    QComboBox *icons=nullptr;
+    QComboBox *icons=nullptr,*preset=nullptr;
+    QSpinBox *duration=nullptr;
     QLineEdit *color=nullptr;
-    QCheckBox *scope=nullptr,*replace=nullptr;
+    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr;
     QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr;
     explicit Ui(Controller &c):controller(c){}
 };
@@ -122,7 +125,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     setModal(false);
-    resize(780,510);
+    resize(800,580);
     setMinimumSize(570,420);
     auto *root=new QVBoxLayout(this);
     root->setContentsMargins(11,11,11,11);root->setSpacing(7);
@@ -132,6 +135,9 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
     ui->status=new QLabel("Pick any widget or open a context menu and hover an action.",this);
     ui->status->setWordWrap(true);
     toolbar->addWidget(ui->pick);toolbar->addWidget(ui->status,1);
+    ui->motion=new QCheckBox("Motion",this);ui->motion->setObjectName("augment-motion");
+    ui->motion->setToolTip("Enable menu icon motion globally. Uncheck for reduced motion. Applies on next popup.");
+    ui->motion->setChecked(controller.motionEnabled());toolbar->addWidget(ui->motion);
     root->addLayout(toolbar);
     ui->type=new QLabel("No target captured",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont bold=ui->type->font();bold.setBold(true);ui->type->setFont(bold);
@@ -155,6 +161,15 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
     ui->choose=new QPushButton("Pick…",right);
     colorRow->addWidget(cl);colorRow->addWidget(ui->color,1);colorRow->addWidget(ui->choose);
     rl->addLayout(colorRow);
+    auto *motionRow=new QHBoxLayout;
+    motionRow->addWidget(new QLabel("Animation",right));
+    ui->preset=new QComboBox(right);ui->preset->setObjectName("augment-motion-preset");
+    ui->preset->addItems({"soft","pop","spin","none"});
+    ui->preset->setToolTip("soft: fade/slide and gentle hover growth; pop: stronger scale; spin: rotation; none: static.");
+    motionRow->addWidget(ui->preset,1);
+    ui->duration=new QSpinBox(right);ui->duration->setObjectName("augment-motion-duration");
+    ui->duration->setRange(60,600);ui->duration->setSingleStep(20);ui->duration->setSuffix(" ms");ui->duration->setValue(160);
+    motionRow->addWidget(ui->duration);rl->addLayout(motionRow);
     ui->scope=new QCheckBox("Scope to observed menu",right);ui->scope->setChecked(true);
     ui->replace=new QCheckBox("Replace existing native icon",right);
     rl->addWidget(ui->scope);rl->addWidget(ui->replace);
@@ -181,6 +196,19 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
     });
     connect(ui->actions,&QListWidget::currentRowChanged,this,[this](int row){selectRow(row);});
     connect(ui->icons,&QComboBox::currentTextChanged,this,[this]{updatePreview();});
+    connect(ui->preset,&QComboBox::currentTextChanged,this,[this]{updatePreview();});
+    connect(ui->duration,&QSpinBox::valueChanged,this,[this]{updatePreview();});
+    connect(ui->motion,&QCheckBox::toggled,this,[this](bool enabled){
+        QString error;
+        if(ui->controller.setMotionEnabled(enabled,&error))
+            ui->status->setText(enabled?"Motion enabled. Reopen a menu to see it.":"Motion disabled. Reopen menus for static icons.");
+        else {
+            const QSignalBlocker blocker(ui->motion);
+            ui->motion->setChecked(ui->controller.motionEnabled());
+            ui->status->setText(error);
+        }
+        updatePreview();
+    });
     connect(ui->color,&QLineEdit::textChanged,this,[this]{updatePreview();});
     connect(ui->scope,&QCheckBox::toggled,this,[this]{updatePreview();});
     connect(ui->replace,&QCheckBox::toggled,this,[this]{updatePreview();});
@@ -212,6 +240,7 @@ void Inspector::startPick() {
 }
 void Inspector::capture(const WidgetSnapshot &snapshot) {
     ui->snapshot=snapshot;
+    {const QSignalBlocker blocker(ui->motion);ui->motion->setChecked(ui->controller.motionEnabled());}
     {
         QSignalBlocker blocker(ui->actions);
         ui->actions->clear();
@@ -236,10 +265,12 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
 void Inspector::selectRow(int row) {
     const auto target=targetFor(ui->snapshot,row);
     const auto rule=target.isEmpty()?QJsonObject{}:ui->controller.effectiveRule(target,ui->snapshot.menuLabels);
-    const QSignalBlocker a(ui->icons),b(ui->color),c(ui->replace);
+    const QSignalBlocker a(ui->icons),b(ui->color),c(ui->replace),d(ui->preset),e(ui->duration);
     ui->icons->setCurrentText(rule.value("icon").toString("plus"));
     ui->color->setText(rule.value("color").toString());
     ui->replace->setChecked(rule.value("replaceExisting").toBool(false));
+    MotionSpec spec;MotionSpec::parse(rule.value("animation"),spec);
+    ui->preset->setCurrentText(spec.preset);ui->duration->setValue(spec.duration);
     updatePreview();
 }
 void Inspector::updatePreview() {
@@ -250,7 +281,8 @@ void Inspector::updatePreview() {
     const bool validColor=text.isEmpty()||color.isValid();
     if(text.isEmpty())color=palette().color(QPalette::Text);
     ui->sample->setPixmap(previewIcon(ui->icons->currentText(),color).pixmap(24,24));
-    for(auto *w:QList<QWidget*>{ui->icons,ui->color,ui->choose,ui->scope,ui->replace,ui->copy,ui->remove})w->setEnabled(eligible);
+    for(auto *w:QList<QWidget*>{ui->icons,ui->color,ui->choose,ui->scope,ui->replace,ui->copy,ui->remove,ui->preset,ui->duration})w->setEnabled(eligible);
+    ui->duration->setEnabled(eligible && ui->preset->currentText()!="none");
     bool native=false;
     if(eligible)native=ui->snapshot.actions.at(ui->actions->currentRow()).nativeIcon;
     ui->save->setEnabled(eligible && validColor && (!native || ui->replace->isChecked()));
@@ -261,8 +293,10 @@ void Inspector::updatePreview() {
         selector.contains("objectName")?"Matches this action ID across menus.":"Matches this label across menus.";
     if(native&&!ui->replace->isChecked())hint+="  Native icon present: enable replacement to save.";
     if(!validColor)hint+="  Invalid color.";
+    if(!ui->motion->isChecked())hint+="  Global motion is off.";
     ui->scopeHint->setText(hint);
     selector["icon"]=ui->icons->currentText();
+    selector["animation"]=QJsonObject{{"preset",ui->preset->currentText()},{"duration",ui->duration->value()}};
     if(!text.isEmpty())selector["color"]=text;
     if(ui->replace->isChecked())selector["replaceExisting"]=true;
     ui->selector->setPlainText(QString::fromUtf8(QJsonDocument(selector).toJson(QJsonDocument::Indented)));

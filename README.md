@@ -35,6 +35,47 @@ The inspector also captures arbitrary widget class names, ancestry, accessibilit
 
 ![Source widget identity](docs/screenshots/inspector-widget.png)
 
+## Motion
+
+Open **Tools → UI Augment Inspector** and enable **Motion** in the toolbar.
+This applies the default soft effect to matched icons the next time a menu opens.
+Motion is off by default, so existing configurations retain their static appearance.
+For individual actions, pick a preset and duration in the inspector and save the rule.
+
+- **soft**: fade/slide entrance, modest icon growth on hover.
+- **pop**: fade/slide with a more pronounced scale transition.
+- **spin**: fade/slide with rotation on hover.
+- **none**: static icon even when global motion is enabled.
+
+The duration is 60–600 ms (default 160 ms); a capped 9 ms stagger separates successive entrances.
+Uncheck Motion for reduced motion. The master switch persists in the rules file; it is applied when a menu opens.
+
+```json
+{
+  "enabled": true,
+  "motion": true,
+  "rules": [
+    {
+      "text": "Filters",
+      "icon": "sliders",
+      "animation": {"preset": "spin", "duration": 220}
+    }
+  ]
+}
+```
+
+The native menu and its hit targets never move. Only the independently drawn icon layer
+changes. The renderer caches rasterized SVGs at the display's device pixel ratio, clips
+motion to the icon gutter, uses monotonic elapsed time with cubic easing, and stops its
+16 ms timer when transitions finish or the menu closes. Hover retargets from its current
+value rather than snapping to an endpoint.
+
+![Real OBS icon reveal frames](docs/screenshots/motion-frames.png)
+
+Verified in isolated OBS 32.2.0 with the actual Colorway Rosé Pine theme: GUI enabled
+motion, selected spin and a 600 ms duration for Scale Filtering, persisted the scoped
+rule, and captured changing icon pixels during both entrance and hover.
+
 ## Live rules
 
 The file is re-read just before a menu opens. Close and reopen the menu after editing it; there is no OBS restart or theme replacement. Invalid or partially written JSON keeps the last valid rules.

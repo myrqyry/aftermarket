@@ -1,4 +1,10 @@
 #include "augment.h"
+#include "motion.h"
+#include <QElapsedTimer>
+#include <QPaintEvent>
+#include <QtMath>
+#include <QTimer>
+#include <QMouseEvent>
 #include <QAction>
 #include <QApplication>
 #include <QColor>
@@ -133,6 +139,7 @@ struct Rule {
     bool replaceExisting = false;
     QStringList anchors;
     QJsonObject raw;
+    MotionSpec motion;
     bool matches(const QString &label, const QString &id, const QString &menuId, const QStringList &labels) const {
         if ((!menuObjectName.isEmpty() && menuObjectName!=menuId) ||
             (!objectName.isEmpty() && objectName!=id) ||
@@ -144,7 +151,7 @@ struct Rules {
     QString path;
     Logger logger;
     QByteArray lastRead;
-    bool enabled = true, inspect = false;
+    bool enabled = true, inspect = false, motion = false;
     std::vector<Rule> entries;
     explicit Rules(QString file, Logger sink): path(std::move(file)), logger(std::move(sink)) {
         if (!QFileInfo::exists(path)) {
@@ -164,7 +171,8 @@ struct Rules {
         if (error.error != QJsonParseError::NoError || !doc.isObject()) return false;
         auto root = doc.object();
         if (!root.value("rules").isArray() || (root.contains("enabled") && !root.value("enabled").isBool()) ||
-            (root.contains("inspect") && !root.value("inspect").isBool())) return false;
+            (root.contains("inspect") && !root.value("inspect").isBool()) ||
+            (root.contains("motion") && !root.value("motion").isBool())) return false;
         std::vector<Rule> next;
         for (const auto &v : root.value("rules").toArray()) {
             if (!v.isObject()) return false;
@@ -183,10 +191,12 @@ struct Rules {
                 for (const auto &v : o.value("menuContains").toArray())
                     if (!v.isString() || normalizeActionText(v.toString()).isEmpty()) return false;
             }
+            if (!MotionSpec::parse(o.value("animation"),r.motion)) return false;
             next.push_back(std::move(r));
         }
         enabled = root.value("enabled").toBool(true);
         inspect = root.value("inspect").toBool(false);
+        motion = root.value("motion").toBool(false);
         entries = std::move(next);
         return true;
     }
@@ -217,12 +227,51 @@ class Overlay final : public QWidget {
         bool originallyVisible;
         QString icon;
         QColor color;
+        MotionSpec motion;
+        MotionTrack hover;
+        qint64 delay=0;
+        QColor cachedColor;
+        QPixmap cachedIcon;
+        qreal cachedDpr=0;
     };
     QMenu *menu;
     std::vector<Slot> slots_;
     bool prepared_ = false;
+    bool motionEnabled_=false;
+    QElapsedTimer elapsed_;
+    QTimer *clock_;
+    QPointer<QAction> hovered_;
+    qint64 now() const {return elapsed_.isValid()?elapsed_.elapsed():0;}
+    QRect iconRegion(const Slot &s) const {
+        if(!s.action || !menu->actions().contains(s.action))return {};
+        const QRect row=menu->actionGeometry(s.action);
+        if(!row.isValid() || !rect().contains(row))return {};
+        return menu->layoutDirection()==Qt::RightToLeft ?
+            QRect(row.right()-25,row.top(),26,row.height()) : QRect(row.left(),row.top(),26,row.height());
+    }
+    bool moving(const Slot &s,qint64 t) const {
+        return motionEnabled_ && s.motion.enabled() && (t<s.delay+s.motion.duration || s.hover.running(t));
+    }
+    void tick() {
+        if (!isVisible()) {clock_->stop();return;}
+        const auto t=now();
+        bool active=false;
+        // Repaint the final frame too. Qt repaints the parent backing store for
+        // transparent children; the native menu owns all non-icon pixels.
+        for (const auto &s:slots_) {
+            if(!s.motion.enabled())continue;
+            const auto region=iconRegion(s);
+            if(region.isValid())update(region);
+            active|=moving(s,t);
+        }
+        if(!active)clock_->stop();
+    }
 public:
-    explicit Overlay(QMenu *m):QWidget(m),menu(m) {
+    explicit Overlay(QMenu *m):QWidget(m),menu(m),clock_(new QTimer(this)) {
+        clock_->setObjectName("augment-motion-clock");
+        clock_->setTimerType(Qt::PreciseTimer);
+        clock_->setInterval(16);
+        connect(clock_,&QTimer::timeout,this,[this]{tick();});
         setObjectName("obs-ui-augment-overlay");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_NoSystemBackground);
@@ -232,6 +281,7 @@ public:
     ~Overlay() override { restore(); }
     bool prepared() const {return prepared_;}
     void restore() {
+        clock_->stop();elapsed_.invalidate();hovered_.clear();motionEnabled_=false;
         hide();
         auto old = std::move(slots_);
         slots_.clear();
@@ -249,6 +299,7 @@ public:
     void prepare(Rules &rules) {
         if (prepared_) return;
         prepared_ = true;
+        motionEnabled_=rules.motion;
         const auto actions = menu->actions();
         QStringList menuLabels;
         for (auto *action : actions)
@@ -267,7 +318,7 @@ public:
             QPixmap blank(extent,extent);
             blank.fill(Qt::transparent);
             QIcon reservation(blank);
-            slots_.push_back({a,reservation.cacheKey(),a->icon(),a->isIconVisibleInMenu(),r->icon,r->color});
+            slots_.push_back({a,reservation.cacheKey(),a->icon(),a->isIconVisibleInMenu(),r->icon,r->color,r->motion,{},qMin<qint64>(72,slots_.size()*9)});
             a->setProperty("_obsUiAugmentOriginalIcon",!a->icon().isNull());
             a->setProperty("_obsUiAugmentReservation",true);
             a->setIcon(reservation);
@@ -280,12 +331,33 @@ public:
         if (slots_.empty()) return;
         setGeometry(menu->rect());
         raise(); show(); update();
+        if(motionEnabled_ && !elapsed_.isValid()) {
+            elapsed_.start();
+            if(std::any_of(slots_.begin(),slots_.end(),[](const Slot &s){return s.motion.enabled();}))
+                clock_->start();
+        }
+    }
+    void hover(QAction *action) {
+        if (action && !action->isEnabled()) action=nullptr;
+        if (hovered_==action) return;
+        hovered_=action;
+        if (!motionEnabled_ || !elapsed_.isValid()) {update();return;}
+        auto t=now();
+        bool active=false;
+        for(auto &s:slots_) {
+            if(!s.motion.enabled())continue;
+            s.hover.retarget(s.action==action?1.:0.,t,s.motion.duration);
+            active|=moving(s,t);
+        }
+        if(active && isVisible() && !clock_->isActive())clock_->start();
+        update();
     }
 protected:
-    void paintEvent(QPaintEvent *) override {
+    void paintEvent(QPaintEvent *event) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        for (const auto &s : slots_) {
+        const auto t=now();
+        for (auto &s : slots_) {
             if (!s.action || !s.action->isVisible() || s.action->isCheckable() ||
                 s.action->icon().cacheKey()!=s.key || !menu->actions().contains(s.action)) continue;
             const QRect row = menu->actionGeometry(s.action);
@@ -296,10 +368,40 @@ protected:
             const QRect target(x,row.center().y()-size/2,size,size);
             QColor color = s.color.isValid() ? s.color : menu->palette().color(QPalette::Text);
             if (!s.action->isEnabled()) color.setAlpha(100);
-            QSvgRenderer renderer(iconSvg(s.icon,color));
+            const auto region=iconRegion(s);
+            if(!event->region().intersects(region))continue;
+            const auto dpr=devicePixelRatioF();
+            if(s.cachedIcon.isNull() || s.cachedColor!=color || s.cachedDpr!=dpr) {
+                s.cachedColor=color;s.cachedDpr=dpr;
+                const int physical=qCeil(32*dpr);
+                s.cachedIcon=QPixmap(physical,physical);
+                s.cachedIcon.setDevicePixelRatio(dpr);
+                s.cachedIcon.fill(Qt::transparent);
+                QPainter cache(&s.cachedIcon);
+                cache.setRenderHint(QPainter::Antialiasing);
+                QSvgRenderer svg(iconSvg(s.icon,color));
+                svg.render(&cache,QRectF(0,0,32,32));
+            }
+            qreal alpha=1,scale=1,shift=0,angle=0;
+            if(motionEnabled_ && s.motion.enabled() && elapsed_.isValid()) {
+                const auto progress=qBound(0.,double(t-s.delay)/s.motion.duration,1.);
+                const auto entrance=QEasingCurve(QEasingCurve::OutCubic).valueForProgress(progress);
+                const auto hover=s.hover.value(t);
+                alpha=entrance;
+                shift=-3*(1-entrance);
+                if(menu->layoutDirection()==Qt::RightToLeft)shift=-shift;
+                if(s.motion.preset=="pop")scale=.72+.28*entrance+.18*hover;
+                else if(s.motion.preset=="spin") {scale=.88+.12*entrance;angle=-18*(1-entrance)+28*hover;}
+                else scale=.90+.10*entrance+.10*hover;
+            }
             p.save();
-            p.setClipRect(row);
-            renderer.render(&p,target);
+            p.setClipRect(region);
+            p.setOpacity(alpha);
+            p.setRenderHint(QPainter::SmoothPixmapTransform);
+            p.translate(QRectF(target).center()+QPointF(shift,0));
+            p.rotate(angle);
+            p.scale(scale,scale);
+            p.drawPixmap(QRectF(-size/2.,-size/2.,size,size),s.cachedIcon,QRectF(s.cachedIcon.rect()));
             p.restore();
         }
     }
@@ -340,7 +442,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -349,10 +451,12 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     Rules validator=current;
     if (before.size()>maxRuleBytes || !validator.parse(before))
         return fail(error,"Invalid rules.json; fix the file before editing.");
+    auto root=QJsonDocument::fromJson(before).object();
+    if (motion) root["motion"]=*motion;
+    else {
     auto selector=canonicalSelector(entry);
     if (!selector.contains("text") && !selector.contains("objectName"))
         return fail(error,"No valid action selector.");
-    auto root=QJsonDocument::fromJson(before).object();
     QJsonArray next;
     if (!remove) next.append(entry); // narrow overrides win over broader rules
     bool found=false;
@@ -362,6 +466,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     }
     if (remove && !found) return fail(error,"No exact override exists for this selector.");
     root["rules"]=next;
+    }
     auto after=QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (after.size()>maxRuleBytes || !validator.parse(after))
         return fail(error,"Invalid rule; nothing was written.");
@@ -377,6 +482,10 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     if (error) error->clear();
     return true;
 }
+}
+bool Controller::motionEnabled() const {state->rules.refresh();return state->rules.motion;}
+bool Controller::setMotionEnabled(bool enabled, QString *error) {
+    return editRules(state->rules,{},false,error,&enabled);
 }
 bool Controller::saveRule(const QJsonObject &entry, QString *error) {
     return editRules(state->rules,entry,false,error);
@@ -400,7 +509,7 @@ void Controller::attach(QMenu *menu) {
         state->rules.refresh();
         overlay->prepare(state->rules);
     });
-    connect(menu,&QMenu::hovered,overlay,[overlay]{overlay->update();});
+    connect(menu,&QMenu::hovered,overlay,[overlay](QAction *action){overlay->hover(action);});
 }
 bool Controller::eventFilter(QObject *object,QEvent *event) {
     switch(event->type()) {
@@ -410,6 +519,9 @@ bool Controller::eventFilter(QObject *object,QEvent *event) {
         case QEvent::Resize:
         case QEvent::ActionRemoved:
         case QEvent::ActionChanged:
+        case QEvent::MouseMove:
+        case QEvent::Leave:
+        case QEvent::KeyPress:
             break;
         default: return false;
     }
@@ -429,6 +541,13 @@ bool Controller::eventFilter(QObject *object,QEvent *event) {
             break;
         case QEvent::Hide: overlay->restore(); break;
         case QEvent::Resize: if (menu->isVisible()) overlay->present(); break;
+        case QEvent::MouseMove: overlay->hover(menu->actionAt(static_cast<QMouseEvent*>(event)->position().toPoint()));break;
+        case QEvent::Leave: overlay->hover(nullptr);break;
+        case QEvent::KeyPress: {
+            QPointer<QMenu> safe(menu);
+            QTimer::singleShot(0,overlay,[overlay,safe]{if(safe && safe->isVisible())overlay->hover(safe->activeAction());});
+            break;
+        }
         case QEvent::ActionChanged:
         case QEvent::ActionRemoved: overlay->update(); break;
         default: break;
