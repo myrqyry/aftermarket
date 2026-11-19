@@ -23,17 +23,47 @@ Restart OBS (or open it if closed). The module creates its rules file at
 `~/.config/obs-studio/plugin_config/obs-ui-augment/rules.json` by default.
 If XDG_CONFIG_HOME is set, use that configuration root.
 
-## Native inspector
+## Inspector workspace
 
-Open **Tools → UI Augment Inspector**. Click **Pick target · 4s**; the inspector hides while you move the pointer over an OBS control, or open a context menu and hover an action. After four seconds it snapshots the target and returns.
+Open **Tools → UI Augment Inspector**. All existing effects are now accessible
+from four pages in one native, theme-aware window:
 
-![Menu inspector in real OBS](docs/screenshots/inspector-menu.png)
+- **Menus & widgets:** Pick target with an adjustable 2–10 second delay,
+  open a context menu and hover an action. Filter captured labels, see saved
+  icon previews, choose an icon/color/animation and save a rule. Technical
+  geometry, ancestry and generated JSON are available through Show technical
+  details; ordinary widget capture remains read-only.
+- **Mixer:** choose all current/future mixer sources or check individual
+  live source names. Refresh the actual mixer list or add an exact offline
+  name, including names containing semicolons. Select knobs, integrated
+  peak meters, per-source reactive gradients or native meter color pulses.
+  Picking a mixer widget opens this page at its source, without changing it.
+- **Gradients:** enable track categories, select theme palette or enter
+  custom colors, add colors with the native color picker, preview the
+  sequence and adjust loop duration.
+- **Panels:** collapse/expand eligible native docks, refresh the list or
+  expand all. The legacy Tools → UI Augment Panels shortcut opens this page.
 
-The left pane lists the captured action labels and Qt object names. Choose an icon and optional color on the right. The generated JSON shows exactly what will match. Scope the rule to the captured menu (default), or uncheck that option to target the action across menus. Save, dismiss the inspector if needed, and reopen the menu. Existing native icons require explicit replacement. Remove exact rule deletes only the identical selector and leaves broader rules intact. Saving prepends the new priority override and replaces rules with the identical selector, without rewriting unrelated rule entries or root fields. Invalid JSON is never overwritten by the inspector.
+![Mixer page in OBS](docs/screenshots/workspace-mixer.png)
 
-The inspector also captures arbitrary widget class names, ancestry, accessibility names and geometry, but **editing is currently menu-action only**. For example, the Sources dock's actual label is an OBSSourceLabel under SourceTreeItem.
+![Gradient page in OBS](docs/screenshots/workspace-gradients.png)
 
-![Source widget identity](docs/screenshots/inspector-widget.png)
+![Panels page in OBS](docs/screenshots/workspace-panels.png)
+
+Mixer and gradient edits share an explicit Apply changes button; a pending
+indicator and Reload saved settings distinguish the draft from applied
+settings. No separate editor dialog is needed. Apply preserves unknown
+settings and rejects conflicting external changes rather than overwriting
+them; an empty individual selection never silently selects all sources.
+Motion remains a global immediate toggle. Menu rules still save individually.
+
+Scope a menu rule to its captured menu (default), or uncheck scope to target
+the action across menus. Reopen the menu after saving. Existing native icons
+require explicit replacement. Remove exact rule deletes only the identical
+selector and leaves broader rules intact. The menu matcher's previous
+heuristic and rule precedence are unchanged.
+
+![Captured native menu](docs/screenshots/workspace-menus.png)
 
 ## Motion
 
@@ -78,7 +108,7 @@ rule, and captured changing icon pixels during both entrance and hover.
 
 ## Animated gradient tracks
 
-Open **Tools → UI Augment Inspector → Gradients…**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+Open **Tools → UI Augment Inspector → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
 
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
@@ -109,7 +139,7 @@ Verified in an isolated OBS 32.2.0 session with Colorway Rosé Pine, native medi
 
 ## Audio-reactive mixer effects
 
-In **Tools → UI Augment Inspector → Gradients…**, enable gradient tracks,
+In **Tools → UI Augment Inspector**, enable gradient tracks on Gradients, then open Mixer and enable
 **Audio-reactive mixer gradients**, and optionally **Pulse native meter colors**.
 Enable Motion in the inspector. The effects are opt-in and can be toggled live.
 
@@ -153,9 +183,9 @@ inside meter bars remain future work.
 
 ## Rotary mixer knobs
 
-Open **Tools → UI Augment Inspector → Gradients…** and check
-**Replace mixer faders with knobs**. Leave Knob sources blank to replace every
-mixer fader, or enter exact mixer source names separated by semicolons (e.g.
+Open **Tools → UI Augment Inspector → Mixer** and check
+**Replace mixer faders with knobs**. Enable All mixer sources to replace every
+mixer fader, or select specific sources in the checklist (e.g.
 `Mic; Music`). Apply without restarting OBS. For now this is limited to mixer
 sliders, not seek bars or arbitrary settings controls.
 
@@ -206,7 +236,7 @@ one-second peak marker, clip flash and 30 dB/s release.
 The native meter is hidden only when paired with the supported knob and
 source can be resolved. It is restored if the binding is unavailable or
 the effect is disabled. Disable **Integrate peak meter into knob** in
-Tools → UI Augment Inspector → Gradients… to retain the full native meter.
+Tools → UI Augment Inspector → Mixer to retain the full native meter.
 The corresponding JSON key is `gradient.knobMeters` (default true).
 The compact control requests a 68-pixel minimum and 76-pixel maximum height
 subject to native constraints. The OBS setting for sample/true peak is used.

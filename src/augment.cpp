@@ -466,7 +466,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -476,7 +476,11 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     if (before.size()>maxRuleBytes || !validator.parse(before))
         return fail(error,"Invalid rules.json; fix the file before editing.");
     auto root=QJsonDocument::fromJson(before).object();
-    if (gradient) root["gradient"]=*gradient;
+    if (gradient) {
+        if(expected&&root.value("gradient").toObject()!=*expected)
+            return fail(error,"Settings changed elsewhere. Reload before applying.");
+        root["gradient"]=*gradient;
+    }
     else if (motion) root["motion"]=*motion;
     else {
     auto selector=canonicalSelector(entry);
@@ -513,8 +517,8 @@ void Controller::setAudioProvider(AudioProvider provider,AudioReset reset) {
     state->gradients.setAudioProvider(std::move(provider),std::move(reset));
 }
 QJsonObject Controller::gradientSettings() const {state->rules.refresh();return state->rules.gradientRaw;}
-bool Controller::setGradientSettings(const QJsonObject &spec,QString *error) {
-    if(!editRules(state->rules,{},false,error,nullptr,&spec))return false;
+bool Controller::setGradientSettings(const QJsonObject &spec,QString *error,const QJsonObject *expected) {
+    if(!editRules(state->rules,{},false,error,nullptr,&spec,expected))return false;
     state->refreshGradients();return true;
 }
 bool Controller::motionEnabled() const {state->rules.refresh();return state->rules.motion;}

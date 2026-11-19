@@ -109,49 +109,60 @@ bool Panels::eventFilter(QObject *o,QEvent *event) {
     }
     return false;
 }
-void Panels::showManager(QMainWindow *main) {
-    if(!main)return;
-    if(state->manager){state->manager->raise();state->manager->activateWindow();return;}
-    auto *dlg=new QDialog(main);
-    state->manager=dlg;
-    dlg->setObjectName("obs-ui-augment-panels");
-    dlg->setWindowTitle("UI Augment · Panels");
-    dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->resize(360,380);
+QWidget *Panels::createPage(QMainWindow *main,QWidget *parent) {
+    auto *dlg=new QWidget(parent);
     auto *layout=new QVBoxLayout(dlg);
     auto *hint=new QLabel("Middle-click a dock title to collapse or expand it. Or select a panel here. Floating and tabbed docks are left alone.",dlg);
     hint->setWordWrap(true);layout->addWidget(hint);
-    auto *list=new QListWidget(dlg);layout->addWidget(list,1);
+    auto *list=new QListWidget(dlg);list->setObjectName("augment-panel-list");layout->addWidget(list,1);
     auto *status=new QLabel(dlg);status->setWordWrap(true);layout->addWidget(status);
     auto *buttons=new QHBoxLayout;
-    auto *toggleButton=new QPushButton("Collapse / expand",dlg);
+    auto *toggleButton=new QPushButton("Collapse / expand",dlg);toggleButton->setObjectName("augment-panel-toggle");
     auto *restoreButton=new QPushButton("Expand all",dlg);
-    auto *refreshButton=new QPushButton("Refresh",dlg);
+    auto *refreshButton=new QPushButton("Refresh",dlg);refreshButton->setObjectName("augment-panel-refresh");
     buttons->addWidget(toggleButton);buttons->addWidget(restoreButton);buttons->addWidget(refreshButton);layout->addLayout(buttons);
     auto targets=std::make_shared<QVector<QPointer<QDockWidget>>>();
+    QPointer<Panels> safe(this);
+    QPointer<QMainWindow> window(main);
     auto refresh=[=]{
+        if(!safe||!window)return;
         QPointer<QDockWidget> previous;
         if(list->currentRow()>=0&&list->currentRow()<targets->size())previous=targets->at(list->currentRow());
         list->clear();targets->clear();
-        auto docks=main->findChildren<QDockWidget*>();
+        auto docks=window->findChildren<QDockWidget*>();
         std::sort(docks.begin(),docks.end(),[](auto *a,auto *b){return a->windowTitle().localeAwareCompare(b->windowTitle())<0;});
         for(auto *dock:docks) {
-            if(owner(dock)!=main||dock->isHidden()||dock->windowTitle().isEmpty())continue;
-            const auto label=dock->windowTitle()+(collapsed(dock)?"  ·  Collapsed":canCollapse(dock)?"":"  ·  Unavailable");
+            if(owner(dock)!=window||dock->isHidden()||dock->windowTitle().isEmpty())continue;
+            const auto label=dock->windowTitle()+(safe->collapsed(dock)?"  ·  Collapsed":safe->canCollapse(dock)?"  ·  Expanded":"  ·  Unavailable");
             list->addItem(label);targets->append(dock);
             if(dock==previous)list->setCurrentRow(list->count()-1);
         }
         if(list->currentRow()<0&&list->count())list->setCurrentRow(0);
+        const int row=list->currentRow();
+        toggleButton->setEnabled(row>=0&&row<targets->size()&&safe->canCollapse(targets->at(row)));
     };
     connect(toggleButton,&QPushButton::clicked,dlg,[=]{
         const int row=list->currentRow();
-        if(row<0||row>=targets->size()||!targets->at(row))return;
+        if(!safe||row<0||row>=targets->size()||!targets->at(row))return;
         auto *dock=targets->at(row).data();
-        status->setText(toggle(dock)?(collapsed(dock)?"Panel collapsed.":"Panel expanded."):"This panel cannot be collapsed in its current layout.");
+        status->setText(safe->toggle(dock)?(safe->collapsed(dock)?"Panel collapsed.":"Panel expanded."):"This panel cannot be collapsed in its current layout.");
         refresh();
     });
-    connect(restoreButton,&QPushButton::clicked,dlg,[=]{restoreAll();status->setText("All collapsed panels expanded.");refresh();});
+    connect(restoreButton,&QPushButton::clicked,dlg,[=]{if(!safe)return;safe->restoreAll();status->setText("All collapsed panels expanded.");refresh();});
     connect(refreshButton,&QPushButton::clicked,dlg,refresh);
-    refresh();dlg->show();
+    connect(list,&QListWidget::currentRowChanged,dlg,[=](int row){
+        toggleButton->setEnabled(safe&&row>=0&&row<targets->size()&&safe->canCollapse(targets->at(row)));
+    });
+    refresh();return dlg;
+}
+void Panels::showManager(QMainWindow *main) {
+    if(!main)return;
+    if(state->manager){state->manager->raise();state->manager->activateWindow();return;}
+    auto *dlg=new QDialog(main);state->manager=dlg;
+    dlg->setObjectName("obs-ui-augment-panels");
+    dlg->setWindowTitle("UI Augment · Panels");
+    dlg->setAttribute(Qt::WA_DeleteOnClose);dlg->resize(400,380);
+    auto *layout=new QVBoxLayout(dlg);layout->setContentsMargins(0,0,0,0);
+    layout->addWidget(createPage(main,dlg));dlg->show();
 }
 }

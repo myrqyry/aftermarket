@@ -9,6 +9,13 @@
 #include <QSpinBox>
 #include "motion.h"
 #include "gradient.h"
+#include "panels.h"
+#include <QMainWindow>
+#include <QTabWidget>
+#include <QAbstractButton>
+#include <QPainter>
+#include <QPointer>
+#include <functional>
 #include <QCursor>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -46,7 +53,7 @@ bool ActionSnapshot::eligible() const {
 WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
     WidgetSnapshot s;
     if (!widget) return s;
-    if (widget->objectName()=="obs-ui-augment-overlay") widget=widget->parentWidget();
+    if (widget->objectName()=="obs-ui-augment-overlay"||widget->objectName()=="obs-ui-augment-gradient") widget=widget->parentWidget();
     if (!widget) return s;
     s.type=QString::fromLatin1(widget->metaObject()->className());
     s.objectName=widget->objectName();
@@ -56,6 +63,10 @@ WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
     QStringList parents;
     for (auto *w=widget;w;w=w->parentWidget()) parents.prepend(identity(w));
     s.ancestry=parents.join("  ›  ");
+    for(auto *w=widget;w;w=w->parentWidget())if(w->inherits("VolumeControl")) {
+        for(auto *b:w->findChildren<QAbstractButton*>())if(b->inherits("VolumeName")){s.mixerSource=b->text();break;}
+        break;
+    }
     QMenu *menu=nullptr;
     for (auto *w=widget;w;w=w->parentWidget())
         if ((menu=qobject_cast<QMenu*>(w))) break;
@@ -108,90 +119,163 @@ QJsonObject selectorFor(const WidgetSnapshot &s,int row,bool scopeMenu) {
 }
 
 namespace {
-void openGradientSettings(Controller &controller,QWidget *parent) {
-    if(auto *existing=parent->findChild<QDialog*>("obs-ui-augment-gradient-settings")) {
-        existing->show();existing->raise();existing->activateWindow();return;
+QString mixerSource(const QWidget *widget) {
+    for(auto *w=widget;w;w=w->parentWidget()) {
+        if(!w->inherits("VolumeControl"))continue;
+        for(auto *b:w->findChildren<QAbstractButton*>())
+            if(b->inherits("VolumeName"))return b->text();
+        break;
     }
-    auto *dlg=new QDialog(parent);
-    dlg->setObjectName("obs-ui-augment-gradient-settings");
-    dlg->setWindowTitle("UI Augment · Gradient tracks");
-    dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->setModal(false);dlg->resize(520,345);
-    const auto raw=controller.gradientSettings();
-    GradientSpec spec;GradientSpec::parse(raw,spec);
-    auto *layout=new QVBoxLayout(dlg);
-    layout->setContentsMargins(12,12,12,12);layout->setSpacing(8);
-    auto *enable=new QCheckBox("Enable gradient tracks",dlg);
-    enable->setObjectName("augment-gradient-enabled");enable->setChecked(spec.enabled);
-    layout->addWidget(enable);
-    auto *targets=new QHBoxLayout;
-    auto *sliders=new QCheckBox("Sliders",dlg);sliders->setChecked(spec.sliders);
-    auto *progress=new QCheckBox("Progress bars",dlg);progress->setChecked(spec.progress);
-    targets->addWidget(sliders);targets->addWidget(progress);targets->addStretch();
-    layout->addLayout(targets);
-    auto *reactive=new QCheckBox("Audio-reactive mixer gradients",dlg);
-    reactive->setObjectName("augment-gradient-reactive");reactive->setChecked(spec.audioReactive);
-    auto *meters=new QCheckBox("Pulse native meter colors",dlg);
-    meters->setObjectName("augment-gradient-meters");meters->setChecked(spec.meters);
-    meters->setEnabled(spec.audioReactive);
-    QObject::connect(reactive,&QCheckBox::toggled,meters,&QWidget::setEnabled);
-    layout->addWidget(reactive);layout->addWidget(meters);
-    auto *knobs=new QCheckBox("Replace mixer faders with knobs",dlg);
-    knobs->setObjectName("augment-gradient-knobs");knobs->setChecked(spec.knobs);
-    layout->addWidget(knobs);
-    auto *knobMeters=new QCheckBox("Integrate peak meter into knob",dlg);
-    knobMeters->setObjectName("augment-knob-meters");knobMeters->setChecked(spec.knobMeters);
-    knobMeters->setEnabled(spec.knobs);
-    QObject::connect(knobs,&QCheckBox::toggled,knobMeters,&QWidget::setEnabled);
-    layout->addWidget(knobMeters);
+    return {};
+}
+QStringList mixerSources(QWidget *host) {
+    QStringList result;
+    const auto widgets=host?host->findChildren<QWidget*>():QApplication::allWidgets();
+    for(auto *w:widgets)if(w->inherits("VolumeControl")) {
+        const auto name=mixerSource(w);
+        if(!name.isEmpty()&&!result.contains(name))result.append(name);
+    }
+    result.sort();return result;
+}
+struct SettingsPages {
+    QJsonObject baseline;
+    std::function<void()> refreshSources;
+    QPointer<QListWidget> sources;
+};
+std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *tabs,QWidget *host,QWidget *footer,QLabel *status) {
+    auto state=std::make_shared<SettingsPages>();
+    auto *mixer=new QWidget(tabs);auto *ml=new QVBoxLayout(mixer);
+    auto *gradient=new QWidget(tabs);auto *gl=new QVBoxLayout(gradient);
+    ml->setContentsMargins(12,12,12,12);gl->setContentsMargins(12,12,12,12);
+    ml->setSpacing(8);gl->setSpacing(8);
+    auto heading=[](const QString &title,const QString &desc,QVBoxLayout *layout,QWidget *parent){
+        auto *label=new QLabel(title,parent);QFont f=label->font();f.setBold(true);f.setPointSizeF(f.pointSizeF()+2);label->setFont(f);layout->addWidget(label);
+        auto *hint=new QLabel(desc,parent);hint->setWordWrap(true);layout->addWidget(hint);
+    };
+    auto check=[](const QString &label,const QString &id,QVBoxLayout *layout,QWidget *parent){
+        auto *w=new QCheckBox(label,parent);w->setObjectName(id);layout->addWidget(w);return w;
+    };
+    heading("Mixer controls","Choose which channels use rotary controls. The original OBS gain and audio behavior stay intact.",ml,mixer);
+    auto *knobs=check("Replace mixer faders with knobs","augment-gradient-knobs",ml,mixer);
+    auto *knobMeters=check("Integrate peak meter into knob","augment-knob-meters",ml,mixer);
+    knobMeters->setToolTip("Outer ring: maximum-channel peak. Inner ring: gain. Disable to keep detailed native meters.");
+    auto *all=check("All mixer sources","augment-knob-all",ml,mixer);
+    auto *selectionHint=new QLabel("Check the sources you want, or double-click a row to toggle it.",mixer);selectionHint->setWordWrap(true);ml->addWidget(selectionHint);
+    auto *sources=new QListWidget(mixer);sources->setObjectName("augment-knob-source-list");ml->addWidget(sources,1);state->sources=sources;
+    auto *sourceRow=new QHBoxLayout;
+    auto *name=new QLineEdit(mixer);name->setObjectName("augment-knob-add-name");name->setPlaceholderText("Exact source name (including offline sources)");
+    auto *add=new QPushButton("Add source",mixer);add->setObjectName("augment-knob-add");
+    auto *refresh=new QPushButton("Refresh sources",mixer);refresh->setObjectName("augment-knob-refresh");
+    sourceRow->addWidget(name,1);sourceRow->addWidget(add);sourceRow->addWidget(refresh);ml->addLayout(sourceRow);
+    auto *reactive=check("Audio-reactive mixer gradients","augment-gradient-reactive",ml,mixer);
+    auto *meters=check("Pulse native meter colors","augment-gradient-meters",ml,mixer);
+    auto *audioHint=new QLabel("Reactive gradients need enabled gradient tracks, sliders and Motion. Integrated peak meters work even with Motion off.",mixer);
+    audioHint->setWordWrap(true);ml->addWidget(audioHint);
+    heading("Gradient tracks","Use the active theme palette or a custom color sequence. Motion controls decorative animation globally.",gl,gradient);
+    auto *enable=check("Enable gradient tracks","augment-gradient-enabled",gl,gradient);
+    auto *sliders=check("Sliders and rotary rings","augment-gradient-sliders",gl,gradient);
+    auto *progress=check("Progress bars","augment-gradient-progress",gl,gradient);
     auto *form=new QFormLayout;
-    auto *colors=new QLineEdit(dlg);colors->setObjectName("augment-gradient-colors");
-    colors->setPlaceholderText("Theme palette (or #hex, #hex, …)");
-    QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());
-    colors->setText(hex.join(", "));
-    form->addRow("Colors",colors);
-    auto *knobSources=new QLineEdit(dlg);knobSources->setObjectName("augment-knob-sources");
-    knobSources->setPlaceholderText("All mixer sources (or exact names; separated by semicolons)");
-    knobSources->setText(spec.knobSources.join("; "));
-    knobSources->setEnabled(spec.knobs);
-    QObject::connect(knobs,&QCheckBox::toggled,knobSources,&QWidget::setEnabled);
-    form->addRow("Knob sources",knobSources);
-    auto *period=new QSpinBox(dlg);period->setObjectName("augment-gradient-period");
-    period->setRange(400,12000);period->setSingleStep(100);period->setSuffix(" ms");period->setValue(spec.period);
-    form->addRow("Loop duration",period);
-    layout->addLayout(form);
-    auto *note=new QLabel(controller.motionEnabled() ?
-        "Motion is on. Audio reactivity follows each mixer source independently." :
-        "Motion is off: gradients are static. Enable Motion in the inspector to animate.",dlg);
-    note->setWordWrap(true);layout->addWidget(note);
-    auto *buttons=new QHBoxLayout;
-    auto *apply=new QPushButton("Apply",dlg);apply->setObjectName("augment-gradient-apply");
-    auto *close=new QPushButton("Close",dlg);
-    buttons->addStretch();buttons->addWidget(apply);buttons->addWidget(close);layout->addLayout(buttons);
-    QObject::connect(close,&QPushButton::clicked,dlg,&QDialog::close);
-    QObject::connect(apply,&QPushButton::clicked,dlg,[=,&controller]{
-        auto next=controller.gradientSettings();
-        QJsonArray palette;
-        if(!colors->text().trimmed().isEmpty())
-            for(const auto &c:colors->text().split(','))palette.append(c.trimmed());
-        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();
-        QJsonArray names;
-        for(const auto &name:knobSources->text().split(';'))if(!name.trimmed().isEmpty())names.append(name.trimmed());
-        next["knobs"]=knobs->isChecked();next["knobSources"]=names;next["knobMeters"]=knobMeters->isChecked();
-        next["progress"]=progress->isChecked();next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
-        QString error;
-        if(controller.setGradientSettings(next,&error))
-            note->setText(enable->isChecked() ? (controller.motionEnabled()?
-                "Applied. Visible tracks are now animated.":"Applied. Enable Motion to animate.") : (knobs->isChecked()?"Applied. Mixer knobs use the theme palette.":"Gradient tracks and knobs disabled."));
-        else note->setText("Not saved: use 2–6 opaque colors, or leave blank for the theme palette. "+error);
+    auto *colors=new QLineEdit(gradient);colors->setObjectName("augment-gradient-colors");colors->setPlaceholderText("Theme palette (or 2–6 colors, comma-separated)");
+    auto *colorRow=new QHBoxLayout;auto *pickColor=new QPushButton("Add color…",gradient);
+    auto *theme=new QPushButton("Use theme",gradient);colorRow->addWidget(colors,1);colorRow->addWidget(pickColor);colorRow->addWidget(theme);form->addRow("Colors",colorRow);
+    auto *period=new QSpinBox(gradient);period->setObjectName("augment-gradient-period");period->setRange(400,12000);period->setSingleStep(100);period->setSuffix(" ms");form->addRow("Loop duration",period);
+    gl->addLayout(form);
+    auto *preview=new QLabel(gradient);preview->setObjectName("augment-gradient-preview");preview->setMinimumHeight(32);preview->setAlignment(Qt::AlignCenter);gl->addWidget(preview);
+    auto *colorHint=new QLabel(gradient);colorHint->setWordWrap(true);gl->addWidget(colorHint);gl->addStretch();
+    tabs->addTab(mixer,"Mixer");tabs->addTab(gradient,"Gradients");
+    auto checkedNames=[=]{QStringList result;for(int i=0;i<sources->count();++i)if(sources->item(i)->checkState()==Qt::Checked)result.append(sources->item(i)->data(Qt::UserRole).toString());result.sort();return result;};
+    auto populate=[=](QStringList chosen,QStringList extra={}){
+        const QSignalBlocker block(sources);auto live=mixerSources(host);auto names=live;
+        for(const auto &n:chosen+extra)if(!names.contains(n))names.append(n);
+        names.sort();sources->clear();
+        for(const auto &n:names){
+            auto *item=new QListWidgetItem(n+(live.contains(n)?"":"  ·  Not in current mixer"),sources);
+            item->setData(Qt::UserRole,n);item->setFlags(item->flags()|Qt::ItemIsUserCheckable);item->setCheckState(chosen.contains(n)?Qt::Checked:Qt::Unchecked);
+        }
+    };
+    state->refreshSources=[=]{populate(checkedNames());};
+    auto enablement=[=]{
+        all->setEnabled(knobs->isChecked());knobMeters->setEnabled(knobs->isChecked());
+        const bool specific=knobs->isChecked()&&!all->isChecked();sources->setEnabled(specific);name->setEnabled(specific);add->setEnabled(specific);
+        meters->setEnabled(reactive->isChecked());
+        selectionHint->setText(all->isChecked()?"All current and future mixer sources are included. Uncheck All mixer sources to choose individually.":"Check the sources you want, or double-click a row to toggle it.");
+    };
+    auto updatePreview=[=]{
+        QJsonArray arr;for(const auto &v:colors->text().split(',',Qt::SkipEmptyParts))arr.append(v.trimmed());
+        GradientSpec spec;bool valid=GradientSpec::parse(QJsonObject{{"colors",arr}},spec);
+        if(!colors->text().trimmed().isEmpty()&&arr.isEmpty())valid=false;
+        if(!valid){preview->clear();colorHint->setText("Enter 2–6 valid opaque colors, or clear the field for the theme palette.");return;}
+        auto palette=spec.colors;
+        if(palette.isEmpty()){auto p=gradient->palette();palette={p.color(QPalette::Highlight),p.color(QPalette::Highlight).lighter(155),p.color(QPalette::Link),p.color(QPalette::Highlight)};}
+        if(palette.first()!=palette.last())palette.append(palette.first());
+        QPixmap image(320,24);image.fill(Qt::transparent);QPainter p(&image);p.setRenderHint(QPainter::Antialiasing);
+        QLinearGradient brush(0,0,image.width(),0);for(int i=0;i<palette.size();++i)brush.setColorAt(double(i)/(palette.size()-1),palette.at(i));
+        p.setPen(Qt::NoPen);p.setBrush(brush);p.drawRoundedRect(image.rect(),12,12);p.end();preview->setPixmap(image);colorHint->setText(spec.colors.isEmpty()?"Using the active Qt theme palette.":"Custom palette preview. Timing is set by loop duration.");
+    };
+    auto *buttons=new QHBoxLayout(footer);buttons->setContentsMargins(0,3,0,3);footer->setMinimumHeight(40);footer->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
+    auto *pending=new QLabel("Settings saved",footer);pending->setObjectName("augment-settings-state");
+    auto *reload=new QPushButton("Reload saved settings",footer);reload->setObjectName("augment-settings-reload");
+    auto *apply=new QPushButton("Apply changes",footer);apply->setObjectName("augment-gradient-apply");
+    reload->setMinimumHeight(30);apply->setMinimumHeight(30);
+    buttons->addWidget(pending);buttons->addStretch();buttons->addWidget(reload);buttons->addWidget(apply);
+    auto draft=[=]{
+        auto next=state->baseline;
+        QJsonArray palette;const auto text=colors->text().trimmed();if(!text.isEmpty())for(const auto &c:text.split(','))palette.append(c.trimmed());
+        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();next["progress"]=progress->isChecked();
+        next["knobs"]=knobs->isChecked();next["knobSources"]=QJsonArray::fromStringList(all->isChecked()?QStringList{}:checkedNames());next["knobMeters"]=knobMeters->isChecked();
+        next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
+        return next;
+    };
+    auto normalized=std::make_shared<QJsonObject>();
+    auto changed=[=]{
+        const bool dirty=draft()!=*normalized;
+        pending->setText(dirty?"Unapplied changes":"Settings saved");
+        apply->setEnabled(dirty);
+    };
+    auto load=[=,&controller]{
+        state->baseline=controller.gradientSettings();GradientSpec spec;GradientSpec::parse(state->baseline,spec);
+        knobs->setChecked(spec.knobs);knobMeters->setChecked(spec.knobMeters);all->setChecked(spec.knobSources.isEmpty());populate(spec.knobSources);
+        reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);
+        QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());colors->setText(hex.join(", "));period->setValue(spec.period);
+        enablement();updatePreview();*normalized=draft();changed();
+    };
+    for(auto *box:{knobs,knobMeters,all,reactive,meters,enable,sliders,progress})
+        QObject::connect(box,&QCheckBox::toggled,footer,changed);
+    QObject::connect(sources,&QListWidget::itemChanged,footer,changed);
+    QObject::connect(colors,&QLineEdit::textChanged,footer,changed);
+    QObject::connect(period,&QSpinBox::valueChanged,footer,changed);
+    QObject::connect(knobs,&QCheckBox::toggled,mixer,enablement);QObject::connect(all,&QCheckBox::toggled,mixer,enablement);QObject::connect(reactive,&QCheckBox::toggled,mixer,enablement);
+    QObject::connect(refresh,&QPushButton::clicked,mixer,[=]{state->refreshSources();changed();});
+    QObject::connect(sources,&QListWidget::itemDoubleClicked,mixer,[](QListWidgetItem *item){if(item)item->setCheckState(item->checkState()==Qt::Checked?Qt::Unchecked:Qt::Checked);});
+    auto addName=[=]{const auto n=name->text();if(n.isEmpty()||n.trimmed().isEmpty())return;auto chosen=checkedNames();if(!chosen.contains(n))chosen.append(n);populate(chosen);name->clear();changed();};
+    QObject::connect(add,&QPushButton::clicked,mixer,addName);QObject::connect(name,&QLineEdit::returnPressed,mixer,addName);
+    QObject::connect(colors,&QLineEdit::textChanged,gradient,updatePreview);
+    QObject::connect(theme,&QPushButton::clicked,colors,&QLineEdit::clear);
+    QObject::connect(pickColor,&QPushButton::clicked,gradient,[=]{
+        const auto color=QColorDialog::getColor(gradient->palette().color(QPalette::Highlight),gradient,"Add gradient color");
+        if(color.isValid())colors->setText(colors->text().trimmed().isEmpty()?color.name():colors->text()+", "+color.name());
     });
-    dlg->show();
+    QObject::connect(reload,&QPushButton::clicked,footer,[=]{load();status->setText("Reloaded saved mixer and gradient settings.");});
+    QObject::connect(apply,&QPushButton::clicked,footer,[=,&controller]{
+        if(knobs->isChecked()&&!all->isChecked()&&checkedNames().isEmpty()){status->setText("Choose at least one source, or enable All mixer sources.");return;}
+        QString error;
+        if(controller.setGradientSettings(draft(),&error,&state->baseline)){load();status->setText("Applied mixer and gradient settings to OBS.");}
+        else status->setText("Not saved: "+error);
+    });
+    load();return state;
 }
 }
 struct Inspector::Ui {
     Controller &controller;
     WidgetSnapshot snapshot;
     QTimer *timer=nullptr;
+    QTabWidget *tabs=nullptr;
+    QLineEdit *filter=nullptr;
+    QSpinBox *pickDelay=nullptr;
+    QWidget *footer=nullptr,*details=nullptr;
+    QCheckBox *advanced=nullptr;
+    std::shared_ptr<SettingsPages> settings;
     QLabel *type=nullptr,*geometry=nullptr,*status=nullptr,*sample=nullptr,*scopeHint=nullptr;
     QPlainTextEdit *ancestry=nullptr,*selector=nullptr;
     QListWidget *actions=nullptr;
@@ -203,36 +287,45 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(new Ui(controller)) {
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     setModal(false);
-    resize(800,580);
+    resize(820,590);
     setMinimumSize(570,420);
     auto *root=new QVBoxLayout(this);
     root->setContentsMargins(11,11,11,11);root->setSpacing(7);
     auto *toolbar=new QHBoxLayout;
-    ui->pick=new QPushButton("Pick target · 4s",this);
+    ui->pick=new QPushButton("Pick target",this);
     ui->pick->setObjectName("augment-pick");
-    ui->status=new QLabel("Pick any widget or open a context menu and hover an action.",this);
-    ui->status->setWordWrap(true);
-    toolbar->addWidget(ui->pick);toolbar->addWidget(ui->status,1);
+    ui->status=new QLabel("Click Pick target, then open a context menu and hover an action before the timer expires.",this);
+    ui->status->setWordWrap(true);ui->status->setTextFormat(Qt::PlainText);
+    toolbar->addWidget(ui->pick);toolbar->addStretch();
     ui->motion=new QCheckBox("Motion",this);ui->motion->setObjectName("augment-motion");
     ui->motion->setToolTip("Enable motion globally. Uncheck for reduced motion. Menu motion applies on next popup; gradient motion updates immediately.");
     ui->motion->setChecked(controller.motionEnabled());toolbar->addWidget(ui->motion);
-    auto *gradients=new QPushButton("Gradients…",this);gradients->setObjectName("augment-gradient-settings");
-    toolbar->addWidget(gradients);
-    connect(gradients,&QPushButton::clicked,this,[this]{openGradientSettings(ui->controller,this);});
+    ui->pickDelay=new QSpinBox(this);ui->pickDelay->setRange(2,10);ui->pickDelay->setValue(4);ui->pickDelay->setSuffix(" s");ui->pickDelay->setToolTip("Time to open a menu or hover a widget");toolbar->insertWidget(1,ui->pickDelay);
     root->addLayout(toolbar);
-    ui->type=new QLabel("No target captured",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    ui->tabs=new QTabWidget(this);ui->tabs->setObjectName("augment-workspace");root->addWidget(ui->tabs,1);
+    auto *menus=new QWidget(ui->tabs);auto *menuLayout=new QVBoxLayout(menus);menuLayout->setContentsMargins(8,8,8,8);menuLayout->setSpacing(6);
+    ui->tabs->addTab(menus,"Menus & widgets");
+    ui->advanced=new QCheckBox("Show technical details",menus);
+    ui->details=new QWidget(menus);auto *detailsLayout=new QVBoxLayout(ui->details);detailsLayout->setContentsMargins(0,0,0,0);
+    ui->type=new QLabel("Choose a menu action or inspect a native widget",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont bold=ui->type->font();bold.setBold(true);ui->type->setFont(bold);
-    root->addWidget(ui->type);
-    ui->geometry=new QLabel(this);ui->geometry->setTextFormat(Qt::PlainText);ui->geometry->setWordWrap(true);root->addWidget(ui->geometry);
+    menuLayout->addWidget(ui->type);
+    ui->geometry=new QLabel(this);ui->geometry->setTextFormat(Qt::PlainText);ui->geometry->setWordWrap(true);detailsLayout->addWidget(ui->geometry);
     ui->ancestry=new QPlainTextEdit(this);ui->ancestry->setReadOnly(true);ui->ancestry->setMaximumHeight(64);
-    ui->ancestry->setPlaceholderText("Widget ancestry");root->addWidget(ui->ancestry);
-    auto *split=new QSplitter(Qt::Horizontal,this);split->setChildrenCollapsible(false);root->addWidget(split,1);
+    ui->ancestry->setPlaceholderText("Widget ancestry");detailsLayout->addWidget(ui->ancestry);
+    auto *split=new QSplitter(Qt::Horizontal,this);split->setChildrenCollapsible(false);menuLayout->addWidget(split,1);
     auto *left=new QWidget(split);auto *ll=new QVBoxLayout(left);ll->setContentsMargins(0,0,5,0);ll->setSpacing(4);
     ll->addWidget(new QLabel("Menu actions",left));
+    ui->filter=new QLineEdit(left);ui->filter->setObjectName("augment-menu-filter");ui->filter->setPlaceholderText("Filter actions…");ll->addWidget(ui->filter);
+    connect(ui->filter,&QLineEdit::textChanged,this,[this](const QString &text){
+        for(int i=0;i<ui->actions->count();++i)ui->actions->item(i)->setHidden(!ui->actions->item(i)->text().contains(text,Qt::CaseInsensitive));
+        if(auto *item=ui->actions->currentItem();item&&item->isHidden())ui->actions->setCurrentRow(-1);
+        if(ui->actions->currentRow()<0)for(int i=0;i<ui->actions->count();++i)if(!ui->actions->item(i)->isHidden()){ui->actions->setCurrentRow(i);break;}
+    });
     ui->actions=new QListWidget(left);ui->actions->setObjectName("augment-actions");ll->addWidget(ui->actions,1);
     auto *right=new QWidget(split);auto *rl=new QVBoxLayout(right);rl->setContentsMargins(5,0,0,0);rl->setSpacing(5);
     auto *iconRow=new QHBoxLayout;
@@ -259,15 +352,26 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
     ui->replace=new QCheckBox("Replace existing native icon",right);
     rl->addWidget(ui->scope);rl->addWidget(ui->replace);
     ui->scopeHint=new QLabel(right);ui->scopeHint->setWordWrap(true);rl->addWidget(ui->scopeHint);
-    rl->addWidget(new QLabel("Generated rule",right));
+    rl->addWidget(ui->advanced);
     ui->selector=new QPlainTextEdit(right);ui->selector->setReadOnly(true);ui->selector->setObjectName("augment-selector");
-    ui->selector->setMinimumHeight(95);rl->addWidget(ui->selector,1);
+    ui->selector->setMinimumHeight(95);detailsLayout->addWidget(ui->selector,1);
+    menuLayout->addWidget(ui->details);ui->details->hide();
     auto *buttons=new QHBoxLayout;
     ui->copy=new QPushButton("Copy JSON",right);
     ui->remove=new QPushButton("Remove exact rule",right);
     ui->save=new QPushButton("Save rule",right);ui->save->setObjectName("augment-save");
     buttons->addWidget(ui->copy);buttons->addWidget(ui->remove);buttons->addWidget(ui->save);
-    rl->addLayout(buttons);split->addWidget(left);split->addWidget(right);split->setSizes({310,420});
+    rl->addStretch();rl->addLayout(buttons);split->addWidget(left);split->addWidget(right);split->setSizes({310,420});
+    ui->footer=new QWidget(this);root->addWidget(ui->footer);root->addWidget(ui->status);
+    ui->settings=buildSettings(controller,ui->tabs,parent,ui->footer,ui->status);
+    if(panels)ui->tabs->addTab(panels->createPage(qobject_cast<QMainWindow*>(parent),ui->tabs),"Panels");
+    ui->footer->hide();
+    connect(ui->tabs,&QTabWidget::currentChanged,this,[this](int index){
+        ui->footer->setVisible(index==1||index==2);
+        if(index==1)ui->settings->refreshSources();
+        if(index==3)if(auto *refresh=ui->tabs->widget(index)->findChild<QPushButton*>("augment-panel-refresh"))refresh->click();
+    });
+    connect(ui->advanced,&QCheckBox::toggled,ui->details,&QWidget::setVisible);
     ui->timer=new QTimer(this);ui->timer->setSingleShot(true);
     connect(ui->pick,&QPushButton::clicked,this,[this]{startPick();});
     connect(ui->timer,&QTimer::timeout,this,[this]{
@@ -310,6 +414,10 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
         if(ui->controller.removeRule(selector,&error)) {
             ui->status->setText("Exact rule removed. Reopen the target menu.");
             selectRow(ui->actions->currentRow());
+            if(auto *item=ui->actions->currentItem()) {
+                const auto rule=ui->controller.effectiveRule(targetFor(ui->snapshot,ui->actions->currentRow()),ui->snapshot.menuLabels);
+                item->setIcon(rule.isEmpty()?QIcon{}:previewIcon(rule.value("icon").toString(),palette().color(QPalette::Text)));
+            }
         } else ui->status->setText(error);
     });
     selectRow(-1);
@@ -321,20 +429,27 @@ void Inspector::reject() {
 }
 void Inspector::startPick() {
     if (ui->timer->isActive()) return;
-    hide();ui->timer->start(4000);
+    hide();ui->timer->start(ui->pickDelay->value()*1000);
 }
 void Inspector::capture(const WidgetSnapshot &snapshot) {
     ui->snapshot=snapshot;
+    ui->tabs->setCurrentIndex(snapshot.mixerSource.isEmpty()?0:1);
+    if(snapshot.valid()&&!snapshot.isMenu&&snapshot.mixerSource.isEmpty())ui->advanced->setChecked(true);
+    ui->filter->clear();
     {const QSignalBlocker blocker(ui->motion);ui->motion->setChecked(ui->controller.motionEnabled());}
     {
         QSignalBlocker blocker(ui->actions);
         ui->actions->clear();
         for (const auto &a:snapshot.actions) {
-            QString label=a.text;
-            if (!a.objectName.isEmpty()) label+="\n#"+a.objectName;
+            QString label=a.text.section(QChar(9),0,0);
+            label.replace("&&",QString(QChar(1)));label.remove('&');label.replace(QChar(1),'&');label=label.trimmed();
+            if(label.isEmpty())label=a.objectName;
             auto *item=new QListWidgetItem(label,ui->actions);
             if (!a.eligible()) item->setToolTip("Not supported by the menu painter.");
             else if (a.nativeIcon) item->setToolTip("Has a native icon; use Replace existing to override.");
+            if(!a.objectName.isEmpty())item->setToolTip(item->toolTip()+"\n#"+a.objectName);
+            auto rule=ui->controller.effectiveRule(targetFor(snapshot,ui->actions->count()-1),snapshot.menuLabels);
+            if(!rule.isEmpty())item->setIcon(previewIcon(rule.value("icon").toString(),palette().color(QPalette::Text)));
         }
         const int row=snapshot.selected>=0 ? snapshot.selected : (snapshot.actions.isEmpty()?-1:0);
         ui->actions->setCurrentRow(row);
@@ -346,7 +461,14 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
         snapshot.isMenu?"Captured native menu. Pick an action to author an override.":
         "Widget inspected. This slice can edit menu actions; other widgets are read-only.");
     selectRow(ui->actions->currentRow());
+    if(!snapshot.mixerSource.isEmpty()) {
+        ui->settings->refreshSources();
+        if(auto *sources=ui->settings->sources.data())for(int i=0;i<sources->count();++i)
+            if(sources->item(i)->data(Qt::UserRole).toString()==snapshot.mixerSource)sources->setCurrentRow(i);
+        ui->status->setText("Captured mixer source: "+snapshot.mixerSource+". Select sources and apply changes.");
+    }
 }
+void Inspector::openPanels(){if(ui->tabs->count()>3)ui->tabs->setCurrentIndex(3);}
 void Inspector::selectRow(int row) {
     const auto target=targetFor(ui->snapshot,row);
     const auto rule=target.isEmpty()?QJsonObject{}:ui->controller.effectiveRule(target,ui->snapshot.menuLabels);
@@ -390,8 +512,10 @@ void Inspector::save() {
     if(!ui->save->isEnabled())return;
     const auto rule=QJsonDocument::fromJson(ui->selector->toPlainText().toUtf8()).object();
     QString error;
-    if(ui->controller.saveRule(rule,&error))
+    if(ui->controller.saveRule(rule,&error)) {
+        if(auto *item=ui->actions->currentItem())item->setIcon(previewIcon(rule.value("icon").toString(),palette().color(QPalette::Text)));
         ui->status->setText("Saved. Close and reopen the target menu to see your icon.");
+    }
     else ui->status->setText(error);
 }
 }

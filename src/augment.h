@@ -22,7 +22,7 @@ public:
     void setMeterProvider(MeterProvider);
     void setAudioProvider(AudioProvider provider,AudioReset reset={});
     QJsonObject gradientSettings() const;
-    bool setGradientSettings(const QJsonObject &, QString *error = nullptr);
+    bool setGradientSettings(const QJsonObject &, QString *error = nullptr, const QJsonObject *expected = nullptr);
     bool motionEnabled() const;
     bool setMotionEnabled(bool enabled, QString *error = nullptr);
     bool saveRule(const QJsonObject &rule, QString *error = nullptr);

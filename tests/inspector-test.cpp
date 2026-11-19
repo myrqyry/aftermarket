@@ -13,6 +13,11 @@
 #include <QSpinBox>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QTabWidget>
+#include <QLabel>
+#include <QMainWindow>
+#include <QDockWidget>
+#include "panels.h"
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
 int main(int argc,char **argv) {
@@ -94,7 +99,13 @@ int main(int argc,char **argv) {
     REQUIRE(!c.removeRule(selector,&error) && read()=="{broken");
     REQUIRE(write(R"({"enabled":true,"rules":[]})"));
     {
-        augment::Inspector inspector(c);
+        QMainWindow main;
+        auto *dock=new QDockWidget("Scenes",&main);dock->setWidget(new QWidget(dock));main.addDockWidget(Qt::LeftDockWidgetArea,dock);
+        main.resize(800,600);main.show();app.processEvents();
+        augment::Panels panels;
+        augment::Inspector inspector(c,&main,&panels);
+        auto *tabs=inspector.findChild<QTabWidget*>("augment-workspace");
+        REQUIRE(tabs&&tabs->count()==4);
         inspector.capture(snap);
         auto *list=inspector.findChild<QListWidget*>("augment-actions");
         auto *icons=inspector.findChild<QComboBox*>("augment-icon");
@@ -113,10 +124,16 @@ int main(int argc,char **argv) {
         auto animation=c.effectiveRule(target,snap.menuLabels).value("animation").toObject();
         REQUIRE(animation.value("preset").toString()=="spin" && animation.value("duration").toInt()==260);
         motion->setChecked(false);REQUIRE(!c.motionEnabled());
-        auto *gradient=inspector.findChild<QPushButton*>("augment-gradient-settings");
-        REQUIRE(gradient);gradient->click();
-        auto *dialog=inspector.findChild<QDialog*>("obs-ui-augment-gradient-settings");
-        REQUIRE(dialog);
+        auto *dialog=&inspector;
+        tabs->setCurrentIndex(1);
+        auto *sourceList=dialog->findChild<QListWidget*>("augment-knob-source-list");
+        auto *allSources=dialog->findChild<QCheckBox*>("augment-knob-all");
+        REQUIRE(sourceList&&allSources&&allSources->isChecked());
+        auto *pending=dialog->findChild<QLabel*>("augment-settings-state");
+        REQUIRE(pending&&pending->text()=="Settings saved");
+        auto *filter=dialog->findChild<QLineEdit*>("augment-menu-filter");
+        REQUIRE(filter);filter->setText("Copy");REQUIRE(list->item(0)->isHidden());
+        filter->clear();REQUIRE(!list->item(0)->isHidden());
         auto *enable=dialog->findChild<QCheckBox*>("augment-gradient-enabled");
         auto *colors=dialog->findChild<QLineEdit*>("augment-gradient-colors");
         auto *period=dialog->findChild<QSpinBox*>("augment-gradient-period");
@@ -126,8 +143,13 @@ int main(int argc,char **argv) {
         auto *meters=dialog->findChild<QCheckBox*>("augment-gradient-meters");
         REQUIRE(reactive&&meters);
         auto *knobs=dialog->findChild<QCheckBox*>("augment-gradient-knobs");
-        auto *knobSources=dialog->findChild<QLineEdit*>("augment-knob-sources");
-        REQUIRE(knobs&&knobSources);knobs->setChecked(true);knobSources->setText("Mic; Music");
+        REQUIRE(knobs);knobs->setChecked(true);allSources->setChecked(false);
+        auto *sourceName=dialog->findChild<QLineEdit*>("augment-knob-add-name");
+        auto *addSource=dialog->findChild<QPushButton*>("augment-knob-add");
+        REQUIRE(sourceName&&addSource);
+        sourceName->setText("Mic; Music");addSource->click();
+        sourceName->setText("Desktop");addSource->click();
+        REQUIRE(sourceList->count()==2&&pending->text()=="Unapplied changes");
         auto *knobMeters=dialog->findChild<QCheckBox*>("augment-knob-meters");
         REQUIRE(knobMeters&&knobMeters->isChecked());knobMeters->setChecked(false);
         reactive->setChecked(true);meters->setChecked(true);
@@ -140,10 +162,26 @@ int main(int argc,char **argv) {
         REQUIRE(c.gradientSettings().value("meters").toBool());
         REQUIRE(c.gradientSettings().value("knobs").toBool());
         REQUIRE(c.gradientSettings().contains("knobMeters")&&!c.gradientSettings().value("knobMeters").toBool());
-        REQUIRE(c.gradientSettings().value("knobSources").toArray()==QJsonArray({"Mic","Music"}));
+        REQUIRE(c.gradientSettings().value("knobSources").toArray()==QJsonArray({"Desktop","Mic; Music"}));
+        REQUIRE(pending->text()=="Settings saved"&&!apply->isEnabled());
         colors->setText("invalid");apply->click();
         REQUIRE(c.gradientSettings().value("colors").toArray().size()==3);
-        dialog->close();
+        auto *reload=dialog->findChild<QPushButton*>("augment-settings-reload");REQUIRE(reload);
+        reload->click();REQUIRE(colors->text().contains("#31748f"));
+        // Stale drafts must not silently overwrite a second editor.
+        auto external=c.gradientSettings();external["period"]=3300;REQUIRE(c.setGradientSettings(external));
+        period->setValue(1800);apply->click();REQUIRE(c.gradientSettings().value("period").toInt()==3300);
+        reload->click();REQUIRE(period->value()==3300);
+        for(int i=0;i<sourceList->count();++i)sourceList->item(i)->setCheckState(Qt::Unchecked);
+        apply->click();REQUIRE(c.gradientSettings().value("knobSources").toArray().size()==2);
+        reload->click();
+        tabs->setCurrentIndex(3);
+        auto *panelList=dialog->findChild<QListWidget*>("augment-panel-list");
+        REQUIRE(panelList&&panelList->count()==1);
+        auto *panelToggle=dialog->findChild<QPushButton*>("augment-panel-toggle");
+        REQUIRE(panelToggle);panelToggle->click();REQUIRE(panels.collapsed(dock));
+        panelToggle->click();REQUIRE(!panels.collapsed(dock));
+        tabs->setCurrentIndex(0);
         list->setCurrentRow(3); REQUIRE(!save->isEnabled());
         QWidget widget;widget.setObjectName("something");
         QPushButton child("Sample",&widget);child.setObjectName("target");

@@ -59,3 +59,20 @@ meter restored live, both integrated knobs, drag changed native gain to 0 dB.
 Combined peak is not full independent stereo/magnitude/input peak, fixed
 thresholds; horizontal/rebuild/rename/other versions and performance unverified.
 Earlier named tokens and leak attribution still open.
+
+## Slice 9 — Inspector workspace (2026-11-19)
+
+Outcome: consolidated existing functionality into four native tabs: Menus &
+widgets, Mixer, Gradients, Panels. Adjustable capture delay, action search,
+existing rule icon previews, optional technical details, source checklist
+discovered from actual mixer widgets, exact offline names, capture routes to
+the selected source, palette preview and native color picker, explicit
+shared Apply/Reload with unsaved indicator and conflict rejection. Panels
+entry routes into the same inspector. Existing rendering engines and rule
+formats retained; unknown gradient fields preserved. Real isolated OBS
+32.2.0 Colorway: source selection changed both channels to integrated knobs,
+custom palette persisted and recolored the controls, panel collapse/restore,
+source and menu captures. All 8 CTests pass including stale write and
+empty selection regressions. No named-token resolver or arbitrary widget
+editor added; earlier renderer limitations remain. Source list discovery
+only covers current mixer widgets, with manual offline-name fallback.

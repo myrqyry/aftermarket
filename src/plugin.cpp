@@ -19,9 +19,9 @@ static QPointer<augment::Inspector> inspector;
 static QPointer<QAction> toolsAction, panelsAction;
 static std::unique_ptr<augment::Panels> panels;
 static void cleanupUi() {
+    delete inspector.data();
     panels.reset();
     delete panelsAction.data();
-    delete inspector.data();
     if (toolsAction) {
         // Remove our callback and menu entry before unloading the plugin code.
         delete toolsAction.data();
@@ -54,7 +54,7 @@ MODULE_EXPORT bool obs_module_load(void) {
     toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
     if (toolsAction) QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if (!inspector) inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()));
+            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get());
         inspector->show();
         inspector->raise();
         inspector->activateWindow();
@@ -62,7 +62,8 @@ MODULE_EXPORT bool obs_module_load(void) {
     panels=std::make_unique<augment::Panels>();
     panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
     if(panelsAction) QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
-        if(panels)panels->showManager(qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())));
+        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get());
+        inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
     });
     obs_frontend_add_event_callback(frontendEvent,nullptr);
     blog(LOG_INFO, "[ui-augment] menu instrumentation active; rules: %s", qPrintable(file));

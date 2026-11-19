@@ -3,6 +3,7 @@
 #include <memory>
 class QDockWidget;
 class QMainWindow;
+class QWidget;
 namespace augment {
 class Panels final : public QObject {
 public:
@@ -12,6 +13,7 @@ public:
     bool collapsed(QDockWidget *) const;
     bool toggle(QDockWidget *);
     void restoreAll();
+    QWidget *createPage(QMainWindow *, QWidget *parent);
     void showManager(QMainWindow *);
 protected:
     bool eventFilter(QObject *, QEvent *) override;
