@@ -192,6 +192,32 @@ target selection, slider signals, programmatic updates, native key handling,
 invalid config and restoration. Horizontal mixer layouts, live source rename
 and theme changes under knob sizing need further real runtime testing.
 
+## Collapsible panels
+
+Middle-click a visible dock's title bar to collapse it to its header. Middle-click
+again to expand. Alternatively open **Tools → UI Augment Panels**, select a
+panel, and choose **Collapse / expand**. **Expand all** restores all rolled-up
+panels. The original dock and its contents stay alive; this does not close the
+dock or delete OBS sources.
+
+![Collapsed Sources dock in OBS](docs/screenshots/panel-collapsed.png)
+
+The controller temporarily hides dock content and constrains the dock height
+to the native header, preserving its width. It asks QMainWindow to redistribute
+space and restores the original size constraints and requested dimensions
+when expanded. Neighboring dock sizes remain subject to Qt layout negotiation;
+pixel-perfect restoration is not guaranteed. Native close/float gestures
+are untouched. Floating, tabified and vertical-title docks are excluded from
+collapse in this slice. Closing or relocating a collapsed dock restores it.
+The collapse state is session-only; no separate collapse settings are persisted.
+The controller restores on the main window close event or unload. Smooth
+height transitions are not implemented yet.
+
+Verified in isolated OBS 32.2.0 using Colorway Rosé Pine: Sources collapsed
+to a readable title bar at its original column width and expanded to show
+the original source list; panel manager collapsed Scenes and Expand all
+restored it. Also verified by Qt dock-layout regression tests.
+
 ## Live rules
 
 The file is re-read just before a menu opens. Close and reopen the menu after editing it; there is no OBS restart or theme replacement. Invalid or partially written JSON keeps the last valid rules.

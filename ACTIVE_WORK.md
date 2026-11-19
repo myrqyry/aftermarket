@@ -26,3 +26,18 @@ Outcome: opt-in audio-reactive mixer fader gradients and native meter nominal-co
 ## Slice 6 — rotary mixer controls (2026-11-19)
 
 Outcome: reversible rotary presentation for selected or all mixer faders. Original slider stays in native layout and handles values, focus, wheel/key behavior and slider signals; relative drag and independent rotary paint; minimum size restored if not externally modified. Knob source scope uses exact full VolumeName labels; empty list means all mixer sources. Independent enable flag, theme palette default and existing gradient/audio modulation available. Verified 6/6 Qt CTests and isolated OBS 32.2.0 Colorway Rosé Pine: selected Tone test knob only, silent fader unchanged, 242 animated ring pixels, native dB label -12.0 to -3.5 after drag, live disable restored slider at -3.5. Remaining: generic widget-targeted knob rules, actual horizontal mixer testing, rename/rebuild/theme geometry stress, compact custom layout, named theme tokens, full meter gradients, performance profiling and previous leak attribution. No live user rules changed.
+
+## Slice 7 — collapsible dock panels (2026-11-19)
+
+Outcome: session-only dock roll-up controlled by middle-click on the native
+title bar and Tools → UI Augment Panels. Original contents retain identity,
+temporary height constraint rolls dock up; width minimum avoids Qt shrinking
+the whole column when contents are hidden. Expand restores original constraints
+and requests original dimensions; exact sibling geometry is not guaranteed.
+Guard floating/tabified/vertical-title docks; restore on close, relocation,
+main close or plugin unload. Verified real isolated OBS 32.2.0 Colorway:
+Sources header collapse/expand and same column width, Scenes manager collapse
+and Expand all. Qt panel regression covers width, height, original content,
+gesture, tab guard and close restore. No rule config changes. Remaining:
+animated height transitions, header affordance, collapse persistence if desired,
+more complicated layouts, horizontal sibling behavior and broader platform tests.

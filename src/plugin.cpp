@@ -3,6 +3,8 @@
 #include <QAction>
 #include <QPointer>
 #include "inspector.h"
+#include "panels.h"
+#include <QMainWindow>
 #include <util/bmem.h>
 #include <QApplication>
 #include <QThread>
@@ -14,8 +16,11 @@ OBS_DECLARE_MODULE()
 static augment::Controller *controller = nullptr;
 static std::unique_ptr<augment::ObsAudio> audio;
 static QPointer<augment::Inspector> inspector;
-static QPointer<QAction> toolsAction;
+static QPointer<QAction> toolsAction, panelsAction;
+static std::unique_ptr<augment::Panels> panels;
 static void cleanupUi() {
+    panels.reset();
+    delete panelsAction.data();
     delete inspector.data();
     if (toolsAction) {
         // Remove our callback and menu entry before unloading the plugin code.
@@ -52,6 +57,11 @@ MODULE_EXPORT bool obs_module_load(void) {
         inspector->show();
         inspector->raise();
         inspector->activateWindow();
+    });
+    panels=std::make_unique<augment::Panels>();
+    panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
+    if(panelsAction) QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
+        if(panels)panels->showManager(qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())));
     });
     obs_frontend_add_event_callback(frontendEvent,nullptr);
     blog(LOG_INFO, "[ui-augment] menu instrumentation active; rules: %s", qPrintable(file));
