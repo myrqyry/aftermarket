@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QSpinBox>
 #include "motion.h"
+#include "gradient.h"
 #include <QCursor>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -106,6 +107,63 @@ QJsonObject selectorFor(const WidgetSnapshot &s,int row,bool scopeMenu) {
     return selector;
 }
 
+namespace {
+void openGradientSettings(Controller &controller,QWidget *parent) {
+    if(auto *existing=parent->findChild<QDialog*>("obs-ui-augment-gradient-settings")) {
+        existing->show();existing->raise();existing->activateWindow();return;
+    }
+    auto *dlg=new QDialog(parent);
+    dlg->setObjectName("obs-ui-augment-gradient-settings");
+    dlg->setWindowTitle("UI Augment · Gradient tracks");
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setModal(false);dlg->resize(480,220);
+    const auto raw=controller.gradientSettings();
+    GradientSpec spec;GradientSpec::parse(raw,spec);
+    auto *layout=new QVBoxLayout(dlg);
+    layout->setContentsMargins(12,12,12,12);layout->setSpacing(8);
+    auto *enable=new QCheckBox("Enable gradient tracks",dlg);
+    enable->setObjectName("augment-gradient-enabled");enable->setChecked(spec.enabled);
+    layout->addWidget(enable);
+    auto *targets=new QHBoxLayout;
+    auto *sliders=new QCheckBox("Sliders",dlg);sliders->setChecked(spec.sliders);
+    auto *progress=new QCheckBox("Progress bars",dlg);progress->setChecked(spec.progress);
+    targets->addWidget(sliders);targets->addWidget(progress);targets->addStretch();
+    layout->addLayout(targets);
+    auto *form=new QFormLayout;
+    auto *colors=new QLineEdit(dlg);colors->setObjectName("augment-gradient-colors");
+    colors->setPlaceholderText("Theme palette (or #hex, #hex, …)");
+    QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());
+    colors->setText(hex.join(", "));
+    form->addRow("Colors",colors);
+    auto *period=new QSpinBox(dlg);period->setObjectName("augment-gradient-period");
+    period->setRange(400,12000);period->setSingleStep(100);period->setSuffix(" ms");period->setValue(spec.period);
+    form->addRow("Loop duration",period);
+    layout->addLayout(form);
+    auto *note=new QLabel(controller.motionEnabled() ?
+        "Motion is on. Gradient flows within the native filled track." :
+        "Motion is off: gradients are static. Enable Motion in the inspector to animate.",dlg);
+    note->setWordWrap(true);layout->addWidget(note);
+    auto *buttons=new QHBoxLayout;
+    auto *apply=new QPushButton("Apply",dlg);apply->setObjectName("augment-gradient-apply");
+    auto *close=new QPushButton("Close",dlg);
+    buttons->addStretch();buttons->addWidget(apply);buttons->addWidget(close);layout->addLayout(buttons);
+    QObject::connect(close,&QPushButton::clicked,dlg,&QDialog::close);
+    QObject::connect(apply,&QPushButton::clicked,dlg,[=,&controller]{
+        auto next=controller.gradientSettings();
+        QJsonArray palette;
+        if(!colors->text().trimmed().isEmpty())
+            for(const auto &c:colors->text().split(','))palette.append(c.trimmed());
+        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();
+        next["progress"]=progress->isChecked();next["colors"]=palette;next["period"]=period->value();
+        QString error;
+        if(controller.setGradientSettings(next,&error))
+            note->setText(enable->isChecked() ? (controller.motionEnabled()?
+                "Applied. Visible tracks are now animated.":"Applied. Enable Motion to animate.") : "Gradient tracks disabled.");
+        else note->setText("Not saved: use 2–6 opaque colors, or leave blank for the theme palette. "+error);
+    });
+    dlg->show();
+}
+}
 struct Inspector::Ui {
     Controller &controller;
     WidgetSnapshot snapshot;
@@ -136,8 +194,11 @@ Inspector::Inspector(Controller &controller,QWidget *parent):QDialog(parent),ui(
     ui->status->setWordWrap(true);
     toolbar->addWidget(ui->pick);toolbar->addWidget(ui->status,1);
     ui->motion=new QCheckBox("Motion",this);ui->motion->setObjectName("augment-motion");
-    ui->motion->setToolTip("Enable menu icon motion globally. Uncheck for reduced motion. Applies on next popup.");
+    ui->motion->setToolTip("Enable motion globally. Uncheck for reduced motion. Menu motion applies on next popup; gradient motion updates immediately.");
     ui->motion->setChecked(controller.motionEnabled());toolbar->addWidget(ui->motion);
+    auto *gradients=new QPushButton("Gradients…",this);gradients->setObjectName("augment-gradient-settings");
+    toolbar->addWidget(gradients);
+    connect(gradients,&QPushButton::clicked,this,[this]{openGradientSettings(ui->controller,this);});
     root->addLayout(toolbar);
     ui->type=new QLabel("No target captured",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QFont bold=ui->type->font();bold.setBold(true);ui->type->setFont(bold);

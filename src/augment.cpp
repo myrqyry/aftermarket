@@ -1,6 +1,8 @@
 #include "augment.h"
 #include "motion.h"
+#include "gradient.h"
 #include <QElapsedTimer>
+#include <QFileSystemWatcher>
 #include <QPaintEvent>
 #include <QtMath>
 #include <QTimer>
@@ -153,6 +155,8 @@ struct Rules {
     QByteArray lastRead;
     bool enabled = true, inspect = false, motion = false;
     std::vector<Rule> entries;
+    GradientSpec gradient;
+    QJsonObject gradientRaw;
     explicit Rules(QString file, Logger sink): path(std::move(file)), logger(std::move(sink)) {
         if (!QFileInfo::exists(path)) {
             QDir().mkpath(QFileInfo(path).absolutePath());
@@ -173,6 +177,8 @@ struct Rules {
         if (!root.value("rules").isArray() || (root.contains("enabled") && !root.value("enabled").isBool()) ||
             (root.contains("inspect") && !root.value("inspect").isBool()) ||
             (root.contains("motion") && !root.value("motion").isBool())) return false;
+        GradientSpec nextGradient;
+        if(!GradientSpec::parse(root.value("gradient"),nextGradient))return false;
         std::vector<Rule> next;
         for (const auto &v : root.value("rules").toArray()) {
             if (!v.isObject()) return false;
@@ -198,6 +204,8 @@ struct Rules {
         inspect = root.value("inspect").toBool(false);
         motion = root.value("motion").toBool(false);
         entries = std::move(next);
+        gradient=nextGradient;
+        gradientRaw=root.value("gradient").toObject();
         return true;
     }
     void refresh() {
@@ -422,10 +430,26 @@ QIcon previewIcon(const QString &name, const QColor &color) {
 struct Controller::State {
     Rules rules;
     QHash<QMenu*,Overlay*> menus;
+    GradientController gradients;
+    QFileSystemWatcher watcher;
+    QTimer reload;
+    void refreshGradients(){auto spec=rules.gradient;spec.enabled &= rules.enabled;gradients.configure(spec,rules.motion);}
     explicit State(QString path, Logger logger):rules(std::move(path), std::move(logger)) {}
 };
 Controller::Controller(QString rulesFile, QObject *parent, Logger logger):QObject(parent),state(new State(std::move(rulesFile), std::move(logger))) {
     qApp->installEventFilter(this);
+    state->rules.refresh();state->refreshGradients();
+    // Watch both in-place writes and QSaveFile/rename replacements. Re-arm
+    // after a replacement, and debounce transient partial writes.
+    state->reload.setSingleShot(true);state->reload.setInterval(80);
+    auto arm=[this]{
+        const auto path=state->rules.path;
+        if(QFileInfo::exists(path)&&!state->watcher.files().contains(path))state->watcher.addPath(path);
+    };
+    state->watcher.addPath(QFileInfo(state->rules.path).absolutePath());arm();
+    connect(&state->watcher,&QFileSystemWatcher::fileChanged,this,[this]{state->reload.start();});
+    connect(&state->watcher,&QFileSystemWatcher::directoryChanged,this,[this]{state->reload.start();});
+    connect(&state->reload,&QTimer::timeout,this,[this,arm]{arm();state->rules.refresh();state->refreshGradients();});
     for (auto *w : QApplication::allWidgets())
         if (auto *menu = qobject_cast<QMenu*>(w)) attach(menu);
 }
@@ -442,7 +466,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -452,7 +476,8 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     if (before.size()>maxRuleBytes || !validator.parse(before))
         return fail(error,"Invalid rules.json; fix the file before editing.");
     auto root=QJsonDocument::fromJson(before).object();
-    if (motion) root["motion"]=*motion;
+    if (gradient) root["gradient"]=*gradient;
+    else if (motion) root["motion"]=*motion;
     else {
     auto selector=canonicalSelector(entry);
     if (!selector.contains("text") && !selector.contains("objectName"))
@@ -483,9 +508,15 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     return true;
 }
 }
+QJsonObject Controller::gradientSettings() const {state->rules.refresh();return state->rules.gradientRaw;}
+bool Controller::setGradientSettings(const QJsonObject &spec,QString *error) {
+    if(!editRules(state->rules,{},false,error,nullptr,&spec))return false;
+    state->refreshGradients();return true;
+}
 bool Controller::motionEnabled() const {state->rules.refresh();return state->rules.motion;}
 bool Controller::setMotionEnabled(bool enabled, QString *error) {
-    return editRules(state->rules,{},false,error,&enabled);
+    if(!editRules(state->rules,{},false,error,&enabled))return false;
+    state->refreshGradients();return true;
 }
 bool Controller::saveRule(const QJsonObject &entry, QString *error) {
     return editRules(state->rules,entry,false,error);
@@ -506,7 +537,7 @@ void Controller::attach(QMenu *menu) {
     state->menus.insert(menu,overlay);
     connect(menu,&QObject::destroyed,this,[this,menu]{ state->menus.remove(menu);});
     connect(menu,&QMenu::aboutToShow,this,[this,overlay]{
-        state->rules.refresh();
+        state->rules.refresh();state->refreshGradients();
         overlay->prepare(state->rules);
     });
     connect(menu,&QMenu::hovered,overlay,[overlay](QAction *action){overlay->hover(action);});
@@ -533,7 +564,7 @@ bool Controller::eventFilter(QObject *object,QEvent *event) {
     switch(event->type()) {
         case QEvent::Show:
             if (!overlay->prepared()) {
-                state->rules.refresh();
+                state->rules.refresh();state->refreshGradients();
                 overlay->prepare(state->rules);
                 menu->adjustSize();
             }

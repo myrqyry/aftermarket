@@ -76,6 +76,37 @@ Verified in isolated OBS 32.2.0 with the actual Colorway Rosé Pine theme: GUI e
 motion, selected spin and a 600 ms duration for Scale Filtering, persisted the scoped
 rule, and captured changing icon pixels during both entrance and hover.
 
+## Animated gradient tracks
+
+Open **Tools → UI Augment Inspector → Gradients…**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+
+- Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
+- Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
+- Colors: leave blank for the native palette, or specify 2–6 opaque colors separated by commas. Loop duration is adjustable from 400–12000 ms.
+
+```json
+{
+  "enabled": true,
+  "motion": true,
+  "gradient": {
+    "enabled": true,
+    "sliders": true,
+    "progress": true,
+    "period": 1800,
+    "colors": ["#31748f", "#c4a7e7", "#9ccfd8"]
+  },
+  "rules": []
+}
+```
+
+Edit just the gradient and motion fields in an existing file to preserve your menu rules. The inspector merges settings into the existing file, atomically. Changes apply without a theme reload or restart; the rules watcher also reloads valid external edits. Motion off freezes the gradient; gradient off removes the decoration entirely.
+
+The overlay derives groove, thumb and progress content rectangles from Qt's actual style geometry. It uses a seamless repeated gradient and one shared 30 Hz timer, which stops if there are no visible, nonempty animated tracks. It never writes slider values or changes the stream compositor.
+
+![Actual OBS animated media seek and volume tracks](docs/screenshots/gradient-tracks.png)
+
+Verified in an isolated OBS 32.2.0 session with Colorway Rosé Pine, native media playback and mixer fader. Both tracks' pixels changed while paused elapsed text stayed fixed; native seeking updated playback position. Live motion-disable made the pixels stable, and live gradient-disable restored the native appearance. Qt regression tests cover progress bars, vertical and inverted sliders, stylesheet geometry, invalid configuration and reduced motion. Progress bars were tested in Qt, not a specific OBS progress dialog. Custom-drawn controls that are not QSlider/QProgressBar are outside this slice.
+
 ## Live rules
 
 The file is re-read just before a menu opens. Close and reopen the menu after editing it; there is no OBS restart or theme replacement. Invalid or partially written JSON keeps the last valid rules.

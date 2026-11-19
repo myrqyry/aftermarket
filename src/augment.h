@@ -18,6 +18,8 @@ public:
     explicit Controller(QString rulesFile, QObject *parent = nullptr, Logger logger = {});
     ~Controller() override;
     // Returns false without overwriting an invalid or unreadable file.
+    QJsonObject gradientSettings() const;
+    bool setGradientSettings(const QJsonObject &, QString *error = nullptr);
     bool motionEnabled() const;
     bool setMotionEnabled(bool enabled, QString *error = nullptr);
     bool saveRule(const QJsonObject &rule, QString *error = nullptr);
