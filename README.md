@@ -250,7 +250,7 @@ original slider. Real vertical mixer verification: one selected knob
 replaced only its paired meter, mute cleared the outer ring without moving
 gain, both knobs could be selected, and dragging changed the real dB label
 from -1.9 to 0.0 dB. Live disable restored the original meter.
-Horizontal layout and rebuilding/renaming tracks remain unverified.
+The meter scale remains visible at silence and mute, using dimmed native zone colors. Horizontal and vertical layouts have been exercised in isolated OBS, including switching orientation; theme-driven slider size changes are reconciled. Source renaming/rebuilding remain open.
 
 ## Collapsible panels
 

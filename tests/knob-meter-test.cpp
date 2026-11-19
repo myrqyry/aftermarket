@@ -37,6 +37,10 @@ int main(int argc,char **argv) {
  auto *m=new VolumeMeter(frame);m->setMinimumWidth(22);
  box->addWidget(s);box->addWidget(m);
  auto *outer=new QHBoxLayout(&strip);outer->addWidget(frame);
+ QPalette dark=strip.palette();
+ dark.setColor(QPalette::Window,QColor("#002b36"));dark.setColor(QPalette::Mid,QColor("#00232c"));
+ dark.setColor(QPalette::Button,QColor("#073642"));dark.setColor(QPalette::Highlight,QColor("#268bd2"));
+ strip.setPalette(dark);
  strip.resize(180,250);strip.show();app.processEvents();
  auto initialMax=s->maximumSize(),initialMin=s->minimumSize();
  std::optional<augment::MeterReading> reading=augment::MeterReading{-30,false};
@@ -45,6 +49,16 @@ int main(int argc,char **argv) {
  REQUIRE(c.setGradientSettings({{"knobs",true}}));wait(100);
  REQUIRE(m->isHidden()&&s->property("_obsUiAugmentIntegratedMeter").toBool());
  REQUIRE(s->maximumHeight()<=80&&s->value()==40);
+ // The scale must remain recognizable when the input is silent or muted.
+ reading=augment::MeterReading{-100,true};wait(100);
+ auto idle=s->grab().toImage();
+ int scalePixels=0;
+ for(int y=0;y<idle.height();++y)for(int x=0;x<idle.width();++x){
+   auto p=idle.pixelColor(x,y);
+   if(p.red()>70&&p.green()>70&&p.blue()<55)++scalePixels;
+ }
+ REQUIRE(scalePixels>8);
+ reading=augment::MeterReading{-30,false};wait(100);
  auto low=s->grab().toImage();
  reading=augment::MeterReading{-3,false};wait(120);
  auto high=s->grab().toImage();
@@ -52,6 +66,12 @@ int main(int argc,char **argv) {
  int red=0;for(int y=0;y<high.height();++y)for(int x=0;x<high.width();++x){auto p=high.pixelColor(x,y);if(p.red()>180&&p.green()<70&&p.blue()<70)++red;}
  REQUIRE(red>5);
  REQUIRE(!c.motionEnabled()); // actual metering does not depend on decorative motion
+ // OBS changes orientation and repolishes the native slider when switching layouts.
+ s->setOrientation(Qt::Horizontal);
+ s->setStyleSheet("QSlider:horizontal { min-height: 14px; }");
+ s->setMinimumHeight(14);wait(120);
+ REQUIRE(s->minimumHeight()>=68&&m->isHidden());
+ s->setStyleSheet("");s->setOrientation(Qt::Vertical);s->setMinimumSize(initialMin);wait(100);
  reading.reset();wait(100);
  REQUIRE(!m->isHidden()&&!s->property("_obsUiAugmentIntegratedMeter").toBool());
  reading=augment::MeterReading{-12,false};wait(100);REQUIRE(m->isHidden());

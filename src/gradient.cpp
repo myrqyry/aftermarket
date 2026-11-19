@@ -195,6 +195,33 @@ public:
             peakDb=holdDb=-60;holdUntil=clipUntil=0;previousMeterFrame=-1;
             update();
         }
+        // OBS reuses and repolishes its slider when the mixer orientation or
+        // theme changes. Qt can reapply the native short-slider minimum after
+        // integration. Preserve that new native constraint for eventual restore,
+        // then reassert the rotary presentation's minimum on only those axes.
+        const auto currentMin=s->minimumSize(),currentMax=s->maximumSize();
+        if(currentMax!=appliedMeterMax)meterMax=currentMax;
+        if(currentMin!=appliedMeterMin) {
+            if(currentMin.width()!=appliedMeterMin.width()) {
+                originalMinimum.setWidth(currentMin.width());
+                appliedMinimum.setWidth(qMin(qMax(44,currentMin.width()),currentMax.width()));
+                meterMin.setWidth(appliedMinimum.width());
+            }
+            if(currentMin.height()!=appliedMeterMin.height()) {
+                originalMinimum.setHeight(currentMin.height());
+                appliedMinimum.setHeight(qMin(qMax(44,currentMin.height()),currentMax.height()));
+                meterMin.setHeight(appliedMinimum.height());
+            }
+        }
+        const QSize requested(qMin(68,meterMax.width()),qMin(68,meterMax.height()));
+        const QSize desired=meterMin.expandedTo(requested).boundedTo(meterMax);
+        const int desiredMax=qMax(desired.height(),qMin(76,meterMax.height()));
+        if(s->minimumSize()!=desired||s->maximumHeight()!=desiredMax) {
+            s->setMinimumSize(desired);
+            s->setMaximumHeight(desiredMax);
+            appliedMeterMin=s->minimumSize();appliedMeterMax=s->maximumSize();
+            s->updateGeometry();
+        }
         const float target=reading->muted||!std::isfinite(reading->peakDb)?-60.f:std::clamp(reading->peakDb,-60.f,0.f);
         const double dt=previousMeterFrame<0?0.:std::clamp((now-previousMeterFrame)/1000.,0.,.25);
         previousMeterFrame=now;
@@ -291,14 +318,27 @@ public:
             const auto pos=[](float db){return qBound(0.,(db+60.)/60.,1.);};
             auto section=[&](double from,double to,QColor c){
                 if(to<=from)return;
-                p.setPen(QPen(c,3.5,Qt::SolidLine,Qt::FlatCap));
+                p.setPen(QPen(c,4.5,Qt::SolidLine,Qt::FlatCap));
                 p.drawArc(meterArc,int((225-270*from)*16),int(-270*(to-from)*16));
             };
-            section(0,1,pal.color(group,QPalette::Mid));
+            // A meter needs a visible scale even with no signal. Theme Mid can
+            // be almost identical to the dock background (e.g. Solarized Dark).
+            // Tint the inactive zones with the actual native foreground colors;
+            // keep enough headroom between idle and active brightness.
+            const QColor surface=pal.color(group,QPalette::Window);
+            auto dim=[&](QColor c){
+                return QColor::fromRgbF(surface.redF()*.58+c.redF()*.42,
+                    surface.greenF()*.58+c.greenF()*.42,
+                    surface.blueF()*.58+c.blueF()*.42);
+            };
+            const double gap=.009;
+            section(0,pos(-20)-gap,dim(nominal));
+            section(pos(-20)+gap,pos(-9)-gap,dim(warning));
+            section(pos(-9)+gap,1,dim(error));
             const double level=pos(peakDb);
-            section(0,qMin(level,pos(-20)),nominal);
-            section(pos(-20),qMin(level,pos(-9)),warning);
-            section(pos(-9),level,error);
+            section(0,qMin(level,pos(-20)-gap),nominal);
+            section(pos(-20)+gap,qMin(level,pos(-9)-gap),warning);
+            section(pos(-9)+gap,level,error);
             if(clipUntil) section(0,1,error);
             if(holdDb>-60) {
                 const double mark=pos(holdDb);
@@ -463,11 +503,12 @@ void GradientController::sync(QWidget *w,bool frame) {
     auto l=state->layers.value(w);
     if(!l)return;
     if(!state->meterProvider||!l->knob||!state->spec.knobMeters)l->restoreMeter();
-    const auto fill=l->knob?w->rect():gradientFill(w);
+    auto fill=l->knob?w->rect():gradientFill(w);
     if(!w->isVisible()||!fill.isValid()) {if(l->isVisible())l->hide();return;}
     if(frame||!state->meterProvider||!l->knob||!state->spec.knobMeters) {
         const auto reading=l->knob&&state->spec.knobMeters&&state->meterProvider?state->meterProvider(w):std::optional<MeterReading>{};
         l->updateMeter(reading,state->elapsed.elapsed());
+        if(l->knob)fill=w->rect();
     }
     const bool changed=l->geometry()!=fill;
     if(changed)l->setGeometry(fill);
@@ -495,7 +536,7 @@ void GradientController::sync(QWidget *w,bool frame) {
     if(changed||l->phase!=phase||l->energy!=energy){l->phase=phase;l->energy=energy;l->update();}
 }
 void GradientController::reconcileMeter(QWidget *w) {
-    if(!state->provider||!state->motion||!eligibleMeter(w,state->spec)||state->meters.contains(w))return;
+    if(!state->provider||!state->motion||!eligibleMeter(w,state->spec)||!w->isVisible()||state->meters.contains(w))return;
     const auto base=w->property("foregroundNominalColor").value<QColor>();
     if(!base.isValid())return;
     state->meters.insert(w,{base,base,0});

@@ -76,3 +76,25 @@ source and menu captures. All 8 CTests pass including stale write and
 empty selection regressions. No named-token resolver or arbitrary widget
 editor added; earlier renderer limitations remain. Source list discovery
 only covers current mixer widgets, with manual offline-name fallback.
+
+## Slice 10 — rotary meter visibility repair (2026-11-19)
+
+User reported missing meter rings. Inspected current running OBS 32.2.0,
+Solarized Dark+, with knobs, knobMeters, audioReactive and Motion enabled.
+Correct plugin installed; probes attached to Media Source and Live Latent:
+TTS. Actual mixer screenshot showed extremely dark idle outer tracks;
+Media Source muted, TTS signal not established at capture. Root visual
+defect reproduced with dark palette: idle scale lacked recognizable
+warning-zone pixels. Fixed by drawing distinct dimmed nominal/warning/error
+segments and thicker outer ring; active fill retains native colors.
+Hidden native meters no longer re-register as decorative pulse targets.
+Additionally found horizontal mixer repolish could shrink knob; regression
+reproduced native minimum reset, repair reasserts integrated size while
+preserving newer native constraints for restoration.
+Real isolated OBS tone/silence channels verified visible idle zones, active
+peak and muted idle, full-size horizontal knobs and live switch to vertical.
+Isolated theme remained Rosé Pine despite setting Solarized Dark ID; exact
+dark palette covered by Qt regression, not verified on live user session
+with audio. Do not claim user TTS signal path repaired until exercised.
+Current user config untouched. Open: full stereo meter, named OBS theme
+tokens, rename/rebuild stress, generic widget targeting and profiling.
