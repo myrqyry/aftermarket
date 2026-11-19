@@ -107,6 +107,50 @@ The overlay derives groove, thumb and progress content rectangles from Qt's actu
 
 Verified in an isolated OBS 32.2.0 session with Colorway Rosé Pine, native media playback and mixer fader. Both tracks' pixels changed while paused elapsed text stayed fixed; native seeking updated playback position. Live motion-disable made the pixels stable, and live gradient-disable restored the native appearance. Qt regression tests cover progress bars, vertical and inverted sliders, stylesheet geometry, invalid configuration and reduced motion. Progress bars were tested in Qt, not a specific OBS progress dialog. Custom-drawn controls that are not QSlider/QProgressBar are outside this slice.
 
+## Audio-reactive mixer effects
+
+In **Tools → UI Augment Inspector → Gradients…**, enable gradient tracks,
+**Audio-reactive mixer gradients**, and optionally **Pulse native meter colors**.
+Enable Motion in the inspector. The effects are opt-in and can be toggled live.
+
+- Each mixer fader follows its own source's libobs magnitude, not the global
+  clock or another channel. Audio energy accelerates gradient flow and raises
+  brightness; silence or mute brings the effect to rest. The native slider
+  position and volume never change.
+- The native meter's nominal foreground color responds to the same envelope
+  by brightening its current theme color. This is a color modulation, not a
+  replacement meter renderer. Warning, clipping, disabled colors, magnitude
+  and peak-hold geometry remain under OBS control.
+- Non-mixer sliders and progress bars retain the time-driven gradient behavior.
+
+The exponential envelope uses 55 ms attack and 220 ms release.
+Audio callbacks publish only a numeric magnitude and timestamp; no waveforms
+are retained and no audio is sent anywhere. Source identity is matched to the
+full current VolumeName button label; weak source references are revalidated.
+No private OBS object offsets or ABI casts are used. Probes are released after
+the associated controls stop requesting levels, or when the effects are disabled.
+
+Add these keys to an existing gradient object:
+
+```json
+{
+  "audioReactive": true,
+  "meters": true
+}
+```
+
+![Reactive mixer: tone and silent sources](docs/screenshots/audio-reactive.png)
+
+Verified with real OBS 32.2.0, Colorway Rosé Pine, two isolated media sources
+and no active recording or streaming: 1218 changed pixels on the tone fader
+versus zero on the silent fader. Turning Motion off restored the native meter
+nominal color (325 changed pixels); sampled warning/clip and silent-meter regions
+were unchanged. Native mute stopped the tone fader effect after release.
+The Qt tests also verify independent envelopes, unchanged slider values, theme
+base updates and configuration persistence. This first slice is magnitude-driven,
+not beat detection or FFT. OBS named-token resolution and full gradient painting
+inside meter bars remain future work.
+
 ## Live rules
 
 The file is re-read just before a menu opens. Close and reopen the menu after editing it; there is no OBS restart or theme replacement. Invalid or partially written JSON keeps the last valid rules.

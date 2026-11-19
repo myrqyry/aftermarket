@@ -122,11 +122,17 @@ int main(int argc,char **argv) {
         auto *period=dialog->findChild<QSpinBox*>("augment-gradient-period");
         auto *apply=dialog->findChild<QPushButton*>("augment-gradient-apply");
         REQUIRE(enable&&colors&&period&&apply);
+        auto *reactive=dialog->findChild<QCheckBox*>("augment-gradient-reactive");
+        auto *meters=dialog->findChild<QCheckBox*>("augment-gradient-meters");
+        REQUIRE(reactive&&meters);
+        reactive->setChecked(true);meters->setChecked(true);
         enable->setChecked(true);colors->setText("#31748f, #c4a7e7, #9ccfd8");period->setValue(2300);
         apply->click();
         REQUIRE(c.gradientSettings().value("enabled").toBool());
         REQUIRE(c.gradientSettings().value("colors").toArray().size()==3);
         REQUIRE(c.gradientSettings().value("period").toInt()==2300);
+        REQUIRE(c.gradientSettings().value("audioReactive").toBool());
+        REQUIRE(c.gradientSettings().value("meters").toBool());
         colors->setText("invalid");apply->click();
         REQUIRE(c.gradientSettings().value("colors").toArray().size()==3);
         dialog->close();

@@ -116,7 +116,7 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
     dlg->setObjectName("obs-ui-augment-gradient-settings");
     dlg->setWindowTitle("UI Augment · Gradient tracks");
     dlg->setAttribute(Qt::WA_DeleteOnClose);
-    dlg->setModal(false);dlg->resize(480,220);
+    dlg->setModal(false);dlg->resize(500,280);
     const auto raw=controller.gradientSettings();
     GradientSpec spec;GradientSpec::parse(raw,spec);
     auto *layout=new QVBoxLayout(dlg);
@@ -129,6 +129,13 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
     auto *progress=new QCheckBox("Progress bars",dlg);progress->setChecked(spec.progress);
     targets->addWidget(sliders);targets->addWidget(progress);targets->addStretch();
     layout->addLayout(targets);
+    auto *reactive=new QCheckBox("Audio-reactive mixer gradients",dlg);
+    reactive->setObjectName("augment-gradient-reactive");reactive->setChecked(spec.audioReactive);
+    auto *meters=new QCheckBox("Pulse native meter colors",dlg);
+    meters->setObjectName("augment-gradient-meters");meters->setChecked(spec.meters);
+    meters->setEnabled(spec.audioReactive);
+    QObject::connect(reactive,&QCheckBox::toggled,meters,&QWidget::setEnabled);
+    layout->addWidget(reactive);layout->addWidget(meters);
     auto *form=new QFormLayout;
     auto *colors=new QLineEdit(dlg);colors->setObjectName("augment-gradient-colors");
     colors->setPlaceholderText("Theme palette (or #hex, #hex, …)");
@@ -140,7 +147,7 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
     form->addRow("Loop duration",period);
     layout->addLayout(form);
     auto *note=new QLabel(controller.motionEnabled() ?
-        "Motion is on. Gradient flows within the native filled track." :
+        "Motion is on. Audio reactivity follows each mixer source independently." :
         "Motion is off: gradients are static. Enable Motion in the inspector to animate.",dlg);
     note->setWordWrap(true);layout->addWidget(note);
     auto *buttons=new QHBoxLayout;
@@ -154,7 +161,7 @@ void openGradientSettings(Controller &controller,QWidget *parent) {
         if(!colors->text().trimmed().isEmpty())
             for(const auto &c:colors->text().split(','))palette.append(c.trimmed());
         next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();
-        next["progress"]=progress->isChecked();next["colors"]=palette;next["period"]=period->value();
+        next["progress"]=progress->isChecked();next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
         QString error;
         if(controller.setGradientSettings(next,&error))
             note->setText(enable->isChecked() ? (controller.motionEnabled()?

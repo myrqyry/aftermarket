@@ -508,6 +508,9 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     return true;
 }
 }
+void Controller::setAudioProvider(AudioProvider provider,AudioReset reset) {
+    state->gradients.setAudioProvider(std::move(provider),std::move(reset));
+}
 QJsonObject Controller::gradientSettings() const {state->rules.refresh();return state->rules.gradientRaw;}
 bool Controller::setGradientSettings(const QJsonObject &spec,QString *error) {
     if(!editRules(state->rules,{},false,error,nullptr,&spec))return false;

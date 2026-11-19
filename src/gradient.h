@@ -5,10 +5,11 @@
 #include <QVector>
 #include <QJsonObject>
 #include <memory>
+#include "audio-motion.h"
 class QWidget;
 namespace augment {
 struct GradientSpec {
-    bool enabled=false, sliders=true, progress=true;
+    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false;
     int period=1800;
     QVector<QColor> colors;
     static bool parse(const QJsonValue &,GradientSpec &);
@@ -18,6 +19,7 @@ class GradientController final: public QObject {
 public:
     explicit GradientController(QObject *parent=nullptr);
     ~GradientController() override;
+    void setAudioProvider(AudioProvider,AudioReset);
     void configure(const GradientSpec &,bool motion);
 protected:
     bool eventFilter(QObject *,QEvent *) override;
@@ -27,5 +29,8 @@ private:
     void reconcile(QWidget *);
     void sync(QWidget *,bool frame=false);
     void refreshClock();
+    void reconcileMeter(QWidget *);
+    void syncMeter(QWidget *,double dt);
+    void removeMeter(QWidget *);
 };
 }

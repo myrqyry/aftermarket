@@ -7,6 +7,7 @@
 #include <QColor>
 #include <memory>
 #include <functional>
+#include "audio-motion.h"
 class QMenu;
 namespace augment {
 QString normalizeActionText(QString text);
@@ -18,6 +19,7 @@ public:
     explicit Controller(QString rulesFile, QObject *parent = nullptr, Logger logger = {});
     ~Controller() override;
     // Returns false without overwriting an invalid or unreadable file.
+    void setAudioProvider(AudioProvider provider,AudioReset reset={});
     QJsonObject gradientSettings() const;
     bool setGradientSettings(const QJsonObject &, QString *error = nullptr);
     bool motionEnabled() const;
