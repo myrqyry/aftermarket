@@ -283,7 +283,7 @@ struct Inspector::Ui {
     QComboBox *icons=nullptr,*preset=nullptr;
     QSpinBox *duration=nullptr;
     QLineEdit *color=nullptr;
-    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr;
+    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr,*overflow=nullptr;
     QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr;
     explicit Ui(Controller &c):controller(c){}
 };
@@ -306,7 +306,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     ui->motion->setToolTip("Enable motion globally. Uncheck for reduced motion. Menu motion applies on next popup; gradient motion updates immediately.");
     ui->motion->setChecked(controller.motionEnabled());
     ui->compactMenus=new QCheckBox("Compact menus",this);ui->compactMenus->setObjectName("augment-compact-menus");
-    ui->compactMenus->setToolTip("Tighten long menus and put excess commands in native More actions submenus. Reopen a menu to apply.");
+    ui->compactMenus->setToolTip("Tighten long menus into visible columns. Only explicitly selected actions enter More actions. Reopen a menu to apply.");
     ui->compactMenus->setChecked(controller.compactMenusEnabled());toolbar->addWidget(ui->compactMenus);toolbar->addWidget(ui->motion);
     connect(ui->compactMenus,&QCheckBox::toggled,this,[this](bool enabled){
         QString error;
@@ -364,6 +364,21 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     ui->scope=new QCheckBox("Scope to observed menu",right);ui->scope->setChecked(true);
     ui->replace=new QCheckBox("Replace existing native icon",right);
     rl->addWidget(ui->scope);rl->addWidget(ui->replace);
+    ui->overflow=new QCheckBox("Move to More actions",right);ui->overflow->setObjectName("augment-overflow");
+    ui->overflow->setToolTip("Save this action's placement independently of its icon. Uncheck to restore it. No actions are hidden automatically.");
+    rl->addWidget(ui->overflow);
+    connect(ui->overflow,&QCheckBox::clicked,this,[this](bool enabled){
+        auto snapshot=ui->snapshot;
+        const int row=ui->actions->currentRow();
+        if(row<0||row>=snapshot.actions.size())return;
+        snapshot.actions[row].checkable=false;
+        const auto selector=selectorFor(snapshot,row,ui->scope->isChecked());
+        QString error;
+        if(ui->controller.setOverflowRule(selector,enabled,&error))
+            ui->status->setText(enabled?"Placement saved. Reopen the menu to find this action in More actions.":"Placement restored. Reopen the menu.");
+        else ui->status->setText(error);
+        updatePreview();
+    });
     ui->scopeHint=new QLabel(right);ui->scopeHint->setWordWrap(true);rl->addWidget(ui->scopeHint);
     rl->addWidget(ui->advanced);
     ui->selector=new QPlainTextEdit(right);ui->selector->setReadOnly(true);ui->selector->setObjectName("augment-selector");
@@ -497,12 +512,20 @@ void Inspector::selectRow(int row) {
 void Inspector::updatePreview() {
     auto selector=selectorFor(ui->snapshot,ui->actions->currentRow(),ui->scope->isChecked());
     const bool eligible=!selector.isEmpty();
+    auto overflowSnapshot=ui->snapshot;
+    const int overflowRow=ui->actions->currentRow();
+    if(overflowRow>=0&&overflowRow<overflowSnapshot.actions.size())overflowSnapshot.actions[overflowRow].checkable=false;
+    const auto overflowSelector=selectorFor(overflowSnapshot,overflowRow,ui->scope->isChecked());
+    {const QSignalBlocker blocked(ui->overflow);
+        ui->overflow->setEnabled(!overflowSelector.isEmpty());
+        ui->overflow->setChecked(!overflowSelector.isEmpty()&&ui->controller.hasOverflowRule(overflowSelector));}
     const auto text=ui->color->text().trimmed();
     QColor color(text);
     const bool validColor=text.isEmpty()||color.isValid();
     if(text.isEmpty())color=palette().color(QPalette::Text);
     ui->sample->setPixmap(previewIcon(ui->icons->currentText(),color).pixmap(24,24));
     for(auto *w:QList<QWidget*>{ui->icons,ui->color,ui->choose,ui->scope,ui->replace,ui->copy,ui->remove,ui->preset,ui->duration})w->setEnabled(eligible);
+    ui->scope->setEnabled(eligible||!overflowSelector.isEmpty());
     ui->duration->setEnabled(eligible && ui->preset->currentText()!="none");
     bool native=false;
     if(eligible)native=ui->snapshot.actions.at(ui->actions->currentRow()).nativeIcon;

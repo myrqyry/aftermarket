@@ -3,6 +3,8 @@
 #include <QStringList>
 #include <QList>
 #include <QString>
+#include <QSet>
+#include <QRect>
 class QMenu;
 class QAction;
 
@@ -15,11 +17,14 @@ bool overflowAction(const QAction *action);
 class MenuLayout {
 public:
     explicit MenuLayout(QMenu *menu);
-    void prepare(bool enabled);
+    void prepare(bool enabled,const QSet<QAction*> &explicitOverflow={});
+    void present();
     void restore();
 private:
     QMenu *menu;
-    bool prepared=false;
+    bool prepared=false, arranging=false;
+    QRect arrangedGeometry;
+    bool columnsApplied=false;
     QString originalStyle,appliedStyle;
     QList<QPointer<QAction>> originalActions;
     QList<QPointer<QMenu>> pages;

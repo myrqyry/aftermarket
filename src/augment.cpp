@@ -1,5 +1,6 @@
 #include "augment.h"
 #include "menu-layout.h"
+#include "theme-picker.h"
 #include "motion.h"
 #include "gradient.h"
 #include <QElapsedTimer>
@@ -9,6 +10,7 @@
 #include <QTimer>
 #include <QMouseEvent>
 #include <QAction>
+#include <QComboBox>
 #include <QApplication>
 #include <QColor>
 #include <QDir>
@@ -155,7 +157,7 @@ struct Rules {
     Logger logger;
     QByteArray lastRead;
     bool enabled = true, inspect = false, motion = false, compactMenus = true;
-    std::vector<Rule> entries;
+    std::vector<Rule> entries, overflowEntries;
     GradientSpec gradient;
     QJsonObject gradientRaw;
     explicit Rules(QString file, Logger sink): path(std::move(file)), logger(std::move(sink)) {
@@ -201,6 +203,24 @@ struct Rules {
             if (!MotionSpec::parse(o.value("animation"),r.motion)) return false;
             next.push_back(std::move(r));
         }
+        std::vector<Rule> nextOverflow;
+        if(root.contains("menuOverflow")&&!root.value("menuOverflow").isArray())return false;
+        for(const auto &v:root.value("menuOverflow").toArray()) {
+            if(!v.isObject())return false;
+            const auto o=v.toObject();
+            for(const auto *key:{"text","objectName","menuObjectName"})
+                if(o.contains(key)&&!o.value(key).isString())return false;
+            if(o.contains("menuContains")){
+                if(!o.value("menuContains").isArray())return false;
+                for(const auto &label:o.value("menuContains").toArray())
+                    if(!label.isString()||normalizeActionText(label.toString()).isEmpty())return false;
+            }
+            Rule r{normalizeActionText(o.value("text").toString()),o.value("objectName").toString(),
+                   o.value("menuObjectName").toString(),{},QColor{},false,anchorLabels(o),o};
+            if(r.text.isEmpty()&&r.objectName.isEmpty())return false;
+            nextOverflow.push_back(std::move(r));
+        }
+        overflowEntries=std::move(nextOverflow);
         enabled = root.value("enabled").toBool(true);
         inspect = root.value("inspect").toBool(false);
         motion = root.value("motion").toBool(false);
@@ -292,6 +312,7 @@ public:
     ~Overlay() override { restore(); }
     bool prepared() const {return prepared_;}
     void restoreLayout(){layout.restore();}
+    void layoutVisible(){layout.present();}
     void closePopup(){
         restore();
         // Native activation and QMenu::exec finish after Hide.
@@ -316,7 +337,14 @@ public:
     void prepare(Rules &rules) {
         if (prepared_) return;
         layout.restore();
-        layout.prepare(rules.enabled&&rules.compactMenus);
+        QSet<QAction*> selected;
+        if(rules.enabled&&rules.compactMenus&&!menu->property("_aftermarketOverflowPage").toBool()) {
+            const auto labels=normalizedLabels(logicalMenuLabels(menu));
+            for(auto *a:menu->actions())if(a->isVisible()&&!a->isSeparator())
+                for(const auto &r:rules.overflowEntries)
+                    if(r.matches(a->text(),a->objectName(),menu->objectName(),labels)){selected.insert(a);break;}
+        }
+        layout.prepare(rules.enabled&&rules.compactMenus,selected);
         prepared_ = true;
         motionEnabled_=rules.motion;
         const auto actions = menu->actions();
@@ -463,6 +491,7 @@ Controller::Controller(QString rulesFile, QObject *parent, Logger logger):QObjec
 }
 Controller::~Controller() {
     if (qApp) qApp->removeEventFilter(this);
+    closeThemePickers();
     for (auto *menu : state->menus.keys()) QObject::disconnect(menu,nullptr,this,nullptr);
     const auto overlays=state->menus.values();
     state->menus.clear();
@@ -476,7 +505,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -493,6 +522,16 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     }
     else if (motion) root["motion"]=*motion;
     else if (compactMenus) root["compactMenus"]=*compactMenus;
+    else if (overflow) {
+        const auto selector=canonicalSelector(entry);
+        if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
+        QJsonArray next;
+        for(const auto &v:root.value("menuOverflow").toArray())
+            if(canonicalSelector(v.toObject())!=selector)next.append(v);
+        // Keep the original escaped labels, not the normalized comparison key.
+        if(*overflow)next.append(entry);
+        root["menuOverflow"]=next;
+    }
     else {
     auto selector=canonicalSelector(entry);
     if (!selector.contains("text") && !selector.contains("objectName"))
@@ -536,6 +575,15 @@ bool Controller::compactMenusEnabled() const {state->rules.refresh();return stat
 bool Controller::setCompactMenus(bool enabled,QString *error) {
     return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,&enabled);
 }
+bool Controller::hasOverflowRule(const QJsonObject &selector) const {
+    state->rules.refresh();
+    for(const auto &r:state->rules.overflowEntries)
+        if(canonicalSelector(r.raw)==canonicalSelector(selector))return true;
+    return false;
+}
+bool Controller::setOverflowRule(const QJsonObject &selector,bool enabled,QString *error) {
+    return editRules(state->rules,selector,false,error,nullptr,nullptr,nullptr,nullptr,&enabled);
+}
 bool Controller::motionEnabled() const {state->rules.refresh();return state->rules.motion;}
 bool Controller::setMotionEnabled(bool enabled, QString *error) {
     if(!editRules(state->rules,{},false,error,&enabled))return false;
@@ -566,11 +614,18 @@ void Controller::attach(QMenu *menu) {
     connect(menu,&QMenu::hovered,overlay,[overlay](QAction *action){overlay->hover(action);});
 }
 bool Controller::eventFilter(QObject *object,QEvent *event) {
+    if((event->type()==QEvent::MouseButtonPress||event->type()==QEvent::KeyPress)&&qobject_cast<QComboBox*>(object)) {
+        state->rules.refresh();
+        if(handleThemePicker(object,event,state->rules.enabled&&state->rules.compactMenus))return true;
+    }
     switch(event->type()) {
         case QEvent::Polish:
         case QEvent::Show:
         case QEvent::Hide:
         case QEvent::Resize:
+        case QEvent::Paint:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
         case QEvent::ActionRemoved:
         case QEvent::ActionChanged:
         case QEvent::MouseMove:
@@ -591,13 +646,17 @@ bool Controller::eventFilter(QObject *object,QEvent *event) {
                 overlay->prepare(state->rules);
                 menu->adjustSize();
             }
-            overlay->present();
+            overlay->layoutVisible();overlay->present();
             break;
         case QEvent::Hide: overlay->closePopup(); break;
         case QEvent::Resize: if (menu->isVisible()) overlay->present(); break;
-        case QEvent::MouseMove: overlay->hover(menu->actionAt(static_cast<QMouseEvent*>(event)->position().toPoint()));break;
+        case QEvent::Paint:
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease: overlay->layoutVisible();break;
+        case QEvent::MouseMove: overlay->layoutVisible();overlay->hover(menu->actionAt(static_cast<QMouseEvent*>(event)->position().toPoint()));break;
         case QEvent::Leave: overlay->hover(nullptr);break;
         case QEvent::KeyPress: {
+            overlay->layoutVisible();
             QPointer<QMenu> safe(menu);
             QTimer::singleShot(0,overlay,[overlay,safe]{if(safe && safe->isVisible())overlay->hover(safe->activeAction());});
             break;

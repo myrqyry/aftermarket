@@ -23,6 +23,8 @@ public:
     void setAudioProvider(AudioProvider provider,AudioReset reset={});
     QJsonObject gradientSettings() const;
     bool setGradientSettings(const QJsonObject &, QString *error = nullptr, const QJsonObject *expected = nullptr);
+    bool hasOverflowRule(const QJsonObject &selector) const;
+    bool setOverflowRule(const QJsonObject &selector,bool enabled,QString *error=nullptr);
     bool compactMenusEnabled() const;
     bool setCompactMenus(bool enabled, QString *error = nullptr);
     bool motionEnabled() const;

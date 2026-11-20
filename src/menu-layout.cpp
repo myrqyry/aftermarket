@@ -7,6 +7,12 @@
 #include <QCursor>
 #include <QVariant>
 #include <QStyle>
+#include <QMenuBar>
+#include <QtMath>
+#include <algorithm>
+#ifdef AFTERMARKET_QT642_COLUMNS
+#include <QtWidgets/private/qmenu_p.h>
+#endif
 namespace augment {
 namespace {
 constexpr auto labelsKey="_aftermarketLogicalLabels";
@@ -30,104 +36,121 @@ QString logicalMenuName(const QMenu *menu) {
     return name.isValid()?name.toString():menu->objectName();
 }
 MenuLayout::MenuLayout(QMenu *m):menu(m){}
-void MenuLayout::prepare(bool enabled) {
-    if(prepared||!enabled||menu->property(pageKey).toBool()||menu->isTearOffEnabled())return;
+void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow) {
+    if(prepared||!enabled||menu->isTearOffEnabled())return;
     const auto actions=menu->actions();
     int count=0;
     for(auto *a:actions) {
-        if(qobject_cast<QWidgetAction*>(a))return; // preserve embedded/custom controls
+        if(qobject_cast<QWidgetAction*>(a))return;
         if(a->isVisible()&&!a->isSeparator())++count;
     }
     auto *screen=QGuiApplication::screenAt(QCursor::pos());
     if(!screen)screen=menu->screen();
     const int available=screen?screen->availableGeometry().height():800;
-    const int cap=qMin(500,qMax(160,int(available*.57)));
-    if(count<=10&&menu->sizeHint().height()<=cap)return;
+    const int cap=qMin(340,qMax(160,int(available*.48)));
+    if(count<=10&&menu->sizeHint().height()<=cap&&explicitOverflow.isEmpty())return;
     prepared=true;
     originalStyle=menu->styleSheet();
     appliedStyle=originalStyle+QStringLiteral(
         "\nQMenu::item { padding: 2px 12px; margin: 0px; min-height: 16px; }"
         "\nQMenu::separator { height: 1px; margin: 3px 8px; }");
     menu->setStyleSheet(appliedStyle);
+    if(explicitOverflow.isEmpty()||menu->property(pageKey).toBool())return;
     const auto labels=nativeLabels(menu);
     const auto name=menu->objectName();
-    // Sum the actual styled rows instead of trusting sizeHint's possible columns.
-    QList<int> heights;
-    int total=0;
-    const int icon=menu->style()->pixelMetric(QStyle::PM_SmallIconSize,nullptr,menu);
-    for(auto *a:actions) {
-        const auto rect=menu->actionGeometry(a);
-        int h=rect.height();
-        if(a->isVisible()&&!a->isSeparator())
-            h=qMax(h,icon+6); // account for later optional icon reservations
-        h=qMax(0,h);
-        heights.append(h);total+=h;
-    }
-    constexpr int chrome=32;
-    if(total+chrome<=cap)return;
-    // Native cascades, not clipped rows or duplicate command proxies.
-    // Reserve space for a More actions row and prefer original group breaks.
-    // Long context menus often end in frequently used commands (e.g.
-    // Rename, Filters, Properties). Keep the final four visible commands
-    // on the first page whenever they fit without crowding the prefix.
-    int tail=actions.size(),tailCost=0,tailCommands=0;
-    for(int i=actions.size()-1;i>=0;--i) {
-        if(tailCommands>=4&&!actions[i]->isSeparator())break;
-        tail=i;tailCost+=heights[i];
-        if(actions[i]->isVisible()&&!actions[i]->isSeparator())++tailCommands;
-    }
-    if(tailCommands<4||tail<6||tailCost>cap/3){tail=actions.size();tailCost=0;}
-    QList<QList<QAction*>> chunks;
-    int first=0;
-    while(first<tail) {
-        const int reserved=first==0?tailCost:0;
-        int last=first,used=chrome+reserved;
-        while(last<tail&&used+heights[last]+28<=cap) {
-            used+=heights[last];++last;
-        }
-        if(last==first)++last;
-        if(last<tail) {
-            // Prefer a nearby natural group boundary.
-            for(int i=last-1;i>first&&i>=last-4;--i)
-                if(actions[i]->isSeparator()){last=i+1;break;}
-        }
-        // The final page need not reserve an overflow row.
-        if(last<tail) {
-            int remaining=chrome+reserved;
-            for(int i=first;i<tail;++i)remaining+=heights[i];
-            if(remaining<=cap)last=tail;
-        }
-        QList<QAction*> chunk;
-        for(int i=first;i<last;++i)chunk.append(actions[i]);
-        chunks.append(chunk);first=last;
-    }
-    if(chunks.size()<2)return;
     for(auto *a:actions)originalActions.append(a);
     menu->setProperty(labelsKey,labels);
-    QMenu *current=menu;
-    for(int i=1;i<chunks.size();++i) {
-        auto *page=new QMenu(QStringLiteral("More actions…"),current);
-        page->setProperty(pageKey,true);
-        page->setProperty(labelsKey,labels);
-        page->setProperty(nameKey,name);
-        page->setStyleSheet(appliedStyle);
-        page->setLayoutDirection(menu->layoutDirection());
-        page->setFont(menu->font());
-        auto *entry=(i==1&&tail<actions.size())?
-            current->insertMenu(actions[tail],page):current->addMenu(page);
-        entry->setProperty(actionKey,true);
-        pages.append(page);
-        for(auto *action:chunks[i]) {
-            menu->removeAction(action);
-            page->addAction(action);
-            moved.append({action,page});
-        }
-        current=page;
+    auto *page=new QMenu(QStringLiteral("More actions…"),menu);
+    page->setProperty(pageKey,true);
+    page->setProperty(labelsKey,labels);
+    page->setProperty(nameKey,name);
+    page->setStyleSheet(appliedStyle);
+    page->setLayoutDirection(menu->layoutDirection());
+    page->setFont(menu->font());
+    menu->addMenu(page)->setProperty(actionKey,true);
+    pages.append(page);
+    for(auto *action:actions)if(explicitOverflow.contains(action)&&action->isVisible()&&!action->isSeparator()) {
+        menu->removeAction(action);page->addAction(action);moved.append({action,page});
     }
+}
+void MenuLayout::present() {
+#ifdef AFTERMARKET_QT642_COLUMNS
+    // QMenu has no public column-height setter. Update its actual native
+    // geometry cache, so paint, actionAt, mouse/keyboard and submenu paths
+    // all read identical rectangles. Never use this on a different Qt ABI.
+    if(!prepared||arranging||!menu->isVisible()||qstrcmp(qVersion(),QT_VERSION_STR)!=0)return;
+    auto *d=QMenuPrivate::get(menu);
+    if(!d->itemsDirty&&menu->geometry()==arrangedGeometry)return;
+    if(!d->widgetItems.isEmpty()||d->tearoff||d->tornoff)return;
+    const auto actions=menu->actions();
+    if(actions.isEmpty())return;
+    arranging=true;
+    // Obtain current native row sizes via the public API (also flushes dirty
+    // layout). Heights and widths remain the active style's actual metrics.
+    menu->actionGeometry(actions.first());
+    const auto native=d->actionRects;
+    if(native.size()!=actions.size()){arranging=false;return;}
+    auto *screen=menu->screen();
+    if(!screen){arranging=false;return;}
+    const QRect work=screen->availableGeometry().adjusted(4,4,-4,-4);
+    const int cap=qMin(340,qMax(160,int(work.height()*.48)));
+    int total=0,rowWidth=0,left=100000,top=100000;
+    for(const auto &r:native)if(r.isValid()){
+        total+=r.height();rowWidth=qMax(rowWidth,r.width());left=qMin(left,r.x());top=qMin(top,r.y());
+    }
+    // The scroll offset may make native y negative. Reconstruct actual
+    // top inset from the style rather than inheriting an offscreen offset.
+    top=qMax(2,top+(d->scroll?qMax(0,-d->scroll->scrollOffset):0));
+    left=qMax(2,left);
+    const int bottom=top,right=left,gap=10;
+    const int maxColumns=qMin(12,(work.width()-left-right+gap)/qMax(1,rowWidth+gap));
+    const auto count=std::count_if(actions.begin(),actions.end(),[](const QAction *a){return a->isVisible()&&!a->isSeparator();});
+    if((count<16&&total+top+bottom<=cap)||maxColumns<2||rowWidth<=0) {
+        arrangedGeometry=menu->geometry();columnsApplied=false;arranging=false;return;
+    }
+    // Balance contiguous columns in original order. Prefer a nearby
+    // separator boundary, but never remove or duplicate a command.
+    const int cols=qBound(2,qCeil(double(total)/qMax(1,cap-top-bottom)),maxColumns);
+    QList<QRect> rects(native.size());
+    int col=0,y=top,tallest=0,used=0,remaining=total;
+    int target=qCeil(double(remaining)/cols);
+    for(int i=0;i<native.size();++i) {
+        const auto r=native[i];if(!r.isValid())continue;
+        if(col<cols-1&&used>0&&used+r.height()>target) {
+            tallest=qMax(tallest,y);++col;y=top;used=0;
+            target=qCeil(double(remaining)/(cols-col));
+        }
+        const int physical=menu->isRightToLeft()?cols-1-col:col;
+        rects[i]=QRect(left+physical*(rowWidth+gap),y,rowWidth,r.height());
+        y+=r.height();used+=r.height();remaining-=r.height();
+    }
+    tallest=qMax(tallest,y);
+    const QSize size(left+right+cols*rowWidth+(cols-1)*gap,tallest+bottom);
+    // If every row won't fit, retain native behavior; never clip choices.
+    if(size.width()>work.width()||size.height()>work.height()) {
+        arrangedGeometry=menu->geometry();columnsApplied=false;arranging=false;return;
+    }
+    QPoint pos=menu->pos();
+    const QPoint cursor=QCursor::pos();
+    if(!columnsApplied&&!qobject_cast<QMenu*>(d->causedPopup.widget.data())&&!qobject_cast<QMenuBar*>(d->causedPopup.widget.data())&&menu->geometry().adjusted(-8,-8,8,8).contains(cursor))
+        pos.setY(cursor.y()+size.height()<=work.bottom()?cursor.y():cursor.y()-size.height());
+    pos.setX(qBound(work.left(),pos.x(),work.right()-size.width()+1));
+    pos.setY(qBound(work.top(),pos.y(),work.bottom()-size.height()+1));
+    menu->setGeometry(QRect(pos,size));
+    if(d->scroll){d->scroll->scrollTimer.stop();d->scroll->scrollOffset=0;d->scroll->scrollFlags=0;d->scroll->scrollDirection=0;}
+    d->actionRects=rects;d->ncols=cols;d->itemsDirty=false;
+    arrangedGeometry=menu->geometry();columnsApplied=true;arranging=false;
+#else
+    // Public-API fallback: compact rows, never auto-hide commands.
+#endif
 }
 void MenuLayout::restore() {
     if(!prepared)return;
     prepared=false;
+#ifdef AFTERMARKET_QT642_COLUMNS
+    if(columnsApplied&&qstrcmp(qVersion(),QT_VERSION_STR)==0)QMenuPrivate::get(menu)->itemsDirty=true;
+#endif
+    columnsApplied=false;arrangedGeometry={};
     // Only restore surviving actions still owned by a generated page; do
     // not resurrect actions explicitly removed/deleted while the popup was open.
     for(auto it=originalActions.crbegin();it!=originalActions.crend();++it) {

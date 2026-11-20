@@ -2,6 +2,11 @@
 #include "inspector.h"
 #include <QScreen>
 #include <QSet>
+#include <QComboBox>
+#include <QListWidget>
+#include <QLineEdit>
+#include <QScrollBar>
+#include <QMouseEvent>
 #include <QTimer>
 #include <QKeyEvent>
 #include <QApplication>
@@ -106,43 +111,26 @@ int main(int argc, char **argv) {
         longMenu.popup(QPoint(50,50));app.processEvents();
         const auto cap=qMin(500,int(longMenu.screen()->availableGeometry().height()*.57));
         REQUIRE(longMenu.height()<=cap+8);
-        QMenu *page=&longMenu;
-        QSet<QAction*> seen;
-        while(page) {
-            QMenu *next=nullptr;
-            for(auto *a:page->actions()) {
-                if(a->property("_aftermarketOverflowAction").toBool()){next=a->menu();continue;}
-                REQUIRE(originals.contains(a)&&!seen.contains(a));seen.insert(a);
-            }
-            if(!next)break;
-            page=next;
+        REQUIRE(longMenu.actions()==originals);
+        QSet<int> columns;
+        for(auto *a:originals) {
+            if(!a->isVisible()||a->isSeparator())continue;
+            const auto r=longMenu.actionGeometry(a);
+            REQUIRE(r.isValid()&&longMenu.rect().contains(r));
+            REQUIRE(longMenu.actionAt(r.center())==a);
+            columns.insert(r.x());
         }
-        REQUIRE(seen.size()==originals.size()&&page!=&longMenu&&!longMenu.actions().contains(last)
-                &&longMenu.actions().contains(nativeSub->menuAction())&&longMenu.actions().contains(originals.at(originals.size()-2)));
+        REQUIRE(columns.size()>1);
         longMenu.hide();app.processEvents();
         REQUIRE(longMenu.actions()==originals&&longMenu.styleSheet()==style);
-        // Native submenu navigation and exec return must survive pagination.
+        // Native action execution in a second column, without opening overflow.
         QTimer::singleShot(0,&longMenu,[&]{
-            auto *current=&longMenu;
-            for(int depth=0;depth<10&&!current->actions().contains(last);++depth) {
-                QAction *more=nullptr;
-                for(auto *a:current->actions())if(a->property("_aftermarketOverflowAction").toBool()){more=a;break;}
-                if(!more)break;
-                current->setActiveAction(more);
-                QKeyEvent right(QEvent::KeyPress,Qt::Key_Right,Qt::NoModifier);
-                QApplication::sendEvent(current,&right);
-                app.processEvents();
-                current=more->menu();
-                if(current->height()>cap+8)break;
-            }
-            if(current->actions().contains(last)&&current->isVisible()) {
-                current->setActiveAction(last);
-                const auto snapshot=augment::inspectWidget(current,current->mapToGlobal(current->actionGeometry(last).center()));
-                if(snapshot.menuLabels.contains("Entry 0")&&snapshot.menuLabels.contains("Entry 29")&&!last->icon().isNull())
-                    count+=100;
-                QKeyEvent enter(QEvent::KeyPress,Qt::Key_Return,Qt::NoModifier);
-                QApplication::sendEvent(current,&enter);
-            } else longMenu.close();
+            longMenu.setActiveAction(last);
+            const auto snapshot=augment::inspectWidget(&longMenu,longMenu.mapToGlobal(longMenu.actionGeometry(last).center()));
+            if(snapshot.menuLabels.contains("Entry 0")&&snapshot.menuLabels.contains("Entry 29")&&!last->icon().isNull())
+                count+=100;
+            QKeyEvent enter(QEvent::KeyPress,Qt::Key_Return,Qt::NoModifier);
+            QApplication::sendEvent(&longMenu,&enter);
         });
         QTimer::singleShot(1000,&longMenu,&QMenu::close);
         REQUIRE(longMenu.exec(QPoint(50,50))==last);
@@ -150,6 +138,19 @@ int main(int argc, char **argv) {
         REQUIRE(count==101&&rootCount==1&&longMenu.actions()==originals);
         REQUIRE(originals.at(4)->isEnabled()==false);
         REQUIRE(controller.compactMenusEnabled());
+        QMenu filters;
+        for(int i=0;i<18;++i)filters.addAction(QString("Filter %1").arg(i));
+        const auto choices=filters.actions();
+        filters.popup(QPoint(50,50));app.processEvents();
+        QSet<int> filterCols;
+        for(auto *a:choices){
+            const auto r=filters.actionGeometry(a);
+            REQUIRE(filters.rect().contains(r)&&filters.actionAt(r.center())==a);
+            filterCols.insert(r.x());
+        }
+        REQUIRE(filters.actions()==choices&&filterCols.size()>1);
+        filters.hide();app.processEvents();
+
         QMenu embedded;
         embedded.setStyleSheet(style);
         for(int i=0;i<30;++i)embedded.addAction(QString::number(i));
@@ -161,6 +162,53 @@ int main(int argc, char **argv) {
         REQUIRE(embedded.actions()==embeddedActions&&embedded.styleSheet()==style);
         embedded.hide();app.processEvents();
         REQUIRE(nativeSub->actions().size()==1);
+        // Only an explicitly scoped choice may enter overflow.
+        REQUIRE(write(R"({"enabled":true,"menuOverflow":[{"text":"Entry 7","menuContains":["Entry 0","Entry 1"]}],"rules":[]})"));
+        longMenu.popup(QPoint(50,50));app.processEvents();
+        QMenu *more=nullptr;
+        for(auto *a:longMenu.actions())if(a->text()=="More actions…")more=a->menu();
+        REQUIRE(more&&more->actions().size()==1&&more->actions().first()->text()=="Entry 7");
+        for(auto *a:originals)if(a->text()!="Entry 7")REQUIRE(longMenu.actions().contains(a));
+        longMenu.hide();app.processEvents();
+        REQUIRE(longMenu.actions()==originals);
+        QMenu unrelated;unrelated.addAction("Entry 7");
+        unrelated.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(unrelated.actions().size()==1&&unrelated.actions().first()->text()=="Entry 7");
+        unrelated.hide();app.processEvents();
+        // The actual OBS Appearance combo uses a model, not a QMenu.
+        QWidget settings;settings.setObjectName("OBSBasicSettings");
+        QComboBox themes(&settings);themes.setObjectName("themeVariant");
+        for(int i=0;i<120;++i)themes.addItem(QString("Colorway %1").arg(i),i);
+        settings.show();themes.show();app.processEvents();
+        int activated=-1;
+        QObject::connect(&themes,&QComboBox::activated,[&](int row){activated=row;});
+        const QPoint center=themes.rect().center();
+        QMouseEvent press(QEvent::MouseButtonPress,center,themes.mapToGlobal(center),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+        QApplication::sendEvent(&themes,&press);app.processEvents();
+        auto *picker=settings.findChild<QWidget*>("aftermarket-theme-picker");
+        REQUIRE(picker&&picker->isVisible());
+        auto *grid=picker->findChild<QListWidget*>();
+        REQUIRE(grid&&grid->count()==120&&grid->isWrapping());
+        REQUIRE(grid->visualItemRect(grid->item(0)).x()!=grid->visualItemRect(grid->item(1)).x());
+        auto *search=picker->findChild<QLineEdit*>();
+        REQUIRE(search);
+        search->setText("Colorway 83");
+        app.processEvents();
+        REQUIRE(grid->item(0)->isHidden()&&!grid->item(83)->isHidden());
+        search->setText({});
+        app.processEvents();
+        for(int i=0;i<grid->count();++i)REQUIRE(!grid->item(i)->isHidden());
+        auto *choice=grid->item(83);
+        grid->setCurrentItem(choice);grid->scrollToItem(choice);app.processEvents();
+        const auto click=grid->visualItemRect(choice).center();
+        REQUIRE(grid->viewport()->rect().contains(click)&&grid->itemAt(click)==choice);
+        QMouseEvent down(QEvent::MouseButtonPress,click,grid->viewport()->mapToGlobal(click),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+        QMouseEvent up(QEvent::MouseButtonRelease,click,grid->viewport()->mapToGlobal(click),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+        QApplication::sendEvent(grid->viewport(),&down);
+        QApplication::sendEvent(grid->viewport(),&up);
+        app.processEvents();
+        REQUIRE(themes.count()==120&&themes.currentIndex()==83&&activated==83);
+        settings.hide();
         REQUIRE(controller.setCompactMenus(false));
         REQUIRE(!controller.compactMenusEnabled());
         longMenu.popup(QPoint(50,50));app.processEvents();

@@ -54,6 +54,17 @@ int main(int argc,char **argv) {
         REQUIRE(!snap.actions.at(0).nativeIcon); // don't confuse our transparent reservation for a native icon
         menu.hide();
     } // snapshot must survive destruction
+    {
+        augment::Inspector inspector(c);inspector.capture(snap);
+        auto *more=inspector.findChild<QCheckBox*>("augment-overflow");
+        REQUIRE(more&&more->isEnabled()&&!more->isChecked());
+        const auto chosen=augment::selectorFor(snap,snap.selected,true);
+        more->click();
+        REQUIRE(c.hasOverflowRule(chosen));
+        REQUIRE(c.effectiveRule(QJsonObject{{"text","Rename"}},{}).value("icon").toString()=="pencil");
+        more->click();
+        REQUIRE(!c.hasOverflowRule(chosen));
+    }
     auto selector=augment::selectorFor(snap,0,true);
     REQUIRE(selector.value("objectName").toString()=="actionRenameSource");
     REQUIRE(selector.value("menuContains").toArray().size()==2);

@@ -149,3 +149,23 @@ Filters, Properties and middle overflow with existing native submenu arrows.
 Multi-monitor, other DPI/platforms, very large fonts and third-party
 dynamic menus require wider runtime validation. No theme or live config
 changes. Remaining unrelated gaps stay open.
+
+## Slice 13 — browse-first menus and explicit overflow (2026-11-19)
+
+User corrected the earlier automatic overflow behavior: they want to view
+all choices without an extra click, especially filter and theme lists.
+Replaced automatic overflow with native columns on the local Qt 6.4.2 ABI,
+retaining compact row spacing and original QAction objects. Explicit scoped
+menuOverflow rules alone can move an action; inspector checkbox independent
+of icon edits. Native source menu measured 554x312, effect filter picker
+500x204 with all 18 choices visible; selecting an item in the second column
+opened OBS's original Filter name dialog. Native context placement corrected
+near the pointer. The Appearance theme/themeVariant QComboBoxes use a
+separate searchable grid for long lists. Qt test with 120 entries verifies
+wrapping, search reset, actual mouse selection and native activation.
+Isolated OBS exposed just one Colorway style despite copied variant files,
+so real populated theme selection remains unverified. Qt private columns
+are version-gated; other versions use compact native rows. Large lists
+may need scrolling, never automatic hiding. All 8 regression tests passed
+on the local Qt version. User rules and themes unchanged; no automatic
+overflow migration needed because old overflow was generated, not saved.

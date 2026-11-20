@@ -83,24 +83,34 @@ heuristic and rule precedence are unchanged.
 
 ## Compact menus
 
-Long native menus use tighter rows and a bounded overflow layout. A menu
-that still exceeds the height budget (about 57% of available screen height,
-up to 500 logical pixels) places excess commands in native **More actions…**
-submenus. The final four commands remain directly accessible where space
-permits. Short menus, embedded-widget menus and tear-off menus retain their
-original layout. The active theme supplies colors and type.
+Long native menus use tighter rows and balanced, visible columns. Typical
+menus aim for about 340 logical pixels in height, with more columns when
+screen width permits. Original order is preserved down each column.
+No commands are automatically moved behind another menu. If a list cannot
+fit within the available screen space, native navigation remains available.
 
-| Original menu | Compact menu | Overflow |
-| --- | --- | --- |
-| ![Original long source menu](docs/screenshots/readme/menu-long.png) | ![Compact native source menu](docs/screenshots/readme/menu-compact.png) | ![Native overflow submenu](docs/screenshots/readme/menu-overflow.png) |
+| Source menu | Filter picker |
+| --- | --- |
+| ![Two-column source menu](docs/screenshots/readme/menu-columns.png) | ![All 18 effect filters in two columns](docs/screenshots/readme/filter-columns.png) |
 
-Compact menus are enabled by default. Open **Tools → UI Augment Inspector**
-and uncheck **Compact menus** to restore the original layout for subsequent
-popups, or set the root-level JSON key `"compactMenus": false`.
-No theme file is modified. Original action objects, icons, check states,
-shortcuts, submenu pointers and logical rule context are retained. The
-original menu ordering and local stylesheet are restored after dismissal.
-The layout budget is heuristic, not a clipping constraint.
+Use **Tools → UI Augment Inspector → Compact menus** to enable or disable
+the layout (enabled by default). Pick a particular action and check
+**Move to More actions** only if you want that specific command tucked
+away. Placement rules are stored independently in the root-level
+\`menuOverflow\` array; existing icon rules are unaffected. Capture the action
+again in More actions and uncheck it to restore its normal placement.
+
+For OBS Appearance settings, the Theme and Style combo boxes with at least
+16 choices open a searchable, scrollable grid; all choices remain present
+until the user deliberately filters them. Selection commits to the original
+combo box's model. Unrelated and editable combo boxes are left unchanged.
+
+The native column adapter is built for Qt 6.4.2 with its private development
+headers (on Debian/Ubuntu, qt6-base-private-dev) and requires a matching
+runtime version. Other versions fall back to compact native rows rather
+than accessing mismatched private layout data. Short menus, embedded
+widget actions and tear-off menus keep their native layout. The active
+theme supplies colors and type.
 
 ## Motion
 
@@ -131,7 +141,7 @@ Uncheck Motion for reduced motion. The master switch persists in the rules file;
 }
 ```
 
-The native menu and its hit targets never move. Only the independently drawn icon layer
+Icon motion does not move the native menu hit targets. Only the independently drawn icon layer
 changes. The renderer caches rasterized SVGs at the display's device pixel ratio, clips
 motion to the icon gutter, uses monotonic elapsed time with cubic easing, and stops its
 16 ms timer when transitions finish or the menu closes. Hover retargets from its current
