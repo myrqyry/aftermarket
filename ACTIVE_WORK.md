@@ -119,3 +119,12 @@ Colorway palette despite requested Synthwave84 ID, so exact user variant
 and plugin filter dialog not directly exercised. No changes to live settings,
 theme or user OBS session. Higher-DPI and complex image/shaded thumb styles
 need broader verification. Earlier gaps remain tracked above.
+
+## Project identity — Aftermarket (2026-11-19)
+
+User selected Aftermarket, inspired by automotive customization culture, and
+requested a new GitHub repository with existing work and history. Project-facing
+name updated; retain existing module/config identity and local checkout to avoid
+breaking installations. Remote target: myrqyry/aftermarket. Private initially
+pending public visibility/licensing decisions. No release or binary packaging
+implied by source publication.

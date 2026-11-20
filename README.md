@@ -1,6 +1,18 @@
-# OBS UI Augment
+# Aftermarket
 
-An experimental runtime augmentation layer for OBS Studio. The first slice adds independently painted icons to the existing menus without changing OBS themes or source objects.
+**Beyond factory spec.**
+
+A native runtime UI modification engine for OBS Studio. Inspect, customize,
+animate and transform existing controls without forking OBS or replacing its
+theme system. Built to complement Colorway: the theme defines the visual
+identity, while Aftermarket extends presentation and interaction at runtime.
+
+Current capabilities include custom context-menu icons, a native inspector,
+animated gradients, audio-reactive mixer effects, rotary gain controls with
+integrated peak meters, and collapsible docks.
+
+Formerly OBS UI Augment. The installed module, configuration directory and
+Tools menu entries retain their existing names for compatibility.
 
 | Native | Augmented |
 | --- | --- |

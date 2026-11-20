@@ -1,3 +1,11 @@
-# OBS UI Augment
+# Aftermarket
 
-Purpose: a plugin-owned, rule-driven UI augmentation layer for native OBS widgets. Preserve OBS actions and underlying source state; when native theme styling cannot express a decoration, render the artwork independently. MVP is context-menu SVG overlays with a transparent native layout hint only. No OBS fork, arbitrary scripting, video effects, or global theme reload.
+Purpose: a plugin-owned, rule-driven runtime UI modification engine for native
+interfaces, currently supporting OBS Studio. Preserve native actions and source
+state; extend presentation, animation, control forms and layout. Complement
+Colorway without requiring it. Keep the core independent of OBS where practical,
+without premature rewrites.
+
+Compatibility: the existing obs-ui-augment module identity, config path,
+and local checkout remain unchanged for now. No OBS fork or video effects.
+See ACTIVE_WORK.md for verified slices and remaining gaps.
