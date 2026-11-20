@@ -81,6 +81,27 @@ heuristic and rule precedence are unchanged.
 
 ![Captured native menu](docs/screenshots/readme/workspace-menus.png)
 
+## Compact menus
+
+Long native menus use tighter rows and a bounded overflow layout. A menu
+that still exceeds the height budget (about 57% of available screen height,
+up to 500 logical pixels) places excess commands in native **More actions…**
+submenus. The final four commands remain directly accessible where space
+permits. Short menus, embedded-widget menus and tear-off menus retain their
+original layout. The active theme supplies colors and type.
+
+| Original menu | Compact menu | Overflow |
+| --- | --- | --- |
+| ![Original long source menu](docs/screenshots/readme/menu-long.png) | ![Compact native source menu](docs/screenshots/readme/menu-compact.png) | ![Native overflow submenu](docs/screenshots/readme/menu-overflow.png) |
+
+Compact menus are enabled by default. Open **Tools → UI Augment Inspector**
+and uncheck **Compact menus** to restore the original layout for subsequent
+popups, or set the root-level JSON key `"compactMenus": false`.
+No theme file is modified. Original action objects, icons, check states,
+shortcuts, submenu pointers and logical rule context are retained. The
+original menu ordering and local stylesheet are restored after dismissal.
+The layout budget is heuristic, not a clipping constraint.
+
 ## Motion
 
 Open **Tools → UI Augment Inspector** and enable **Motion** in the toolbar.

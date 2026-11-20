@@ -128,3 +128,24 @@ name updated; retain existing module/config identity and local checkout to avoid
 breaking installations. Remote target: myrqyry/aftermarket. Private initially
 pending public visibility/licensing decisions. No release or binary packaging
 implied by source publication.
+
+## Slice 12 — compact native menus (2026-11-19)
+
+User disliked context menus spanning the screen. Qt 6.4.2 source confirms
+clamping QWidget height alone does not establish native scroll flags. Added
+reversible compact stylesheet and native overflow pages with original
+QActions; logical rule labels/IDs preserved across pages. Keep the last four
+commands on the top-level menu when feasible; no arbitrary semantic reordering.
+Default enabled, inspector toolbar checkbox and compactMenus JSON opt-out.
+Skip menus with embedded QWidgetActions or tear-off behavior.
+RED regression: long menu exceeded the budget. GREEN: original actions
+reachable, keyboard native exec return and root triggered signal exactly
+once, scoped icon resolution, restoration, final commands kept, embedded
+widget exclusion, toggle and inspector persistence.
+Isolated OBS 32.2.0/Colorway: source context popup 277x720 before, 254x436
+final, overflow 240x203. Earlier intermediate overflow Rename clicked and
+native inline editor opened; final screenshot shows direct Rename, Remove,
+Filters, Properties and middle overflow with existing native submenu arrows.
+Multi-monitor, other DPI/platforms, very large fonts and third-party
+dynamic menus require wider runtime validation. No theme or live config
+changes. Remaining unrelated gaps stay open.

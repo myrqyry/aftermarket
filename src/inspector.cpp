@@ -1,5 +1,6 @@
 #include "inspector.h"
 #include "augment.h"
+#include "menu-layout.h"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -72,17 +73,17 @@ WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
         if ((menu=qobject_cast<QMenu*>(w))) break;
     if (!menu) return s;
     s.isMenu=true;
-    s.menuObjectName=menu->objectName();
+    s.menuObjectName=logicalMenuName(menu);
+    s.menuLabels=logicalMenuLabels(menu);
     const auto *hit=menu->actionAt(menu->mapFromGlobal(globalPosition));
     for (auto *action : menu->actions()) {
-        if (action->isSeparator() || !action->isVisible()) continue;
+        if (overflowAction(action) || action->isSeparator() || !action->isVisible()) continue;
         const bool reservation=action->property("_obsUiAugmentReservation").toBool();
         ActionSnapshot item{action->text(),action->objectName(),action->isCheckable(),
             qobject_cast<QWidgetAction*>(action)!=nullptr,action->isVisible(),action->isEnabled(),
             reservation ? action->property("_obsUiAugmentOriginalIcon").toBool() : !action->icon().isNull()};
         if (action==hit) s.selected=s.actions.size();
         s.actions.push_back(item);
-        s.menuLabels.append(action->text());
     }
     return s;
 }
@@ -282,7 +283,7 @@ struct Inspector::Ui {
     QComboBox *icons=nullptr,*preset=nullptr;
     QSpinBox *duration=nullptr;
     QLineEdit *color=nullptr;
-    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr;
+    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr;
     QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr;
     explicit Ui(Controller &c):controller(c){}
 };
@@ -303,7 +304,19 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     toolbar->addWidget(ui->pick);toolbar->addStretch();
     ui->motion=new QCheckBox("Motion",this);ui->motion->setObjectName("augment-motion");
     ui->motion->setToolTip("Enable motion globally. Uncheck for reduced motion. Menu motion applies on next popup; gradient motion updates immediately.");
-    ui->motion->setChecked(controller.motionEnabled());toolbar->addWidget(ui->motion);
+    ui->motion->setChecked(controller.motionEnabled());
+    ui->compactMenus=new QCheckBox("Compact menus",this);ui->compactMenus->setObjectName("augment-compact-menus");
+    ui->compactMenus->setToolTip("Tighten long menus and put excess commands in native More actions submenus. Reopen a menu to apply.");
+    ui->compactMenus->setChecked(controller.compactMenusEnabled());toolbar->addWidget(ui->compactMenus);toolbar->addWidget(ui->motion);
+    connect(ui->compactMenus,&QCheckBox::toggled,this,[this](bool enabled){
+        QString error;
+        if(ui->controller.setCompactMenus(enabled,&error))
+            ui->status->setText(enabled?"Compact menus enabled. Reopen a menu.":"Native menu layout restored on next popup.");
+        else {
+            const QSignalBlocker blocker(ui->compactMenus);
+            ui->compactMenus->setChecked(ui->controller.compactMenusEnabled());ui->status->setText(error);
+        }
+    });
     ui->pickDelay=new QSpinBox(this);ui->pickDelay->setRange(2,10);ui->pickDelay->setValue(4);ui->pickDelay->setSuffix(" s");ui->pickDelay->setToolTip("Time to open a menu or hover a widget");toolbar->insertWidget(1,ui->pickDelay);
     root->addLayout(toolbar);
     ui->tabs=new QTabWidget(this);ui->tabs->setObjectName("augment-workspace");root->addWidget(ui->tabs,1);
@@ -437,6 +450,7 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
     if(snapshot.valid()&&!snapshot.isMenu&&snapshot.mixerSource.isEmpty())ui->advanced->setChecked(true);
     ui->filter->clear();
     {const QSignalBlocker blocker(ui->motion);ui->motion->setChecked(ui->controller.motionEnabled());}
+    {const QSignalBlocker blocker(ui->compactMenus);ui->compactMenus->setChecked(ui->controller.compactMenusEnabled());}
     {
         QSignalBlocker blocker(ui->actions);
         ui->actions->clear();

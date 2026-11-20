@@ -1,4 +1,5 @@
 #include "augment.h"
+#include "menu-layout.h"
 #include "motion.h"
 #include "gradient.h"
 #include <QElapsedTimer>
@@ -153,7 +154,7 @@ struct Rules {
     QString path;
     Logger logger;
     QByteArray lastRead;
-    bool enabled = true, inspect = false, motion = false;
+    bool enabled = true, inspect = false, motion = false, compactMenus = true;
     std::vector<Rule> entries;
     GradientSpec gradient;
     QJsonObject gradientRaw;
@@ -176,7 +177,7 @@ struct Rules {
         auto root = doc.object();
         if (!root.value("rules").isArray() || (root.contains("enabled") && !root.value("enabled").isBool()) ||
             (root.contains("inspect") && !root.value("inspect").isBool()) ||
-            (root.contains("motion") && !root.value("motion").isBool())) return false;
+            (root.contains("motion") && !root.value("motion").isBool()) || (root.contains("compactMenus") && !root.value("compactMenus").isBool())) return false;
         GradientSpec nextGradient;
         if(!GradientSpec::parse(root.value("gradient"),nextGradient))return false;
         std::vector<Rule> next;
@@ -203,6 +204,7 @@ struct Rules {
         enabled = root.value("enabled").toBool(true);
         inspect = root.value("inspect").toBool(false);
         motion = root.value("motion").toBool(false);
+        compactMenus = root.value("compactMenus").toBool(true);
         entries = std::move(next);
         gradient=nextGradient;
         gradientRaw=root.value("gradient").toObject();
@@ -243,6 +245,7 @@ class Overlay final : public QWidget {
         qreal cachedDpr=0;
     };
     QMenu *menu;
+    MenuLayout layout;
     std::vector<Slot> slots_;
     bool prepared_ = false;
     bool motionEnabled_=false;
@@ -275,7 +278,7 @@ class Overlay final : public QWidget {
         if(!active)clock_->stop();
     }
 public:
-    explicit Overlay(QMenu *m):QWidget(m),menu(m),clock_(new QTimer(this)) {
+    explicit Overlay(QMenu *m):QWidget(m),menu(m),layout(m),clock_(new QTimer(this)) {
         clock_->setObjectName("augment-motion-clock");
         clock_->setTimerType(Qt::PreciseTimer);
         clock_->setInterval(16);
@@ -288,6 +291,12 @@ public:
     }
     ~Overlay() override { restore(); }
     bool prepared() const {return prepared_;}
+    void restoreLayout(){layout.restore();}
+    void closePopup(){
+        restore();
+        // Native activation and QMenu::exec finish after Hide.
+        QTimer::singleShot(0,this,[this]{if(!menu->isVisible())layout.restore();});
+    }
     void restore() {
         clock_->stop();elapsed_.invalidate();hovered_.clear();motionEnabled_=false;
         hide();
@@ -306,20 +315,19 @@ public:
     }
     void prepare(Rules &rules) {
         if (prepared_) return;
+        layout.restore();
+        layout.prepare(rules.enabled&&rules.compactMenus);
         prepared_ = true;
         motionEnabled_=rules.motion;
         const auto actions = menu->actions();
-        QStringList menuLabels;
-        for (auto *action : actions)
-            if (action->isVisible() && !action->isSeparator()) menuLabels.append(action->text());
-        const auto labels=normalizedLabels(menuLabels);
+        const auto labels=normalizedLabels(logicalMenuLabels(menu));
         for (auto *a : actions) {
             if (rules.inspect)
                 rules.log(QString("menu=%1 action=%2 text=%3").arg(menu->objectName(), a->objectName(), a->text()));
             if (!rules.enabled) continue;
-            if (!a->isVisible() || a->isSeparator() || a->isCheckable() ||
+            if (overflowAction(a) || !a->isVisible() || a->isSeparator() || a->isCheckable() ||
                 qobject_cast<QWidgetAction *>(a)) continue;
-            const auto *r = rules.matchNormalized(a->text(),a->objectName(),menu->objectName(),labels);
+            const auto *r = rules.matchNormalized(a->text(),a->objectName(),logicalMenuName(menu),labels);
             if (!r || (!a->icon().isNull() && !r->replaceExisting) ||
                 a->property("_obsUiAugmentReservation").toBool()) continue;
             int extent = qBound(12,menu->style()->pixelMetric(QStyle::PM_SmallIconSize,nullptr,menu),32);
@@ -458,6 +466,8 @@ Controller::~Controller() {
     for (auto *menu : state->menus.keys()) QObject::disconnect(menu,nullptr,this,nullptr);
     const auto overlays=state->menus.values();
     state->menus.clear();
+    for (auto *overlay : overlays) overlay->restore();
+    for (auto *overlay : overlays) overlay->restoreLayout();
     for (auto *overlay : overlays) delete overlay;
 }
 namespace {
@@ -466,7 +476,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -482,6 +492,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
         root["gradient"]=*gradient;
     }
     else if (motion) root["motion"]=*motion;
+    else if (compactMenus) root["compactMenus"]=*compactMenus;
     else {
     auto selector=canonicalSelector(entry);
     if (!selector.contains("text") && !selector.contains("objectName"))
@@ -520,6 +531,10 @@ QJsonObject Controller::gradientSettings() const {state->rules.refresh();return 
 bool Controller::setGradientSettings(const QJsonObject &spec,QString *error,const QJsonObject *expected) {
     if(!editRules(state->rules,{},false,error,nullptr,&spec,expected))return false;
     state->refreshGradients();return true;
+}
+bool Controller::compactMenusEnabled() const {state->rules.refresh();return state->rules.compactMenus;}
+bool Controller::setCompactMenus(bool enabled,QString *error) {
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,&enabled);
 }
 bool Controller::motionEnabled() const {state->rules.refresh();return state->rules.motion;}
 bool Controller::setMotionEnabled(bool enabled, QString *error) {
@@ -578,7 +593,7 @@ bool Controller::eventFilter(QObject *object,QEvent *event) {
             }
             overlay->present();
             break;
-        case QEvent::Hide: overlay->restore(); break;
+        case QEvent::Hide: overlay->closePopup(); break;
         case QEvent::Resize: if (menu->isVisible()) overlay->present(); break;
         case QEvent::MouseMove: overlay->hover(menu->actionAt(static_cast<QMouseEvent*>(event)->position().toPoint()));break;
         case QEvent::Leave: overlay->hover(nullptr);break;
