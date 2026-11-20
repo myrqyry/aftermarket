@@ -14,11 +14,15 @@ integrated peak meters, and collapsible docks.
 Formerly OBS UI Augment. The installed module, configuration directory and
 Tools menu entries retain their existing names for compatibility.
 
-| Native | Augmented |
+| Gradient faders | Integrated rotary meters |
 | --- | --- |
-| ![Native source context menu](docs/screenshots/menu-disabled.png) | ![Augmented source context menu](docs/screenshots/menu-enabled.png) |
+| ![Native mixer faders with animated tracks](docs/screenshots/readme/mixer-faders.png) | ![Rotary gain controls and peak rings](docs/screenshots/readme/mixer-rings.png) |
 
-Real OBS 32.2.0, Qt 6.4.2, Colorway Rosé Pine — Pine, isolated X11 test profile.
+| Native menu | Augmented menu |
+| --- | --- |
+| ![Native source context menu](docs/screenshots/readme/menu-disabled.png) | ![Augmented source context menu](docs/screenshots/readme/menu-enabled.png) |
+
+Actual OBS 32.2.0 with Colorway, captured at native resolution in an isolated X11 test profile. The two mixer channels use a real test tone and silence.
 
 ## Install locally (Linux)
 
@@ -56,11 +60,11 @@ from four pages in one native, theme-aware window:
 - **Panels:** collapse/expand eligible native docks, refresh the list or
   expand all. The legacy Tools → UI Augment Panels shortcut opens this page.
 
-![Mixer page in OBS](docs/screenshots/workspace-mixer.png)
+![Mixer page in OBS](docs/screenshots/readme/workspace-mixer.png)
 
-![Gradient page in OBS](docs/screenshots/workspace-gradients.png)
+![Gradient page in OBS](docs/screenshots/readme/workspace-gradients.png)
 
-![Panels page in OBS](docs/screenshots/workspace-panels.png)
+![Panels page in OBS](docs/screenshots/readme/workspace-panels.png)
 
 Mixer and gradient edits share an explicit Apply changes button; a pending
 indicator and Reload saved settings distinguish the draft from applied
@@ -75,7 +79,7 @@ require explicit replacement. Remove exact rule deletes only the identical
 selector and leaves broader rules intact. The menu matcher's previous
 heuristic and rule precedence are unchanged.
 
-![Captured native menu](docs/screenshots/workspace-menus.png)
+![Captured native menu](docs/screenshots/readme/workspace-menus.png)
 
 ## Motion
 
@@ -112,7 +116,7 @@ motion to the icon gutter, uses monotonic elapsed time with cubic easing, and st
 16 ms timer when transitions finish or the menu closes. Hover retargets from its current
 value rather than snapping to an endpoint.
 
-![Real OBS icon reveal frames](docs/screenshots/motion-frames.png)
+[Real OBS icon reveal frames](docs/screenshots/motion-frames.png).
 
 Verified in isolated OBS 32.2.0 with the actual Colorway Rosé Pine theme: GUI enabled
 motion, selected spin and a 600 ms duration for Scale Filtering, persisted the scoped
@@ -145,7 +149,9 @@ Edit just the gradient and motion fields in an existing file to preserve your me
 
 The overlay derives groove, thumb and progress content rectangles from Qt's actual style geometry. Slider gradients extend to the native thumb center, preserving the actual handle silhouette instead of leaving a rounded gap before it. A cached native-paint comparison covers the exposed page around the thumb; solid-color antialiased edges are recomposited over the animated fill. Ambiguous custom handle pixels remain native. It uses a seamless repeated gradient and one shared 30 Hz timer, which stops if there are no visible, nonempty animated tracks. It never writes slider values or changes the stream compositor.
 
-![Actual OBS animated media seek and volume tracks](docs/screenshots/gradient-tracks.png)
+![Gradient tracks on actual OBS color correction filter sliders](docs/screenshots/readme/gradient-thumb-join.png)
+
+[Earlier media seek and fader verification](docs/screenshots/gradient-tracks.png).
 
 Verified in an isolated OBS 32.2.0 session with Colorway Rosé Pine, native media playback and mixer fader. Both tracks' pixels changed while paused elapsed text stayed fixed; native seeking updated playback position. Live motion-disable made the pixels stable, and live gradient-disable restored the native appearance. Qt regression tests cover progress bars, vertical and inverted sliders, stylesheet geometry, invalid configuration and reduced motion. Progress bars were tested in Qt, not a specific OBS progress dialog. Custom-drawn controls that are not QSlider/QProgressBar are outside this slice.
 
@@ -181,7 +187,7 @@ Add these keys to an existing gradient object:
 }
 ```
 
-![Reactive mixer: tone and silent sources](docs/screenshots/audio-reactive.png)
+[Reactive mixer verification: tone and silent sources](docs/screenshots/audio-reactive.png).
 
 Verified with real OBS 32.2.0, Colorway Rosé Pine, two isolated media sources
 and no active recording or streaming: 1218 changed pixels on the tone fader
@@ -224,7 +230,7 @@ where those have not been changed by another owner. The current volume is preser
 Merge these keys into the existing gradient object. Source names are scoped
 exactly, not durable source UUIDs; the text UI uses semicolons as delimiters.
 
-![One real mixer fader replaced with a rotary knob](docs/screenshots/knob-mixer.png)
+[Earlier mixed knob/fader verification](docs/screenshots/knob-mixer.png).
 
 Verified in isolated OBS 32.2.0 with Colorway Rosé Pine: Tone test switched to
 a knob, Silent test remained a fader; the reactive ring animated (242 changed
@@ -243,7 +249,7 @@ continues even with decorative Motion disabled. Native nominal, warning and
 error colors are reused, with -60 to 0 dB scale, -20/-9 dB thresholds, a
 one-second peak marker, clip flash and 30 dB/s release.
 
-![Integrated peak rings on the actual OBS mixer](docs/screenshots/knob-meter-active.png)
+![Integrated peak rings on the actual OBS mixer](docs/screenshots/readme/mixer-rings.png)
 
 The native meter is hidden only when paired with the supported knob and
 source can be resolved. It is restored if the binding is unavailable or
@@ -272,7 +278,9 @@ panel, and choose **Collapse / expand**. **Expand all** restores all rolled-up
 panels. The original dock and its contents stay alive; this does not close the
 dock or delete OBS sources.
 
-![Collapsed Sources dock in OBS](docs/screenshots/panel-collapsed.png)
+| Expanded Sources dock | Collapsed Sources dock |
+| --- | --- |
+| ![Expanded native Sources dock](docs/screenshots/readme/panel-expanded.png) | ![Sources rolled up to its header](docs/screenshots/readme/panel-collapsed.png) |
 
 The controller temporarily hides dock content and constrains the dock height
 to the native header, preserving its width. It asks QMainWindow to redistribute
@@ -338,7 +346,7 @@ general widget styling, or runtime scripts.
 ## Verification
 
 - Qt regression test: actual magenta pixels in an offscreen QMenu grab; native icon pixels are transparent; existing and checkable icons preserved; rule hot reload, disabled state, invalid JSON fallback, explicit icon override and restoration, cleanup on unload.
-- OBS 32.2.0 isolated Xvfb profile: 22 source context-menu actions augmented, then disabled and re-enabled without restarting OBS. Screenshots above were captured from the actual enabled and disabled popup in the same session.
+- OBS 32.2.0 isolated Xvfb profile: 22 source context-menu actions augmented, then disabled and re-enabled without restarting OBS. The menu comparison above was recaptured from the actual enabled and disabled popup in a later isolated session.
 - Clicked rendered Rename item in the real popup and verified native inline editing. See [native rename receipt](docs/screenshots/native-rename.png).
 - Isolated OBS exited via Ctrl+Q. No crash observed. The OBS log reported 3 memory leaks at shutdown; their ownership was not established. No claim of leak-free operation.
 
