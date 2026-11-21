@@ -341,8 +341,27 @@ int main(int argc, char **argv) {
         REQUIRE(c.setShowSubmenuSelections(true));
         REQUIRE(c.showSubmenuSelections());
         root.popup(QPoint(50,50));app.processEvents();
-        REQUIRE(scale->menuAction()->text().contains("Lanczos"));
-        REQUIRE(color->menuAction()->text().contains("#ca4141"));
+        REQUIRE(scale->menuAction()->text()=="Scale Filtering");
+        REQUIRE(scale->menuAction()->property("_aftermarketSelectedChoice").toString()=="Lanczos");
+        REQUIRE(root.findChild<QWidget*>("obs-ui-augment-overlay")->isVisible());
+        const auto selectedRow=root.actionGeometry(scale->menuAction());
+        REQUIRE(root.actionAt(selectedRow.center())==scale->menuAction());
+        REQUIRE(root.width()>=root.fontMetrics().horizontalAdvance("Scale Filtering")+
+            root.fontMetrics().horizontalAdvance("(Lanczos)")+60);
+        QImage selectedPixels=root.grab().toImage().convertToFormat(QImage::Format_RGB32);
+        int coloredRightPixels=0;
+        const auto accent=root.palette().color(QPalette::Link);
+        const auto textColor=root.palette().color(QPalette::Text);
+        for(int y=selectedRow.top()+2;y<selectedRow.bottom()-2;++y)
+            for(int x=selectedRow.center().x();x<selectedRow.right()-24;++x){
+                const auto c=selectedPixels.pixelColor(x,y);
+                const int dl=qAbs(c.red()-accent.red())+qAbs(c.green()-accent.green())+qAbs(c.blue()-accent.blue());
+                const int dt=qAbs(c.red()-textColor.red())+qAbs(c.green()-textColor.green())+qAbs(c.blue()-textColor.blue());
+                if(dl<dt)++coloredRightPixels;
+            }
+        REQUIRE(coloredRightPixels>10);
+        REQUIRE(color->menuAction()->text()=="Set Color");
+        REQUIRE(color->menuAction()->property("_aftermarketSelectedChoice").toString()=="#ca4141");
         REQUIRE(empty->menuAction()->text()=="Other");
         auto snap=augment::inspectWidget(&root,root.mapToGlobal(root.actionGeometry(scale->menuAction()).center()));
         REQUIRE(snap.isMenu&&snap.actions.size()==4);
@@ -358,6 +377,8 @@ int main(int argc, char **argv) {
         root.hide();app.processEvents();
         REQUIRE(scale->menuAction()->text()=="Scale Filtering");
         REQUIRE(color->menuAction()->text()=="Set Color");
+        REQUIRE(!scale->menuAction()->property("_aftermarketSelectedChoice").isValid());
+        REQUIRE(root.minimumWidth()==0);
         // OBS's preset color buttons are not checkable QActions. The chosen
         // one receives a 2px border on its QWidgetAction button.
         swatch->setChecked(false);
@@ -370,7 +391,8 @@ int main(int argc, char **argv) {
         swatches->setDefaultWidget(colors);
         color->addAction(swatches);
         root.popup(QPoint(50,50));app.processEvents();
-        REQUIRE(color->menuAction()->text().contains("Green"));
+        REQUIRE(color->menuAction()->text()=="Set Color");
+        REQUIRE(color->menuAction()->property("_aftermarketSelectedChoice").toString()=="Green");
         const auto colorSnapshot=augment::inspectWidget(&root,
             root.mapToGlobal(root.actionGeometry(color->menuAction()).center()));
         bool greenPreset=false;
@@ -381,7 +403,8 @@ int main(int argc, char **argv) {
         REQUIRE(color->menuAction()->text()=="Set Color");
         lanczos->setChecked(false);bilinear->setChecked(true);
         root.popup(QPoint(50,50));app.processEvents();
-        REQUIRE(scale->menuAction()->text().contains("Bilinear"));
+        REQUIRE(scale->menuAction()->text()=="Scale Filtering");
+        REQUIRE(scale->menuAction()->property("_aftermarketSelectedChoice").toString()=="Bilinear");
         root.hide();app.processEvents();
         bilinear->setChecked(false);disable->setChecked(true);
         REQUIRE(c.setShowSubmenuSelections(false));
@@ -397,16 +420,35 @@ int main(int argc, char **argv) {
             first->setChecked(false);second->setChecked(true);
         });
         lazyRoot.popup(QPoint(60,60));app.processEvents();
-        REQUIRE(lazy->menuAction()->text().contains("First"));
+        REQUIRE(lazy->menuAction()->text()=="Lazy options");
+        REQUIRE(lazy->menuAction()->property("_aftermarketSelectedChoice").toString()=="First");
         lazy->popup(QPoint(290,60));app.processEvents();
-        REQUIRE(lazy->menuAction()->text().contains("Second"));
+        REQUIRE(lazy->menuAction()->text()=="Lazy options");
+        REQUIRE(lazy->menuAction()->property("_aftermarketSelectedChoice").toString()=="Second");
         lazy->hide();lazyRoot.hide();app.processEvents();
         REQUIRE(lazy->menuAction()->text()=="Lazy options");
+        REQUIRE(!lazy->menuAction()->property("_aftermarketSelectedChoice").isValid());
         // Multiple checked options are not an unambiguous single choice.
         first->setChecked(true);
         lazyRoot.popup(QPoint(60,60));app.processEvents();
         REQUIRE(lazy->menuAction()->text()=="Lazy options");
         lazyRoot.hide();app.processEvents();
+        // RTL keeps the choice on the trailing (left) edge, and never
+        // takes over Qt's native submenu hit targets.
+        QMenu rtl;
+        rtl.setLayoutDirection(Qt::RightToLeft);
+        auto *choiceMenu=rtl.addMenu("Filtering");
+        auto *choice=choiceMenu->addAction("Lanczos");
+        choice->setCheckable(true);choice->setChecked(true);
+        rtl.popup(QPoint(55,55));app.processEvents();
+        const auto rtlRow=rtl.actionGeometry(choiceMenu->menuAction());
+        REQUIRE(rtl.actionAt(rtlRow.center())==choiceMenu->menuAction());
+        REQUIRE(choiceMenu->menuAction()->text()=="Filtering");
+        REQUIRE(choiceMenu->menuAction()->property("_aftermarketSelectedChoice").toString()=="Lanczos");
+        REQUIRE(rtl.findChild<QWidget*>("obs-ui-augment-overlay")->isVisible());
+        rtl.hide();app.processEvents();
+        REQUIRE(choiceMenu->menuAction()->text()=="Filtering");
+        REQUIRE(!choiceMenu->menuAction()->property("_aftermarketSelectedChoice").isValid());
     }
     std::cout << "menu rendering, preservation, reload, cleanup passed\n";
 }

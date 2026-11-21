@@ -363,3 +363,33 @@ persistent named studio presets, arbitrary drag arrangement of the two
 native video panels, verification of actual broadcast/record output, Wayland,
 Windows/macOS, RTL/multimonitor stress, and support beyond verified OBS 32.2.0
 Qt 6.4.2.
+
+## Slice 19 — trailing selected submenu values (2026-11-20)
+
+User wanted Show selected submenu choices to stop appending plain text:
+right-align the active value, use a distinct secondary/accent color, and
+enclose it in parentheses instead of separating it with a dot/dash.
+Preserved the existing setting (opt-in). Replaced temporary QAction text
+rewriting with a painter-owned, mouse-transparent overlay row for choices.
+Original QAction text remains unmodified for native shortcuts, menus,
+inspector matching, and accessibility label continuity. Values are right-
+aligned before the native submenu arrow (mirrored in RTL), colored from
+the active Qt theme's QPalette::Link, and elided inside parentheses when
+space is constrained. The menu's minimum width is increased only as
+needed for non-overlapping labels and trailing values and restored on hide
+unless an external actor modified it. The transient choice property is
+also cleared on hide, and asynchronous submenu updates repaint without
+changing native text. UI tooltip/status and README wording now match.
+
+TDD RED on the old QAction title mutation, then GREEN. Tests assert
+unchanged native labels, trailing theme-aware nontext pixels, native hit
+targets, animated/recomputed choices (first/Lanczos/Bilinear), color preset,
+state/property cleanup, minimum width restoration, RTL and setting off.
+Actual isolated OBS 32.2.0 / Colorway screenshot verified source menu's
+parent labels at left; colored, parenthesized choices aligned at right;
+original arrow remains at far edge. Clicked the real Scale Filtering submenu
+and selected Lanczos; reopened menu showed (Lanczos) aligned with other
+value labels. Replaced README's prior captured screenshot with verified
+native menu pixels. No modification to user's real OBS state or rules,
+no GitHub push. Further validation: other platforms/themes, very narrow
+screens and custom QStyle arrangements.

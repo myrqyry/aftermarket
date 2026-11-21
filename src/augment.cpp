@@ -30,6 +30,8 @@
 #include <QStyle>
 #include <QSvgRenderer>
 #include <QWidgetAction>
+#include <QFontMetrics>
+#include <QScreen>
 #include <QPushButton>
 #include <QDebug>
 #include <algorithm>
@@ -388,7 +390,7 @@ class Overlay final : public QWidget {
     };
     struct SubmenuStatus {
         QPointer<QAction> action;
-        QString original, applied;
+        QString original, choice;
         QMetaObject::Connection connection;
     };
     std::vector<SubmenuStatus> submenuStatus_;
@@ -397,6 +399,7 @@ class Overlay final : public QWidget {
     std::vector<Slot> slots_;
     bool prepared_ = false;
     bool motionEnabled_=false;
+    int originalMinWidth_=-1, appliedMinWidth_=-1;
     QElapsedTimer elapsed_;
     QTimer *clock_;
     QPointer<QAction> hovered_;
@@ -407,6 +410,62 @@ class Overlay final : public QWidget {
         if(!row.isValid() || !rect().contains(row))return {};
         return menu->layoutDirection()==Qt::RightToLeft ?
             QRect(row.right()-25,row.top(),26,row.height()) : QRect(row.left(),row.top(),26,row.height());
+    }
+    QString actionLabel(const QString &raw) const {
+        QString result=raw.section(QChar(9),0,0);
+        result.replace("&&",QString(QChar(1)));
+        result.remove('&');
+        result.replace(QChar(1),'&');
+        return result.trimmed();
+    }
+    QRect valueRegion(const SubmenuStatus &status) const {
+        if(!status.action||status.choice.isEmpty()||
+           !menu->actions().contains(status.action))return {};
+        const QRect row=menu->actionGeometry(status.action);
+        if(!row.isValid()||!rect().contains(row))return {};
+        const QFontMetrics metrics(menu->font());
+        const int labelWidth=metrics.horizontalAdvance(actionLabel(status.original));
+        const int iconInset=35, gap=12, arrowInset=32;
+        if(menu->layoutDirection()==Qt::RightToLeft) {
+            const int start=row.left()+arrowInset;
+            const int end=row.right()-iconInset-labelWidth-gap;
+            return QRect(start,row.top(),qMax(0,end-start),row.height());
+        }
+        const int start=row.left()+iconInset+labelWidth+gap;
+        const int end=row.right()-arrowInset;
+        return QRect(start,row.top(),qMax(0,end-start),row.height());
+    }
+    void reserveValueSpace() {
+        if(submenuStatus_.empty())return;
+        const QFontMetrics metrics(menu->font());
+        int required=0;
+        for(const auto &status:submenuStatus_)if(status.action&&!status.choice.isEmpty()){
+            const int width=35+metrics.horizontalAdvance(actionLabel(status.original))+
+                12+metrics.horizontalAdvance("("+status.choice+")")+32;
+            required=qMax(required,width);
+        }
+        if(required<=0)return;
+        auto *screen=menu->screen();
+        const int maxWidth=screen?screen->availableGeometry().width()-12:required;
+        const int desired=qMin(required,qMax(120,maxWidth));
+        if(desired>menu->minimumWidth()){
+            menu->setMinimumWidth(desired);
+            appliedMinWidth_=desired;
+            menu->adjustSize();
+        }
+    }
+    void setChoice(size_t index,const QString &choice){
+        if(index>=submenuStatus_.size())return;
+        auto &status=submenuStatus_[index];
+        if(!status.action)return;
+        const auto current=status.action->text();
+        if(current!=status.original)status.original=current; // OBS may rename a menu item
+        if(status.choice==choice)return;
+        status.choice=choice;
+        status.action->setProperty("_aftermarketSelectedChoice",
+            choice.isEmpty()?QVariant{}:QVariant(choice));
+        reserveValueSpace();
+        if(isVisible())update(valueRegion(status));
     }
     bool moving(const Slot &s,qint64 t) const {
         return motionEnabled_ && s.motion.enabled() && (t<s.delay+s.motion.duration || s.hover.running(t));
@@ -449,11 +508,13 @@ public:
     void restore() {
         for(auto &status:submenuStatus_) {
             QObject::disconnect(status.connection);
-            if(!status.action)continue;
-            if(status.action->text()==status.applied)status.action->setText(status.original);
-            status.action->setProperty("_aftermarketBaseText",QVariant());
+            if(status.action)
+                status.action->setProperty("_aftermarketSelectedChoice",QVariant());
         }
         submenuStatus_.clear();
+        if(originalMinWidth_>=0&&menu->minimumWidth()==appliedMinWidth_)
+            menu->setMinimumWidth(originalMinWidth_);
+        originalMinWidth_=-1;appliedMinWidth_=-1;
         clock_->stop();elapsed_.invalidate();hovered_.clear();motionEnabled_=false;
         hide();
         auto old = std::move(slots_);
@@ -527,38 +588,20 @@ public:
             a->setIconVisibleInMenu(true);
         }
         if(rules.enabled&&rules.showSubmenuSelections&&!menu->property("_aftermarketOverflowPage").toBool()) {
-            for(auto *action:menu->actions())if(action->menu()&&!action->property("_aftermarketOverflowAction").toBool()) {
+            originalMinWidth_=menu->minimumWidth();
+            for(auto *action:menu->actions())if(action->menu()&&
+                !action->property("_aftermarketOverflowAction").toBool()) {
                 auto *child=action->menu();
                 submenuStatus_.push_back({action,action->text(),{},{}});
                 const auto index=submenuStatus_.size()-1;
-                auto updateStatus=[this,index]{
-                    if(index>=submenuStatus_.size())return;
-                    auto &slot=submenuStatus_[index];
-                    if(!slot.action||!slot.action->menu())return;
-                    auto current=slot.action->text();
-                    if(!slot.applied.isEmpty()&&current!=slot.applied&&current!=slot.original)
-                        slot.original=current; // host changed the label, respect it
-                    const auto choice=submenuSelection(slot.action->menu());
-                    const auto next=choice.isEmpty()?slot.original:slot.original+"  ·  "+choice;
-                    if(current!=next)slot.action->setText(next);
-                    slot.applied=next;
-                    slot.action->setProperty("_aftermarketBaseText",slot.original);
-                };
-                updateStatus();
+                setChoice(index,submenuSelection(child));
                 submenuStatus_[index].connection=connect(child,&QMenu::aboutToShow,this,[this,index] {
-                    // Qt/OBS may refresh check marks during aboutToShow. Read
-                    // them on the following event-loop turn, not beforehand.
-                    QTimer::singleShot(0,this,[this,index] {
+                    // OBS updates native checked actions during aboutToShow.
+                    QTimer::singleShot(0,this,[this,index]{
                         if(!menu->isVisible()||index>=submenuStatus_.size())return;
                         auto &slot=submenuStatus_[index];
                         if(!slot.action||!slot.action->menu())return;
-                        const auto choice=submenuSelection(slot.action->menu());
-                        const auto next=choice.isEmpty()?slot.original:slot.original+"  ·  "+choice;
-                        if(slot.action->text()==slot.applied&&slot.action->text()!=next) {
-                            slot.action->setText(next);
-                            slot.applied=next;
-                            menu->adjustSize();
-                        }
+                        setChoice(index,submenuSelection(slot.action->menu()));
                     });
                 });
             }
@@ -567,7 +610,7 @@ public:
             rules.log(QString("Painted menu candidates: %1").arg(slots_.size()));
     }
     void present() {
-        if (slots_.empty()) return;
+        if (slots_.empty()&&submenuStatus_.empty()) return;
         setGeometry(menu->rect());
         raise(); show(); update();
         if(motionEnabled_ && !elapsed_.isValid()) {
@@ -596,6 +639,25 @@ protected:
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         const auto t=now();
+        // Draw selected submenu values independently from QAction text.
+        // They occupy a consistent trailing column before Qt's native arrow.
+        for(const auto &status:submenuStatus_){
+            if(!status.action||!status.action->isVisible()||status.choice.isEmpty())continue;
+            const auto region=valueRegion(status);
+            if(region.width()<14||!event->region().intersects(region))continue;
+            const QFontMetrics metrics(menu->font());
+            const int available=qMax(0,region.width()-metrics.horizontalAdvance("()"));
+            if(!available)continue;
+            const QString visible="("+metrics.elidedText(status.choice,Qt::ElideRight,available)+")";
+            const QColor tint=menu->palette().color(QPalette::Link);
+            p.save();
+            p.setClipRect(region);
+            p.setFont(menu->font());
+            p.setPen(tint.isValid()?tint:menu->palette().color(QPalette::Text));
+            const int side=menu->layoutDirection()==Qt::RightToLeft?Qt::AlignLeft:Qt::AlignRight;
+            p.drawText(region,side|Qt::AlignVCenter|Qt::TextSingleLine,visible);
+            p.restore();
+        }
         for (auto &s : slots_) {
             if (!s.action || !s.action->isVisible() || s.action->isCheckable() ||
                 s.action->icon().cacheKey()!=s.key || !menu->actions().contains(s.action)) continue;

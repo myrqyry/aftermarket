@@ -517,13 +517,13 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     rl->addWidget(ui->hideEntry);
     ui->showValues=new QCheckBox("Show selected submenu choices",right);
     ui->showValues->setObjectName("augment-show-submenu-selections");
-    ui->showValues->setToolTip("Show the one checked native submenu choice alongside its parent, when OBS exposes one. Applied the next time a menu opens; original labels restore on close.");
+    ui->showValues->setToolTip("Draw the currently checked choice in parentheses at the trailing edge, using the active theme’s link color. Native labels and submenu arrows stay intact. Applied when menus reopen.");
     ui->showValues->setChecked(controller.showSubmenuSelections());
     rl->addWidget(ui->showValues);
     connect(ui->showValues,&QCheckBox::toggled,this,[this](bool enabled){
         QString error;
         if(ui->controller.setShowSubmenuSelections(enabled,&error))
-            ui->status->setText(enabled?"Checked submenu choices will appear on parent labels when menus reopen.":"Original parent labels will be used on next popup.");
+            ui->status->setText(enabled?"Selected choices will appear right-aligned in parentheses when menus reopen.":"Selected choice annotations disabled for the next popup.");
         else {
             const QSignalBlocker blocker(ui->showValues);
             ui->showValues->setChecked(ui->controller.showSubmenuSelections());

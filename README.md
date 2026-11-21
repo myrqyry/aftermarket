@@ -240,18 +240,21 @@ separators, and OBS's color-preset buttons. Leave it unchecked for the
 original concise top-level list. Selecting a nested action retains that
 action's own submenu scope when inspecting or saving supported rules.
 
-Enable **Show selected submenu choices** to append the one explicitly
-selected choice to its parent in the *open* native menu:
+Enable **Show selected submenu choices** to paint the one explicitly
+selected choice in a **right-aligned trailing column**, using the current
+theme's link/accent color and parentheses, for example:
 
-- **Scale Filtering · Lanczos** (or Disable, Bilinear, Bicubic, etc.)
-- **Blending Mode · Normal**
-- **Set Color · Red** (also supports OBS's eight selected preset swatches)
+- **Scale Filtering** — *(Lanczos)* aligned near the submenu arrow
+- **Blending Mode** — *(Normal)* aligned at the same right edge
+- **Set Color** — *(Red)* (also supports OBS's eight selected preset swatches)
 
 The toggle is off by default and persists as the root-level
-`"showSubmenuSelections": true` option in `rules.json`. It does not
-rename or replace native actions permanently: their original labels are
-restored on menu dismissal. If a submenu exposes no unambiguous checked
-choice, the parent remains unchanged. Dynamically populated submenus
+`"showSubmenuSelections": true` option in `rules.json`. The main
+QAction labels are **never rewritten** to display values. A transparent
+drawing layer adds the current choice independently; native arrows and hit
+targets stay functional, and the layer disappears when the menu closes.
+Long values are elided as space requires. If a submenu exposes no
+unambiguous checked choice, the parent remains unchanged. Dynamically populated submenus
 may need to be opened before capturing their full list.
 
 | Selected choices in OBS | Expanded inspector menu tree |
