@@ -19,6 +19,26 @@ constexpr auto labelsKey="_aftermarketLogicalLabels";
 constexpr auto nameKey="_aftermarketLogicalName";
 constexpr auto pageKey="_aftermarketOverflowPage";
 constexpr auto actionKey="_aftermarketOverflowAction";
+// Source actions are a task-oriented menu rather than a catalogue of choices.
+// Their spatial order is useful muscle memory, so keep them in one column.
+// Match the distinctive OBS command group, not the menu's row count or its
+// (usually empty) QObject name. Filter-type lists remain eligible for columns.
+bool sourceContextMenu(const QMenu *menu) {
+    QSet<QString> labels;
+    for(const auto *a:menu->actions()) {
+        if(!a->isVisible()||a->isSeparator())continue;
+        QString label=a->text().section(QChar('\t'),0,0);
+        label.remove(QChar('&'));
+        label=label.trimmed().toCaseFolded();
+        if(label.endsWith(QStringLiteral("...")))label.chop(3);
+        if(label.endsWith(QChar(0x2026)))label.chop(1);
+        labels.insert(label);
+    }
+    return labels.contains(QStringLiteral("order"))
+        && labels.contains(QStringLiteral("transform"))
+        && labels.contains(QStringLiteral("filters"))
+        && labels.contains(QStringLiteral("properties"));
+}
 QStringList nativeLabels(const QMenu *menu) {
     QStringList labels;
     for(const auto *a:menu->actions())
@@ -81,6 +101,9 @@ void MenuLayout::present() {
     if(!prepared||arranging||!menu->isVisible()||qstrcmp(qVersion(),QT_VERSION_STR)!=0)return;
     auto *d=QMenuPrivate::get(menu);
     if(!d->itemsDirty&&menu->geometry()==arrangedGeometry)return;
+    // Preserve the familiar vertical layout of Source context menus. Do not
+    // disable the independent optional placement rules or compact spacing.
+    if(sourceContextMenu(menu))return;
     if(!d->widgetItems.isEmpty()||d->tearoff||d->tornoff)return;
     const auto actions=menu->actions();
     if(actions.isEmpty())return;

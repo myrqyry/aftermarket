@@ -83,21 +83,22 @@ heuristic and rule precedence are unchanged.
 
 ## Compact menus
 
-Long native menus use tighter rows and balanced, visible columns. Typical
-menus aim for about 340 logical pixels in height, with more columns when
-screen width permits. Original order is preserved down each column.
-No commands are automatically moved behind another menu. If a list cannot
-fit within the available screen space, native navigation remains available.
+Long *choice lists*, such as the Add Filter menu, use tighter rows and
+balanced, visible columns, typically aiming for about 340 logical pixels in
+height. The regular OBS **Source context menu stays a single column** with
+compact spacing, preserving its familiar command layout. No commands are
+automatically moved behind another menu. If a list cannot fit within the
+available screen space, native navigation remains available.
 
 | Source menu | Filter picker |
 | --- | --- |
-| ![Two-column source menu](docs/screenshots/readme/menu-columns.png) | ![All 18 effect filters in two columns](docs/screenshots/readme/filter-columns.png) |
+| ![Compact single-column source context menu](docs/screenshots/readme/menu-source-single.png) | ![All 18 effect filters in two columns](docs/screenshots/readme/filter-columns.png) |
 
 Use **Tools → UI Augment Inspector → Compact menus** to enable or disable
 the layout (enabled by default). Pick a particular action and check
 **Move to More actions** only if you want that specific command tucked
 away. Placement rules are stored independently in the root-level
-\`menuOverflow\` array; existing icon rules are unaffected. Capture the action
+`menuOverflow` array; existing icon rules are unaffected. Capture the action
 again in More actions and uncheck it to restore its normal placement.
 
 For OBS Appearance settings, the Theme and Style combo boxes with at least

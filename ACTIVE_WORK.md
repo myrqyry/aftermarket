@@ -169,3 +169,19 @@ are version-gated; other versions use compact native rows. Large lists
 may need scrolling, never automatic hiding. All 8 regression tests passed
 on the local Qt version. User rules and themes unchanged; no automatic
 overflow migration needed because old overflow was generated, not saved.
+
+## Slice 14 — preserve Source context menu's single column (2026-11-20)
+
+User disliked two columns on the ordinary Source context menu, specifically
+not the multi-column choice pickers. Added source-command-group recognition
+(Order, Transform, Filters, Properties) to exempt that task-oriented menu
+from the native column reflow while retaining its compact styling and
+explicit placement rules. RED regression: source menu reflowed into multiple
+columns. GREEN: all original action rectangles share a single x position;
+existing long choice-list test still verifies multiple columns.
+Actual isolated OBS 32.2.0/Colorway: Source context 275x611 in one column;
+original Filters action opened actual filter dialog, whose Add Filter list
+remained 500x204 with two columns. Theme-picker adapter unchanged.
+No change to user rules, theme files or the live OBS process. The signature
+uses OBS's English Source action labels; localized or unconventional third-
+party Source menus may require an improved contextual locator.

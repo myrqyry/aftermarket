@@ -138,6 +138,24 @@ int main(int argc, char **argv) {
         REQUIRE(count==101&&rootCount==1&&longMenu.actions()==originals);
         REQUIRE(originals.at(4)->isEnabled()==false);
         REQUIRE(controller.compactMenusEnabled());
+        // OBS Source context actions should remain a familiar single column,
+        // even when their size would otherwise trigger the column adapter.
+        QMenu sourceContext;
+        sourceContext.setStyleSheet("QMenu::item { padding: 8px 12px; margin: 2px; }");
+        for(int i=0;i<21;++i)sourceContext.addAction(QString("Source utility %1").arg(i));
+        for(const auto &label:{"Order","Transform","Rename...","Remove","Filters","Properties"})
+            sourceContext.addAction(label);
+        const auto sourceActions=sourceContext.actions();
+        sourceContext.popup(QPoint(55,55));app.processEvents();
+        QSet<int> sourceColumns;
+        for(auto *a:sourceActions) {
+            const auto rect=sourceContext.actionGeometry(a);
+            REQUIRE(rect.isValid());
+            sourceColumns.insert(rect.x());
+        }
+        REQUIRE(sourceContext.actions()==sourceActions);
+        REQUIRE(sourceColumns.size()==1);
+        sourceContext.hide();app.processEvents();
         QMenu filters;
         for(int i=0;i<18;++i)filters.addAction(QString("Filter %1").arg(i));
         const auto choices=filters.actions();
