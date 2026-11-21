@@ -265,11 +265,13 @@ the inspector to generate unique IDs automatically.
 | --- | --- |
 | ![OBS source menu with a custom command and a hidden default](docs/screenshots/readme/menu-custom-actions.png) | ![Manage hidden native actions and custom entries](docs/screenshots/readme/menu-actions-manager.png) |
 
-**Current scope:** flat native QMenus, direct executable actions, and rule
-management. Ordering custom commands, nested custom groups, selection/source
-argument placeholders, and importing external menu-action definitions are not yet
-implemented. Native menus containing embedded widget actions are excluded
-from the default removal layout for safety.
+**Current scope:** native QMenu actions, scoped hiding, and direct executable
+custom entries. The inspector can browse nested native submenus, but custom
+entries are appended to the captured menu rather than placed into new nested
+groups. Ordering custom commands, selection/source argument placeholders, and
+importing external menu-action definitions are not yet implemented. Native
+menus containing embedded widget actions are excluded from the default removal
+layout for safety.
 
 ## Submenu inspection and selected choices
 
@@ -559,9 +561,12 @@ still belongs to us. Existing icons are left alone by default. Separators,
 checkable actions and QWidgetActions are not decorated. Unknown actions are untouched.
 The extension is local to UI rendering, not the OBS video compositor.
 
-The first slice is intentionally declarative JSON, not arbitrary code execution.
-It does not implement a complete custom menu renderer, custom icon file imports,
-general widget styling, or runtime scripts.
+Rules remain declarative JSON; they are not evaluated as scripts. Explicit
+`menuCustom` actions are an exception to the original visual-only scope: when
+clicked, they launch the configured executable and argument array directly,
+without invoking a shell automatically. Only add trusted commands. Aftermarket
+does not implement a complete custom menu renderer, custom icon file imports,
+general-purpose widget styling, or runtime scripting.
 
 ## Verification
 
