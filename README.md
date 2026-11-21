@@ -9,7 +9,7 @@ identity, while Aftermarket extends presentation and interaction at runtime.
 
 Current capabilities include context-menu icons, hiding default commands,
 custom executable actions, a native inspector, animated gradients, audio-reactive mixer effects, rotary gain controls with
-integrated peak meters, and collapsible docks.
+integrated peak meters, collapsible docks, and a reversible dockable preview.
 
 Formerly OBS UI Augment. The installed module, configuration directory and
 Tools menu entries retain their existing names for compatibility.
@@ -58,7 +58,9 @@ from four pages in one native, theme-aware window:
   custom colors, add colors with the native color picker, preview the
   sequence and adjust loop duration.
 - **Panels:** collapse/expand eligible native docks, refresh the list or
-  expand all. The legacy Tools → UI Augment Panels shortcut opens this page.
+  expand all. Optionally move the existing OBS preview and its source toolbar
+  into a movable, floatable, closable native dock, or restore it to the center.
+  The Tools → UI Augment Panels shortcut opens this page.
 
 ![Mixer page in OBS](docs/screenshots/readme/workspace-mixer.png)
 
@@ -80,6 +82,38 @@ selector and leaves broader rules intact. The menu matcher's previous
 heuristic and rule precedence are unchanged.
 
 ![Captured native menu](docs/screenshots/readme/workspace-menus.png)
+
+## Dockable video preview
+
+The preview normally stays in the center of OBS. To move it into the native
+dock system, open **Tools → UI Augment Panels** (or the **Panels** tab of the
+Inspector) and press **Make preview dockable**. The Preview dock can be
+dragged between dock areas, floated, resized, or closed just like the other
+native OBS docks.
+
+- **Show preview** reopens the dock after you close its window.
+- **Restore fixed preview** returns the **same existing** video preview and
+  source-control toolbar to OBS's original central area. No duplicate libobs
+  display or scene renderer is created.
+- If Studio Mode is on, its existing Preview and Program views stay together.
+  In narrow docks, they use OBS's portrait stack rather than extending off
+  screen. The original direction returns when docking is disabled.
+- Floating begins near the previous dock position at a usable size and
+  remains freely resizable. Restoring the original preview is also performed
+  on normal OBS window close and plugin unload.
+
+| Docked Preview/Program | Floating Preview/Program |
+| --- | --- |
+| ![Native OBS Preview and Program workspace inside a movable dock](docs/screenshots/readme/preview-docked.png) | ![Same OBS preview workspace floating as an independent window](docs/screenshots/readme/preview-floating.png) |
+
+**Session-only and opt-in.** It does not change existing theme files or
+`rules.json`. The normal OBS File → Exit path was checked in an isolated
+test: the temporary dock was absent from the saved DockState. Native display
+rendering, Studio Mode toggling and docking/undocking were exercised in
+OBS 32.2.0 on X11. Actual streaming or recording, Wayland, Windows, macOS,
+and long-running native-display stress remain unverified. The placement of
+other docks may shift while the preview is docked; their identities and
+contents are preserved, not their exact pixel geometry.
 
 ## Compact menus
 

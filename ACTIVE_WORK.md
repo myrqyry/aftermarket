@@ -263,3 +263,46 @@ Remaining: dynamically generated child actions unavailable until their
 submenus populate, arbitrary non-OBS QWidgetAction introspection, custom
 color hex resolution, broader DPI/platform/RTL and localization testing,
 and the unrelated previously tracked work.
+
+## Slice 17 — dockable native Preview workspace (2026-11-20)
+
+User asked whether OBS's video preview could operate as a dock. Inspected
+OBS 32.2.0's actual OBSBasic.ui, OBSBasicPreview lifecycle and Studio Mode
+handlers. The preview belongs to canvasEditor inside centralwidget, with
+the separate contextContainer source toolbar also in centralwidget; Studio
+Mode adds programOptions/programWidget into the previewLayout. An early
+canvasEditor-only dock worked but left a huge empty center and opened a
+tiny video tile, so it was rejected.
+
+Implemented an opt-in native QDockWidget in Panels, moving the ORIGINAL
+QMainWindow::takeCentralWidget() (preview, preview-disabled display, scene
+source controls and Studio program) into Preview dock, not duplicating a
+renderer. No original widgets or QActions deleted. Supports native dock
+rearrangement, floating, closing/reopening through Panels, and reversible
+setCentralWidget restore. Native QWidget tree identity survives transitions.
+The feature is session-only; default is the original fixed preview.
+Qt tests cover identity, source context contents, dock close/show, floating,
+exact reparent/recover, invalid host, restored on main Close, and deleting the
+temporary QDockWidget rather than leaving a serialized reference.
+
+In narrow docks (<760 logical pixels), the native previewLayout is switched
+to BottomToTop in Studio Mode, otherwise retains the original Qt direction.
+Handles program widgets added/removed after docking, and Studio Mode already
+on at the time of conversion. Restores the exact pre-conversion direction
+on undock. Floating opens at the last dock size and origin, clamped to the
+screen so a native minimum/preferred display size cannot swallow the entire
+desktop. The user can resize the floating window afterward. Reflow does not
+change user OBS profile settings.
+
+Actual isolated OBS Studio 32.2.0 / Colorway X11 test: native video continued
+to render; studio preview/program stacked within the right-side dock; native
+Studio Mode disabled and enabled while docked correctly switched between
+one preview and Preview/Program; native double-click floated the Preview,
+final 727x424 at +705,+522 fully on 1440x1080 display, and Panels restored
+the existing Studio central view. Actual File → Exit closed gracefully after
+docking. Saved user.ini DockState (isolated profile) did not contain the
+Aftermarket preview dock identifier. No user's live OBS process, real rules,
+theme or scene collection modified. README native captures recorded.
+Any current dock redistribution is not guaranteed to restore pixel-exact.
+Not verified: live stream/record output, Wayland, non-Linux, long-term native
+rendering behavior or exotic dock/tab changes.

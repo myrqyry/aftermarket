@@ -13,6 +13,12 @@ public:
     bool collapsed(QDockWidget *) const;
     bool toggle(QDockWidget *);
     void restoreAll();
+    // Native OBS canvasEditor, including Preview/Program widgets, moved to
+    // a reversible QDockWidget. No second libobs renderer is created.
+    bool previewDocked(QMainWindow *) const;
+    QDockWidget *previewDock(QMainWindow *) const;
+    bool setPreviewDocked(QMainWindow *,bool enabled);
+    void restorePreview(QMainWindow *);
     QWidget *createPage(QMainWindow *, QWidget *parent);
     void showManager(QMainWindow *);
 protected:
@@ -21,5 +27,6 @@ private:
     struct State;
     std::unique_ptr<State> state;
     bool expand(QDockWidget *);
+    void updatePreviewLayout();
 };
 }
