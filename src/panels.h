@@ -13,6 +13,9 @@ public:
     bool collapsed(QDockWidget *) const;
     bool toggle(QDockWidget *);
     void restoreAll();
+    enum class StudioViewMode {Auto,Both,Program,Preview};
+    bool setStudioViewMode(QMainWindow *,StudioViewMode);
+    StudioViewMode studioViewMode(QMainWindow *) const;
     // Native OBS canvasEditor, including Preview/Program widgets, moved to
     // a reversible QDockWidget. No second libobs renderer is created.
     bool previewDocked(QMainWindow *) const;
@@ -28,5 +31,6 @@ private:
     std::unique_ptr<State> state;
     bool expand(QDockWidget *);
     void updatePreviewLayout();
+    void restoreStudioControlStrip();
 };
 }

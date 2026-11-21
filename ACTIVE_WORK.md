@@ -306,3 +306,60 @@ theme or scene collection modified. README native captures recorded.
 Any current dock redistribution is not guaranteed to restore pixel-exact.
 Not verified: live stream/record output, Wayland, non-Linux, long-term native
 rendering behavior or exotic dock/tab changes.
+
+## Slice 18 — responsive Studio Mode shell (2026-11-20)
+
+User showed how OBS's original Studio Mode looked cramped and disorganized
+inside the new dock and asked for genuinely dynamic responsive behavior.
+Revisited actual OBS 32.2.0 source: canvasEditor contains the native Preview
+and Studio Mode adds programOptions and programWidget. OBS QuickTransition
+code explicitly reinterpret_casts programOptions->layout() to QVBoxLayout,
+inserts buttons at index 3, and reuses QPushButton signals. Therefore no
+replacement layout class, clone renderer, duplicate transition buttons or
+rewiring was acceptable.
+
+Implemented a small dock-only Studio toolbar with Auto/Both/Program/Preview
+buttons, retaining native OBS output/preview surfaces. Auto chooses native
+side-by-side at >=900px, stacked below, and Program focus below 430px width
+or 380px height. Both keeps both videos, with a 3:2 Program preference in
+stacked mode; Program/Preview focus selectively hides only the other video,
+and restores it on mode change or undocking. The compact labels use 12px
+type and restore their original Qt fonts. Original layout direction,
+alignment, stretch factors and native central widget identity are restored
+on undock/OBS close. Modes are session-only, not new persistent settings.
+
+In compact mode, preserve OBS's original QVBoxLayout object and every
+quick-transition QPushButton, slider, menu and signal. Reorient it horizontally
+inside a bounded, native QScrollArea in place of the original layout item.
+Chevron buttons browse its horizontal scroll range, including the native
+T-bar. This prevents the original quick-transition buttons from forcing
+the dock/window beyond available screen width. The scroll area uses QWidget
+ownership transfer with takeWidget() on wide reflow, Studio Mode teardown
+and undocking; native programOptions is never deleted by Aftermarket. A
+QPointer-based deferred cleanup handles OBS deleting its controls during
+Studio Mode exit, and listens for options layout changes to update widths
+after dynamically adding/removing native quick transitions. Qt scrollbar
+signals update arrow states without reentering Qt layout geometry.
+
+TDD: RED failures for missing responsive modes/toolbar, focus distribution,
+bounded scrolling, and dynamic quick transitions. GREEN: mock OBS canvas
+with 12 native quick transitions, arrow scrolling, button signal identity,
+dynamic button insertion/removal, automatic focus, wide-to-narrow resizing,
+preexisting Studio Mode and Studio Mode teardown/recreation, exact fixed
+preview restoration, previous panels behavior. All eight CTests passed.
+Real isolated OBS 32.2.0/Colorway X11: narrow 580px floating dock stacked
+Program and Preview with native quick controls in bounded scroll bar; right
+arrow physically clicked and verified translated the button strip so Fade to
+Black and the T-bar were accessible. Actual Program/Preview/Both/Auto
+buttons tested; native Studio Mode switched off and back on without a crash.
+Floating resized to 1080px side-by-side with original native vertical
+transition controls; resized back narrow; restored fixed central preview
+using Panels UI with original video and transitions visible. Native screenshots
+saved for README. Isolated scenes contained no live user media and did not
+start streaming/recording. Existing live OBS, user rules and Colorway untouched.
+
+Remaining ideas, not implemented: animated transitions, PiP/focus inset,
+persistent named studio presets, arbitrary drag arrangement of the two
+native video panels, verification of actual broadcast/record output, Wayland,
+Windows/macOS, RTL/multimonitor stress, and support beyond verified OBS 32.2.0
+Qt 6.4.2.

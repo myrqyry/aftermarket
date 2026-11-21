@@ -16,6 +16,13 @@
 #include <QLayout>
 #include <QBoxLayout>
 #include <QSizePolicy>
+#include <QFrame>
+#include <QToolButton>
+#include <QButtonGroup>
+#include <QFont>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QStyle>
 #include <QTimer>
 #include <algorithm>
 namespace augment {
@@ -50,6 +57,16 @@ struct Panels::State {
         bool refreshPending=false;
         QSize dockedSize;
         QPoint dockedOrigin;
+        StudioViewMode mode=StudioViewMode::Auto;
+        QPointer<QWidget> studioToolbar,studioOptions,studioProgram,studioPreview;
+        QPointer<QScrollArea> transitionStrip;
+        QPointer<QBoxLayout> studioOptionsLayout;
+        QBoxLayout::Direction originalOptionsDirection=QBoxLayout::TopToBottom;
+        Qt::Alignment originalOptionsAlignment;
+        QPointer<QLabel> programTitle,previewTitle;
+        QFont originalProgramFont,originalPreviewFont,appliedProgramFont,appliedPreviewFont;
+        bool studioPreviewHiddenByUs=false,studioProgramHiddenByUs=false;
+        int originalPreviewStretch=0,originalProgramStretch=0;
     } preview;
 };
 Panels::Panels(QObject *p):QObject(p),state(new State) {
@@ -66,6 +83,22 @@ bool Panels::previewDocked(QMainWindow *main)const {
 }
 QDockWidget *Panels::previewDock(QMainWindow *main)const {
     return previewDocked(main)?state->preview.dock.data():nullptr;
+}
+
+Panels::StudioViewMode Panels::studioViewMode(QMainWindow *main) const {
+    return previewDocked(main)?state->preview.mode:StudioViewMode::Auto;
+}
+bool Panels::setStudioViewMode(QMainWindow *main,StudioViewMode mode) {
+    if(!previewDocked(main))return false;
+    state->preview.mode=mode;
+    if(auto *bar=state->preview.studioToolbar.data()) {
+        const QString name=mode==StudioViewMode::Auto?"auto":mode==StudioViewMode::Both?"both":
+            mode==StudioViewMode::Program?"program":"preview";
+        if(auto *button=bar->findChild<QToolButton*>("aftermarket-studio-"+name))
+            button->setChecked(true);
+    }
+    updatePreviewLayout();
+    return true;
 }
 bool Panels::setPreviewDocked(QMainWindow *main,bool enabled) {
     if(!main)return false;
@@ -96,6 +129,62 @@ bool Panels::setPreviewDocked(QMainWindow *main,bool enabled) {
                       QDockWidget::DockWidgetFloatable);
     state->preview={main,dock,content,const_cast<QWidget*>(canvas),canvasLayout,
         canvasLayout->direction(),qMin(2,canvasLayout->count()),false,{},{} };
+    if(auto *nativePreview=canvas->findChild<QWidget*>("previewContainer",Qt::FindDirectChildrenOnly)){
+        const int index=canvasLayout->indexOf(nativePreview);
+        if(index>=0)state->preview.originalPreviewStretch=canvasLayout->stretch(index);
+    }
+    // A slim native toolbar is owned by Aftermarket, not OBS. It disappears
+    // with the dock and never replaces or forwards any OBS transition event.
+    if(auto *centralLayout=qobject_cast<QBoxLayout*>(content->layout())) {
+        auto *toolbar=new QWidget(content);
+        toolbar->setObjectName("aftermarket-studio-toolbar");
+        auto *row=new QHBoxLayout(toolbar);
+        row->setContentsMargins(6,2,6,2);row->setSpacing(4);
+        auto *title=new QLabel("Studio",toolbar);
+        QFont titleFont=title->font();titleFont.setBold(true);titleFont.setPixelSize(12);
+        title->setFont(titleFont);row->addWidget(title);
+        auto *group=new QButtonGroup(toolbar);group->setExclusive(true);
+        for(const auto &item:{std::pair{"auto","Auto"},std::pair{"both","Both"},
+                               std::pair{"program","Program"},std::pair{"preview","Preview"}}) {
+            auto *button=new QToolButton(toolbar);
+            button->setObjectName(QStringLiteral("aftermarket-studio-")+item.first);
+            button->setText(item.second);button->setCheckable(true);
+            button->setAutoRaise(true);
+            button->setToolTip(QStringLiteral("Studio display: ")+item.second);
+            button->setMinimumHeight(24);
+            group->addButton(button);row->addWidget(button);
+            if(QString::fromLatin1(item.first)=="auto")button->setChecked(true);
+        }
+        auto *hint=new QLabel(toolbar);hint->setObjectName("aftermarket-studio-hint");
+        row->addStretch(1);row->addWidget(hint);
+        for(const auto &step:{std::pair{"left","‹"},std::pair{"right","›"}}) {
+            auto *arrow=new QToolButton(toolbar);
+            arrow->setObjectName(QStringLiteral("aftermarket-studio-scroll-")+step.first);
+            arrow->setText(QString::fromUtf8(step.second));
+            arrow->setAutoRaise(true);
+            arrow->setMinimumSize(26,24);
+            arrow->setToolTip("Browse native transition controls");
+            row->addWidget(arrow);
+            arrow->hide();
+            const int direction=QString::fromLatin1(step.first)=="left"?-1:1;
+            connect(arrow,&QToolButton::clicked,this,[this,direction]{
+                auto *scroll=state->preview.transitionStrip.data();
+                if(!scroll)return;
+                auto *bar=scroll->horizontalScrollBar();
+                bar->setValue(bar->value()+direction*qMax(90,scroll->viewport()->width()/2));
+            });
+        }
+        centralLayout->insertWidget(0,toolbar);
+        state->preview.studioToolbar=toolbar;
+        toolbar->hide();
+        connect(group,&QButtonGroup::buttonClicked,this,[this,main](QAbstractButton *clicked){
+            if(!clicked||!previewDocked(main))return;
+            const auto name=clicked->objectName();
+            setStudioViewMode(main,name.endsWith("-both")?StudioViewMode::Both:
+                name.endsWith("-program")?StudioViewMode::Program:
+                name.endsWith("-preview")?StudioViewMode::Preview:StudioViewMode::Auto);
+        });
+    }
     connect(dock,&QDockWidget::topLevelChanged,this,[this,dock](bool floating){
         if(!floating)return;
         QPointer<QDockWidget> safe(dock);
@@ -139,6 +228,27 @@ void Panels::restorePreview(QMainWindow *main) {
     auto *content=item.content.data();
     content->hide();
     dock->hide();
+    if(item.studioPreviewHiddenByUs&&item.studioPreview)item.studioPreview->show();
+    if(item.studioProgramHiddenByUs&&item.studioProgram)item.studioProgram->show();
+    restoreStudioControlStrip();
+    if(item.studioOptionsLayout)item.studioOptionsLayout->setDirection(item.originalOptionsDirection);
+    if(item.canvasLayout&&item.studioOptions)
+        item.canvasLayout->setAlignment(item.studioOptions,item.originalOptionsAlignment);
+    if(item.canvasLayout) {
+        if(item.studioPreview) {
+            const int idx=item.canvasLayout->indexOf(item.studioPreview);
+            if(idx>=0)item.canvasLayout->setStretch(idx,item.originalPreviewStretch);
+        }
+        if(item.studioProgram) {
+            const int idx=item.canvasLayout->indexOf(item.studioProgram);
+            if(idx>=0)item.canvasLayout->setStretch(idx,item.originalProgramStretch);
+        }
+    }
+    if(item.previewTitle&&item.previewTitle->font()==item.appliedPreviewFont)
+        item.previewTitle->setFont(item.originalPreviewFont);
+    if(item.programTitle&&item.programTitle->font()==item.appliedProgramFont)
+        item.programTitle->setFont(item.originalProgramFont);
+    if(item.studioToolbar)delete item.studioToolbar.data();
     if(item.canvasLayout)item.canvasLayout->setDirection(item.originalDirection);
     main->removeDockWidget(dock);
     // QDockWidget owns its content. Reparent it before deleting the dock;
@@ -149,18 +259,193 @@ void Panels::restorePreview(QMainWindow *main) {
     state->preview={};
     delete dock;
 }
+void Panels::restoreStudioControlStrip() {
+    auto &entry=state->preview;
+    auto *scroll=entry.transitionStrip.data();
+    if(!scroll||!entry.canvasLayout)return;
+    const int pos=entry.canvasLayout->indexOf(scroll);
+    QWidget *widget=scroll->takeWidget(); // transfer OBS-owned widget, never delete it
+    entry.canvasLayout->removeWidget(scroll);
+    if(widget&&pos>=0) {
+        widget->hide();
+        widget->setParent(entry.canvas);
+        entry.canvasLayout->insertWidget(pos,widget);
+        entry.canvasLayout->setAlignment(widget,entry.originalOptionsAlignment);
+        widget->show();
+    }
+    delete scroll;
+    entry.transitionStrip=nullptr;
+}
 void Panels::updatePreviewLayout() {
-    const auto &entry=state->preview;
-    if(!entry.main||!entry.dock||!entry.canvasLayout)return;
+    auto &entry=state->preview;
+    if(!entry.main||!entry.dock||!entry.canvasLayout||!entry.canvas)return;
     const bool studio=entry.canvasLayout->count()>entry.baseWidgetCount;
-    // In narrow docks, Studio Mode's side-by-side program would overflow
-    // the dock (OBS creates two video widgets and a transition column).
-    // Use its native portrait arrangement. Restore the original direction
-    // as soon as Studio Mode or the dock is disabled.
-    const auto desired=studio&&entry.dock->width()<760?
-        QBoxLayout::BottomToTop:entry.originalDirection;
-    if(entry.canvasLayout->direction()!=desired)
-        entry.canvasLayout->setDirection(desired);
+    // OBS dynamically creates and destroys these widgets on Studio Mode
+    // changes. Read the live layout, never retain a stale raw program pointer.
+    QWidget *options=nullptr,*program=nullptr;
+    QBoxLayout *optionsLayout=nullptr;
+    if(studio&&entry.canvasLayout->count()>=4) {
+        options=entry.canvasLayout->itemAt(entry.canvasLayout->count()-2)->widget();
+        if(auto *scroll=qobject_cast<QScrollArea*>(options))options=scroll->widget();
+        program=entry.canvasLayout->itemAt(entry.canvasLayout->count()-1)->widget();
+        optionsLayout=options?qobject_cast<QBoxLayout*>(options->layout()):nullptr;
+        if(!optionsLayout||!program||!program->findChild<QLabel*>()) {
+            options=nullptr;program=nullptr;optionsLayout=nullptr;
+        }
+    }
+    if(entry.studioOptions!=options) {
+        restoreStudioControlStrip();
+        // A new Studio Mode session receives new native controls.
+        entry.studioOptions=options;
+        entry.studioOptionsLayout=optionsLayout;
+        if(optionsLayout) {
+            entry.originalOptionsDirection=optionsLayout->direction();
+            const int idx=entry.canvasLayout->indexOf(options);
+            entry.originalOptionsAlignment=idx>=0?entry.canvasLayout->itemAt(idx)->alignment():Qt::Alignment{};
+        }
+    }
+    if(entry.studioProgram!=program) {
+        entry.studioProgram=program;
+        entry.originalProgramStretch=program?
+            entry.canvasLayout->stretch(entry.canvasLayout->indexOf(program)):0;
+        entry.studioProgramHiddenByUs=false;
+        entry.programTitle=nullptr;
+    }
+    auto *preview=entry.canvas->findChild<QWidget*>("previewContainer",Qt::FindDirectChildrenOnly);
+    if(entry.studioPreview!=preview) {
+        entry.studioPreview=preview;
+        entry.studioPreviewHiddenByUs=false;
+        entry.previewTitle=nullptr;
+    }
+    if(auto *bar=entry.studioToolbar.data())bar->setVisible(studio&&optionsLayout!=nullptr);
+    const int width=entry.dock->width(),height=entry.dock->height();
+    const bool wide=width>=900;
+    const bool compact=studio&&!wide;
+    auto desired=compact?QBoxLayout::BottomToTop:entry.originalDirection;
+    if(entry.canvasLayout->direction()!=desired)entry.canvasLayout->setDirection(desired);
+    if(optionsLayout) {
+        const auto optionDirection=compact?QBoxLayout::LeftToRight:entry.originalOptionsDirection;
+        if(optionsLayout->direction()!=optionDirection)optionsLayout->setDirection(optionDirection);
+        if(compact&&!entry.transitionStrip&&entry.canvasLayout->indexOf(options)>=0) {
+            const int position=entry.canvasLayout->indexOf(options);
+            options->hide();
+            entry.canvasLayout->removeWidget(options);
+            auto *scroll=new QScrollArea(entry.canvas);
+            scroll->setObjectName("aftermarket-studio-transition-strip");
+            scroll->setFrameShape(QFrame::NoFrame);
+            scroll->setWidgetResizable(false);
+            scroll->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
+            scroll->setMinimumWidth(0);
+            scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+            scroll->setFixedHeight(qBound(54,options->sizeHint().height()+
+                scroll->style()->pixelMetric(QStyle::PM_ScrollBarExtent)+6,80));
+            scroll->setWidget(options);
+            entry.canvasLayout->insertWidget(position,scroll);
+            entry.canvasLayout->setAlignment(scroll,{});
+            entry.transitionStrip=scroll;
+            scroll->show();
+            options->show();
+            QPointer<QScrollArea> safeScroll(scroll);
+            connect(options,&QObject::destroyed,this,[this,safeScroll]{
+                if(!safeScroll||state->preview.transitionStrip!=safeScroll)return;
+                QTimer::singleShot(0,this,[this,safeScroll]{
+                    if(safeScroll&&state->preview.transitionStrip==safeScroll) {
+                        restoreStudioControlStrip();
+                        updatePreviewLayout();
+                    }
+                });
+            });
+            auto updateArrows=[this,scroll] {
+                if(state->preview.transitionStrip!=scroll)return;
+                auto *bar=state->preview.studioToolbar.data();
+                if(!bar)return;
+                auto *sb=scroll->horizontalScrollBar();
+                const int max=sb->maximum();
+                for(const auto &step:{std::pair{"left",-1},std::pair{"right",1}}) {
+                    auto *button=bar->findChild<QToolButton*>(
+                        QStringLiteral("aftermarket-studio-scroll-")+step.first);
+                    if(!button)continue;
+                    button->setVisible(max>0);
+                    button->setEnabled(step.second<0?sb->value()>0:sb->value()<max);
+                }
+            };
+            // Qt recalculates the scrollbar range *during* geometry changes.
+            // Never re-enter layout work from those synchronous signals.
+            connect(scroll->horizontalScrollBar(),&QScrollBar::rangeChanged,this,
+                [this,updateArrows](int,int){QTimer::singleShot(0,this,updateArrows);});
+            connect(scroll->horizontalScrollBar(),&QScrollBar::valueChanged,this,
+                [this,updateArrows](int){QTimer::singleShot(0,this,updateArrows);});
+            QTimer::singleShot(0,this,updateArrows);
+        } else if(!compact&&entry.transitionStrip) {
+            restoreStudioControlStrip();
+        }
+        if(auto *scroll=entry.transitionStrip.data()) {
+            if(options->size()!=options->sizeHint())options->adjustSize();
+        }
+    }
+    if(!entry.transitionStrip) {
+        if(auto *bar=entry.studioToolbar.data())
+            for(const auto &name:{"left","right"})
+                if(auto *button=bar->findChild<QToolButton*>(QStringLiteral("aftermarket-studio-scroll-")+name))
+                    button->hide();
+    }
+    const bool focusAuto=width<430||height<380;
+    const bool showProgram=entry.mode==StudioViewMode::Program||
+        (entry.mode==StudioViewMode::Auto&&focusAuto);
+    const bool showPreview=entry.mode==StudioViewMode::Preview;
+    if(entry.studioPreview) {
+        if(showProgram&&!entry.studioPreviewHiddenByUs&&entry.studioPreview->isVisible()){
+            entry.studioPreview->hide();entry.studioPreviewHiddenByUs=true;
+        } else if(!showProgram&&entry.studioPreviewHiddenByUs) {
+            entry.studioPreviewHiddenByUs=false;entry.studioPreview->show();
+        }
+    }
+    if(entry.studioProgram) {
+        if(showPreview&&!entry.studioProgramHiddenByUs&&entry.studioProgram->isVisible()){
+            entry.studioProgram->hide();entry.studioProgramHiddenByUs=true;
+        } else if(!showPreview&&entry.studioProgramHiddenByUs) {
+            entry.studioProgramHiddenByUs=false;entry.studioProgram->show();
+        }
+    }
+    // Give the live Program a little more space in stacked mode. Focus
+    // modes give the selected native display the available space instead
+    // of leaving an OBS-sized empty region above/below it.
+    auto applyStretch=[&](QWidget *widget,int amount){
+        const int index=widget?entry.canvasLayout->indexOf(widget):-1;
+        if(index>=0&&entry.canvasLayout->stretch(index)!=amount)
+            entry.canvasLayout->setStretch(index,amount);
+    };
+    applyStretch(entry.studioPreview,compact?(showProgram?0:showPreview?6:2):entry.originalPreviewStretch);
+    applyStretch(entry.studioProgram,compact?(showPreview?0:showProgram?6:3):entry.originalProgramStretch);
+    auto *nativePreviewTitle=entry.studioPreview?
+        entry.studioPreview->findChild<QLabel*>("previewLabel"):nullptr;
+    auto *nativeProgramTitle=entry.studioProgram?
+        entry.studioProgram->findChild<QLabel*>():nullptr;
+    auto adaptFont=[compact](QPointer<QLabel> &tracked,QLabel *now,QFont &original,QFont &applied){
+        if(tracked!=now){
+            if(tracked&&tracked->font()==applied)tracked->setFont(original);
+            tracked=now;
+            if(now)original=now->font();
+        }
+        if(!tracked)return;
+        if(compact){
+            QFont font=original;font.setPixelSize(12);font.setWeight(QFont::DemiBold);
+            applied=font;
+            if(tracked->font()!=font)tracked->setFont(font);
+        } else if(tracked->font()==applied&&tracked->font()!=original){
+            tracked->setFont(original);
+        }
+    };
+    adaptFont(entry.previewTitle,nativePreviewTitle,entry.originalPreviewFont,entry.appliedPreviewFont);
+    adaptFont(entry.programTitle,nativeProgramTitle,entry.originalProgramFont,entry.appliedProgramFont);
+    if(auto *bar=entry.studioToolbar.data()) {
+        if(auto *hint=bar->findChild<QLabel*>("aftermarket-studio-hint")){
+            const auto mode=showPreview?"Preview focus":showProgram?"Program focus":wide?"Side by side":"Stacked";
+            hint->setText(mode);
+            hint->setVisible(width>=650);
+        }
+    }
 }
 bool Panels::collapsed(QDockWidget *dock)const {return state->entries.contains(dock);}
 bool Panels::canCollapse(QDockWidget *dock)const {
@@ -216,7 +501,8 @@ bool Panels::eventFilter(QObject *o,QEvent *event) {
         state->preview.dockedOrigin=state->preview.dock->mapToGlobal(QPoint());
     }
     if(state->preview.dock && (o==state->preview.dock||o==state->preview.canvas||
-        o==state->preview.canvasLayout) &&
+        o==state->preview.canvasLayout||o==state->preview.studioOptions||
+        o==state->preview.studioOptionsLayout) &&
         (event->type()==QEvent::Resize||event->type()==QEvent::ChildAdded||
          event->type()==QEvent::ChildRemoved||event->type()==QEvent::LayoutRequest||
          event->type()==QEvent::Show||event->type()==QEvent::Hide)) {

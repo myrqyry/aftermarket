@@ -8,6 +8,11 @@
 #include <QVBoxLayout>
 #include <QListWidget>
 #include <QPointer>
+#include <QToolButton>
+#include <QButtonGroup>
+#include <QFont>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QScreen>
 #include <iostream>
 #define REQUIRE(x) do {if(!(x)){std::cerr<<"FAILED "<<__LINE__<<": "<<#x<<"\n";return 1;}}while(false)
@@ -67,7 +72,7 @@ int main(int argc,char **argv) {
  REQUIRE(dock&&dock->isVisible()&&dock->widget()==central);
  REQUIRE(preview->parentWidget()==previewContainer&&canvas->findChild<QWidget*>("preview")==preview);
  REQUIRE(previewMain.centralWidget()==nullptr&&central->findChild<QWidget*>("contextContainer")==context);
- REQUIRE(centralLayout->indexOf(canvas)==0&&centralLayout->indexOf(context)>=0);
+ REQUIRE(centralLayout->indexOf(canvas)==1&&centralLayout->indexOf(context)>=0);
  REQUIRE(previewMain.dockWidgetArea(dock)!=Qt::NoDockWidgetArea);
  auto *program=new QWidget(canvas);program->setObjectName("program");canvasLayout->addWidget(program);
  app.processEvents();
@@ -129,6 +134,127 @@ int main(int argc,char **argv) {
  REQUIRE(!panels.previewDocked(&studioMain));
  REQUIRE(studioMain.centralWidget()==studioCentral);
  REQUIRE(studioMain.findChildren<QDockWidget*>("aftermarket-preview-dock").isEmpty());
+ // A real OBS-shaped studio layout has two native video surfaces and the
+ // actual transition group. No replacement renderer or fake buttons.
+ QMainWindow responsive;
+ auto *workspace=new QWidget(&responsive);workspace->setObjectName("centralwidget");
+ auto *workspaceLayout=new QVBoxLayout(workspace);
+ auto *editor=new QWidget(workspace);editor->setObjectName("canvasEditor");
+ auto *editorLayout=new QHBoxLayout(editor);
+ auto *disabled=new QWidget(editor);disabled->setObjectName("previewDisabledWidget");disabled->hide();
+ auto *previewPane=new QWidget(editor);previewPane->setObjectName("previewContainer");
+ auto *previewLabel=new QLabel("Preview: Scene",previewPane);previewLabel->setObjectName("previewLabel");
+ auto *previewDisplay=new QWidget(previewPane);previewDisplay->setObjectName("preview");
+ auto *previewPaneLayout=new QVBoxLayout(previewPane);previewPaneLayout->addWidget(previewLabel);previewPaneLayout->addWidget(previewDisplay);
+ editorLayout->addWidget(disabled);editorLayout->addWidget(previewPane);
+ auto *options=new QWidget(editor);
+ auto *optionsLayout=new QVBoxLayout(options);
+ optionsLayout->addWidget(new QPushButton("Transition",options));
+ optionsLayout->addWidget(new QLabel("Quick Transitions",options));
+ int triggerCount=0;
+ for(int i=0;i<12;++i){
+     auto *native=new QPushButton(QString("Quick transition %1").arg(i),options);
+     native->setProperty("id",i+1);
+     QObject::connect(native,&QPushButton::clicked,[&]{++triggerCount;});
+     optionsLayout->insertWidget(2+i,native);
+ }
+ auto *programPane=new QWidget(editor);
+ auto *programPaneLayout=new QVBoxLayout(programPane);
+ auto *programLabel=new QLabel("Program: Scene",programPane);programLabel->setObjectName("programLabel");
+ auto *programDisplay=new QWidget(programPane);programDisplay->setObjectName("program");
+ programPaneLayout->addWidget(programLabel);programPaneLayout->addWidget(programDisplay);
+ editorLayout->addWidget(options);editorLayout->addWidget(programPane);
+ workspaceLayout->addWidget(editor);
+ auto *contextToolbar=new QWidget(workspace);contextToolbar->setObjectName("contextContainer");
+ workspaceLayout->addWidget(contextToolbar);
+ responsive.setCentralWidget(workspace);responsive.resize(820,620);responsive.show();app.processEvents();
+ REQUIRE(panels.setPreviewDocked(&responsive,true));app.processEvents();
+ auto *toolbar=workspace->findChild<QWidget*>("aftermarket-studio-toolbar");
+ REQUIRE(toolbar&&toolbar->isVisible());
+ auto *autoButton=toolbar->findChild<QToolButton*>("aftermarket-studio-auto");
+ auto *bothButton=toolbar->findChild<QToolButton*>("aftermarket-studio-both");
+ auto *programButton=toolbar->findChild<QToolButton*>("aftermarket-studio-program");
+ auto *previewButtonMode=toolbar->findChild<QToolButton*>("aftermarket-studio-preview");
+ REQUIRE(autoButton&&bothButton&&programButton&&previewButtonMode);
+ REQUIRE(autoButton->isChecked());
+ REQUIRE(editorLayout->direction()==QBoxLayout::BottomToTop);
+ REQUIRE(optionsLayout->direction()==QBoxLayout::LeftToRight);
+ QPointer<QScrollArea> strip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ REQUIRE(strip&&strip->widget()==options);
+ REQUIRE(strip->width()<=panels.previewDock(&responsive)->width());
+ REQUIRE(strip->horizontalScrollBar()->maximum()>0);
+ auto *left=toolbar->findChild<QToolButton*>("aftermarket-studio-scroll-left");
+ auto *right=toolbar->findChild<QToolButton*>("aftermarket-studio-scroll-right");
+ REQUIRE(left&&right&&right->isEnabled());
+ const int beforeScroll=strip->horizontalScrollBar()->value();
+ right->click();app.processEvents();
+ REQUIRE(strip->horizontalScrollBar()->value()>beforeScroll);
+ auto *native=options->findChildren<QPushButton*>().last();
+ native->click();REQUIRE(triggerCount==1);
+ const int originalScrollMax=strip->horizontalScrollBar()->maximum();
+ auto *newNative=new QPushButton("Extra long native Quick Transition with dynamic options",options);
+ newNative->setProperty("id",40);
+ optionsLayout->insertWidget(3,newNative);app.processEvents();app.processEvents();
+ REQUIRE(strip->horizontalScrollBar()->maximum()>originalScrollMax);
+ optionsLayout->removeWidget(newNative);delete newNative;app.processEvents();
+ REQUIRE(strip->horizontalScrollBar()->maximum()<=originalScrollMax);
+ REQUIRE(previewPane->isVisible()&&programPane->isVisible());
+ REQUIRE(editorLayout->stretch(editorLayout->indexOf(programPane)) >
+         editorLayout->stretch(editorLayout->indexOf(previewPane)));
+ const int bothProgramHeight=programPane->height();
+ REQUIRE(previewLabel->font().pixelSize()>0&&previewLabel->font().pixelSize()<=13);
+ previewButtonMode->click();app.processEvents();
+ REQUIRE(previewPane->isVisible()&&!programPane->isVisible());
+ programButton->click();app.processEvents();
+ REQUIRE(!previewPane->isVisible()&&programPane->isVisible());
+ REQUIRE(programPane->height()>bothProgramHeight+20);
+ bothButton->click();app.processEvents();
+ REQUIRE(previewPane->isVisible()&&programPane->isVisible());
+ REQUIRE(panels.setStudioViewMode(&responsive,augment::Panels::StudioViewMode::Auto));app.processEvents();
+ REQUIRE(autoButton->isChecked());
+ // In a roomy floating dock, controls and views return to a wide split.
+ auto *responsiveDock=panels.previewDock(&responsive);
+ responsiveDock->setFloating(true);responsiveDock->resize(1050,650);app.processEvents();
+ REQUIRE(editorLayout->direction()==QBoxLayout::LeftToRight);
+ REQUIRE(optionsLayout->direction()==QBoxLayout::TopToBottom);
+ REQUIRE(editorLayout->indexOf(options)>=0&&strip.isNull());
+ responsiveDock->resize(430,580);app.processEvents();
+ REQUIRE(editorLayout->direction()==QBoxLayout::BottomToTop);
+ REQUIRE(optionsLayout->direction()==QBoxLayout::LeftToRight);
+ strip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ REQUIRE(!strip.isNull()&&strip->widget()==options);
+ REQUIRE(panels.setPreviewDocked(&responsive,false));app.processEvents();
+ REQUIRE(responsive.centralWidget()==workspace);
+ REQUIRE(workspace->findChild<QWidget*>("aftermarket-studio-toolbar")==nullptr);
+ REQUIRE(previewPane->isVisible()&&programPane->isVisible());
+ REQUIRE(editorLayout->direction()==QBoxLayout::LeftToRight);
+ REQUIRE(optionsLayout->direction()==QBoxLayout::TopToBottom);
+ REQUIRE(previewLabel->font().pixelSize()!=12);
+ REQUIRE(contextToolbar->parentWidget()==workspace);
+ // OBS deletes programOptions and programWidget on Studio Mode exit.
+ // The temporary scroll container must disappear before a new studio set.
+ REQUIRE(panels.setPreviewDocked(&responsive,true));app.processEvents();
+ QPointer<QScrollArea> oldStrip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ REQUIRE(oldStrip);
+ delete options;
+ delete programPane;
+ app.processEvents();
+ REQUIRE(oldStrip.isNull());
+ REQUIRE(editorLayout->count()==2);
+ auto *nextOptions=new QWidget(editor);
+ auto *nextOptionsLayout=new QVBoxLayout(nextOptions);
+ nextOptionsLayout->addWidget(new QPushButton("Next session transition",nextOptions));
+ auto *nextProgram=new QWidget(editor);
+ auto *nextProgramLayout=new QVBoxLayout(nextProgram);
+ nextProgramLayout->addWidget(new QLabel("Program scene",nextProgram));
+ editorLayout->addWidget(nextOptions);editorLayout->addWidget(nextProgram);
+ app.processEvents();
+ auto *newStrip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ REQUIRE(newStrip&&newStrip->widget()==nextOptions);
+ REQUIRE(panels.setPreviewDocked(&responsive,false));app.processEvents();
+ REQUIRE(editorLayout->indexOf(nextOptions)>=0);
+ REQUIRE(editorLayout->indexOf(nextProgram)>=0);
+ REQUIRE(nextOptionsLayout->direction()==QBoxLayout::TopToBottom);
  QMainWindow invalid;invalid.setCentralWidget(new QLabel("nothing"));
  REQUIRE(!panels.setPreviewDocked(&invalid,true));
  std::cout<<"dock height, native content identity, restore, header gesture, tab guard and preview docking passed\n";

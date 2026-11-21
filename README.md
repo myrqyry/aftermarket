@@ -106,6 +106,32 @@ native OBS docks.
 | --- | --- |
 | ![Native OBS Preview and Program workspace inside a movable dock](docs/screenshots/readme/preview-docked.png) | ![Same OBS preview workspace floating as an independent window](docs/screenshots/readme/preview-floating.png) |
 
+### Responsive Studio Mode
+
+Once the preview is docked, a small **Studio** toolbar appears whenever
+OBS Studio Mode is active. It provides four session-only display choices:
+
+- **Auto:** side-by-side Preview/Program in wide docks (at least ~900 logical
+  pixels), stacked in medium docks, and Program focus in very small docks
+  (under ~430 pixels wide or 380 pixels high).
+- **Both:** keep the real Preview and Program surfaces visible; in a narrow
+  dock, Program receives slightly more of the available height.
+- **Program / Preview:** focus that one original OBS display without replacing
+  its renderer. Switch back to Both or Auto any time.
+- **Transition strip:** when stacked, the *original OBS control widget* becomes
+  a compact horizontal, scrollable bar. The chevrons reveal the remaining
+  native quick-transition buttons and T-bar; their original click handlers
+  and sliders are not proxied or replaced.
+
+Program and Preview titles are reduced in the compact layout and their
+original font settings return with the fixed preview. Quick transitions
+added or removed by OBS update the scrollable width. Switching Studio Mode
+off and back on also safely reconstructs the strip.
+
+| Compact dock | Wide floating dock |
+| --- | --- |
+| ![Aftermarket compact Studio Mode with stacked live displays and horizontally scrollable native transition controls](docs/screenshots/readme/studio-compact.png) | ![Aftermarket side-by-side Studio Mode with native centered transitions](docs/screenshots/readme/studio-wide.png) |
+
 **Session-only and opt-in.** It does not change existing theme files or
 `rules.json`. The normal OBS File → Exit path was checked in an isolated
 test: the temporary dock was absent from the saved DockState. Native display
