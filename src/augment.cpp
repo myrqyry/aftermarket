@@ -25,6 +25,7 @@
 #include <QMenu>
 #include <QPainter>
 #include <QPointer>
+#include <QProcess>
 #include <QSaveFile>
 #include <QStyle>
 #include <QSvgRenderer>
@@ -157,7 +158,17 @@ struct Rules {
     Logger logger;
     QByteArray lastRead;
     bool enabled = true, inspect = false, motion = false, compactMenus = true;
-    std::vector<Rule> entries, overflowEntries;
+    std::vector<Rule> entries, overflowEntries, hiddenEntries;
+    struct Custom {
+        QString id,label,program,icon,menuObjectName;
+        QStringList args,anchors;
+        QJsonObject raw;
+        bool matches(const QString &name,const QStringList &labels) const {
+            if(!menuObjectName.isEmpty()&&menuObjectName!=name)return false;
+            return std::all_of(anchors.begin(),anchors.end(),[&labels](const QString &anchor){return labels.contains(anchor);});
+        }
+    };
+    std::vector<Custom> customEntries;
     GradientSpec gradient;
     QJsonObject gradientRaw;
     explicit Rules(QString file, Logger sink): path(std::move(file)), logger(std::move(sink)) {
@@ -220,7 +231,57 @@ struct Rules {
             if(r.text.isEmpty()&&r.objectName.isEmpty())return false;
             nextOverflow.push_back(std::move(r));
         }
+        std::vector<Rule> nextHidden;
+        if(root.contains("menuHidden")&&!root.value("menuHidden").isArray())return false;
+        for(const auto &v:root.value("menuHidden").toArray()) {
+            if(!v.isObject())return false;
+            const auto o=v.toObject();
+            for(const auto *key:{"text","objectName","menuObjectName"})
+                if(o.contains(key)&&!o.value(key).isString())return false;
+            if(o.contains("menuContains")){
+                if(!o.value("menuContains").isArray())return false;
+                for(const auto &label:o.value("menuContains").toArray())
+                    if(!label.isString()||normalizeActionText(label.toString()).isEmpty())return false;
+            }
+            Rule r{normalizeActionText(o.value("text").toString()),o.value("objectName").toString(),
+                o.value("menuObjectName").toString(),{},QColor{},false,anchorLabels(o),o};
+            if(r.text.isEmpty()&&r.objectName.isEmpty())return false;
+            nextHidden.push_back(std::move(r));
+        }
+        std::vector<Custom> nextCustom;
+        QSet<QString> customIds;
+        if(root.contains("menuCustom")&&!root.value("menuCustom").isArray())return false;
+        for(const auto &v:root.value("menuCustom").toArray()){
+            if(!v.isObject())return false;
+            const auto o=v.toObject();
+            const auto id=o.value("id").toString(),label=o.value("label").toString(),program=o.value("program").toString();
+            if(id.trimmed().isEmpty()||id.size()>96||customIds.contains(id)
+                ||label.trimmed().isEmpty()||label.size()>120
+                ||program.trimmed().isEmpty()||program.size()>512
+                ||!o.value("args").isArray())return false;
+            const auto icon=o.value("icon").toString();
+            if(o.contains("icon")&&(!o.value("icon").isString()||!icon.isEmpty()&&!shapes.contains(icon)))return false;
+            if(o.contains("menuObjectName")&&!o.value("menuObjectName").isString())return false;
+            if(o.contains("menuContains")) {
+                if(!o.value("menuContains").isArray())return false;
+                for(const auto &anchor:o.value("menuContains").toArray())
+                    if(!anchor.isString()||normalizeActionText(anchor.toString()).isEmpty())return false;
+            }
+            const auto anchors=anchorLabels(o);
+            if(o.value("menuObjectName").toString().isEmpty()&&anchors.isEmpty())return false;
+            QStringList args;
+            if(o.value("args").toArray().size()>32)return false;
+            for(const auto &a:o.value("args").toArray()){
+                if(!a.isString()||a.toString().size()>2048||a.toString().contains(QChar(0)))return false;
+                args.append(a.toString());
+            }
+            if(program.contains(QChar(0))||program.contains(QChar('\n')))return false;
+            customIds.insert(id);
+            nextCustom.push_back({id,label,program,icon,o.value("menuObjectName").toString(),args,anchors,o});
+        }
         overflowEntries=std::move(nextOverflow);
+        hiddenEntries=std::move(nextHidden);
+        customEntries=std::move(nextCustom);
         enabled = root.value("enabled").toBool(true);
         inspect = root.value("inspect").toBool(false);
         motion = root.value("motion").toBool(false);
@@ -337,14 +398,37 @@ public:
     void prepare(Rules &rules) {
         if (prepared_) return;
         layout.restore();
-        QSet<QAction*> selected;
-        if(rules.enabled&&rules.compactMenus&&!menu->property("_aftermarketOverflowPage").toBool()) {
-            const auto labels=normalizedLabels(logicalMenuLabels(menu));
-            for(auto *a:menu->actions())if(a->isVisible()&&!a->isSeparator())
+        QSet<QAction*> selected,hidden;
+        const auto labelsBefore=normalizedLabels(logicalMenuLabels(menu));
+        if(rules.enabled&&!menu->property("_aftermarketOverflowPage").toBool()) {
+            for(auto *a:menu->actions())if(a->isVisible()&&!a->isSeparator()) {
                 for(const auto &r:rules.overflowEntries)
-                    if(r.matches(a->text(),a->objectName(),menu->objectName(),labels)){selected.insert(a);break;}
+                    if(r.matches(a->text(),a->objectName(),menu->objectName(),labelsBefore)){selected.insert(a);break;}
+                for(const auto &r:rules.hiddenEntries)
+                    if(r.matches(a->text(),a->objectName(),menu->objectName(),labelsBefore)){hidden.insert(a);break;}
+            }
         }
-        layout.prepare(rules.enabled&&rules.compactMenus,selected);
+        layout.prepare(rules.enabled,selected,hidden,rules.compactMenus);
+        if(rules.enabled&&!menu->property("_aftermarketOverflowPage").toBool()) {
+            for(const auto &entry:rules.customEntries) {
+                if(!entry.matches(menu->objectName(),labelsBefore))continue;
+                auto *a=new QAction(entry.label,menu);
+                a->setProperty("_aftermarketCustomId",entry.id);
+                a->setObjectName("aftermarket-custom-"+entry.id);
+                if(!entry.icon.isEmpty())a->setIcon(previewIcon(entry.icon,menu->palette().color(QPalette::Text)));
+                const QString program=entry.program;
+                const QStringList args=entry.args;
+                const auto log=rules.logger;
+                connect(a,&QAction::triggered,menu,[program,args,log]{
+                    if(!QProcess::startDetached(program,args)) {
+                        if(log)log("Custom menu command failed to launch: "+program);
+                        else qWarning().noquote()<<"[ui-augment] Custom menu command failed to launch:"<<program;
+                    }
+                });
+                layout.trackCustom(a);
+                menu->addAction(a);
+            }
+        }
         prepared_ = true;
         motionEnabled_=rules.motion;
         const auto actions = menu->actions();
@@ -353,7 +437,7 @@ public:
             if (rules.inspect)
                 rules.log(QString("menu=%1 action=%2 text=%3").arg(menu->objectName(), a->objectName(), a->text()));
             if (!rules.enabled) continue;
-            if (overflowAction(a) || !a->isVisible() || a->isSeparator() || a->isCheckable() ||
+            if (overflowAction(a) || a->property("_aftermarketCustomId").isValid() || !a->isVisible() || a->isSeparator() || a->isCheckable() ||
                 qobject_cast<QWidgetAction *>(a)) continue;
             const auto *r = rules.matchNormalized(a->text(),a->objectName(),logicalMenuName(menu),labels);
             if (!r || (!a->icon().isNull() && !r->replaceExisting) ||
@@ -505,7 +589,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -522,6 +606,27 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     }
     else if (motion) root["motion"]=*motion;
     else if (compactMenus) root["compactMenus"]=*compactMenus;
+    else if(hidden) {
+        const auto selector=canonicalSelector(entry);
+        if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
+        QJsonArray next;
+        for(const auto &v:root.value("menuHidden").toArray())
+            if(canonicalSelector(v.toObject())!=selector)next.append(v);
+        if(*hidden)next.append(entry);
+        root["menuHidden"]=next;
+    }
+    else if(custom||removeCustom){
+        const auto id=custom?custom->value("id").toString():*removeCustom;
+        if(id.isEmpty())return fail(error,"Custom entry needs an ID.");
+        QJsonArray next;bool found=false;
+        for(const auto &v:root.value("menuCustom").toArray()) {
+            if(v.toObject().value("id").toString()==id){found=true;continue;}
+            next.append(v);
+        }
+        if(removeCustom&&!found)return fail(error,"No custom entry with this ID.");
+        if(custom)next.append(*custom);
+        root["menuCustom"]=next;
+    }
     else if (overflow) {
         const auto selector=canonicalSelector(entry);
         if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
@@ -574,6 +679,48 @@ bool Controller::setGradientSettings(const QJsonObject &spec,QString *error,cons
 bool Controller::compactMenusEnabled() const {state->rules.refresh();return state->rules.compactMenus;}
 bool Controller::setCompactMenus(bool enabled,QString *error) {
     return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,&enabled);
+}
+bool Controller::hasHiddenRule(const QJsonObject &selector) const {
+    state->rules.refresh();
+    for(const auto &r:state->rules.hiddenEntries)
+        if(canonicalSelector(r.raw)==canonicalSelector(selector))return true;
+    return false;
+}
+bool Controller::setHiddenRule(const QJsonObject &selector,bool hidden,QString *error){
+    return editRules(state->rules,selector,false,error,nullptr,nullptr,nullptr,nullptr,nullptr,&hidden);
+}
+QJsonArray Controller::allHiddenRules() const {
+    state->rules.refresh();QJsonArray result;
+    for(const auto &r:state->rules.hiddenEntries)result.append(r.raw);
+    return result;
+}
+QJsonArray Controller::allCustomActions() const {
+    state->rules.refresh();QJsonArray result;
+    for(const auto &r:state->rules.customEntries)result.append(r.raw);
+    return result;
+}
+QJsonArray Controller::hiddenRulesForMenu(const QString &name,const QStringList &labels) const {
+    state->rules.refresh();
+    QJsonArray entries;
+    const auto normalized=normalizedLabels(labels);
+    for(const auto &r:state->rules.hiddenEntries)
+        if((r.menuObjectName.isEmpty()||r.menuObjectName==name)&&
+            std::all_of(r.anchors.begin(),r.anchors.end(),[&](const QString &anchor){return normalized.contains(anchor);}))
+            entries.append(r.raw);
+    return entries;
+}
+QJsonArray Controller::customActionsForMenu(const QString &name,const QStringList &labels) const {
+    state->rules.refresh();
+    QJsonArray entries;
+    const auto normalized=normalizedLabels(labels);
+    for(const auto &r:state->rules.customEntries)if(r.matches(name,normalized))entries.append(r.raw);
+    return entries;
+}
+bool Controller::setCustomAction(const QJsonObject &entry,QString *error){
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&entry);
+}
+bool Controller::removeCustomAction(const QString &id,QString *error){
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&id);
 }
 bool Controller::hasOverflowRule(const QJsonObject &selector) const {
     state->rules.refresh();

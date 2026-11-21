@@ -15,6 +15,8 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QImage>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QIcon>
 #include <QWidgetAction>
 #include <iostream>
@@ -156,6 +158,19 @@ int main(int argc, char **argv) {
         REQUIRE(sourceContext.actions()==sourceActions);
         REQUIRE(sourceColumns.size()==1);
         sourceContext.hide();app.processEvents();
+        // Hiding one of the sentinel Source commands must not make the
+        // remaining source menu turn into a multi-column choice catalogue.
+        REQUIRE(write(R"({"enabled":true,"rules":[],"menuHidden":[{"text":"Transform","menuContains":["Order","Filters"]}]})"));
+        sourceContext.popup(QPoint(55,55));app.processEvents();
+        auto *transform=sourceActions.at(sourceActions.size()-5);
+        REQUIRE(transform->text()=="Transform"&&!sourceContext.actions().contains(transform));
+        QSet<int> remainingColumns;
+        for(auto *a:sourceContext.actions())if(!a->isSeparator()&&a->isVisible())
+            remainingColumns.insert(sourceContext.actionGeometry(a).x());
+        REQUIRE(remainingColumns.size()==1);
+        sourceContext.hide();app.processEvents();
+        REQUIRE(sourceContext.actions()==sourceActions);
+        REQUIRE(write(R"({"enabled":true,"rules":[]})"));
         QMenu filters;
         for(int i=0;i<18;++i)filters.addAction(QString("Filter %1").arg(i));
         const auto choices=filters.actions();
@@ -189,10 +204,78 @@ int main(int argc, char **argv) {
         for(auto *a:originals)if(a->text()!="Entry 7")REQUIRE(longMenu.actions().contains(a));
         longMenu.hide();app.processEvents();
         REQUIRE(longMenu.actions()==originals);
+        REQUIRE(write(R"({"enabled":true,"menuHidden":[{"text":"Entry 7","menuContains":["Entry 0","Entry 1"]}],"menuOverflow":[{"text":"Entry 7","menuContains":["Entry 0","Entry 1"]}],"rules":[]})"));
+        longMenu.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(!longMenu.actions().contains(originals.at(8)));
+        bool leakedInOverflow=false;
+        for(auto *a:longMenu.actions())if(a->menu()&&a->text()=="More actions…")
+            leakedInOverflow|=a->menu()->actions().contains(originals.at(8));
+        REQUIRE(!leakedInOverflow);
+        longMenu.hide();app.processEvents();
+        REQUIRE(longMenu.actions()==originals);
         QMenu unrelated;unrelated.addAction("Entry 7");
         unrelated.popup(QPoint(50,50));app.processEvents();
         REQUIRE(unrelated.actions().size()==1&&unrelated.actions().first()->text()=="Entry 7");
         unrelated.hide();app.processEvents();
+        // Hide a native command only in a selected menu; do not destroy the
+        // QAction or its signal. Restore original actions on dismiss.
+        REQUIRE(write(R"({"enabled":true,"rules":[],"menuHidden":[{"text":"Remove","menuObjectName":"sourceActions"},{"text":"Mute","menuObjectName":"sourceActions"}],"menuCustom":[{"id":"open-audit","label":"Open audit log","program":"/usr/bin/touch","args":["AUDIT_TARGET"],"menuObjectName":"sourceActions","icon":"camera"}]})"));
+        QMenu source;source.setObjectName("sourceActions");
+        auto *sourceRename=source.addAction("Rename");
+        auto *sourceRemove=source.addAction("Remove");
+        auto *sourceFilters=source.addAction("Filters");
+        auto *sourceMute=source.addAction("Mute");
+        sourceMute->setCheckable(true);sourceMute->setChecked(true);
+        const auto sourceOriginal=source.actions();
+        int removeTriggered=0;
+        QObject::connect(sourceRemove,&QAction::triggered,[&]{++removeTriggered;});
+        QMenu another;another.setObjectName("differentContext");
+        auto *otherRemove=another.addAction("Remove");
+        another.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(another.actions().contains(otherRemove));
+        REQUIRE(another.actions().size()==1);
+        another.hide();app.processEvents();
+        const auto auditTarget=dir.filePath("audit created");
+        // Replace a test-only target; the production command must use exact argv.
+        REQUIRE(controller.setCustomAction(QJsonObject{{"id","open-audit"},{"label","Open audit log"},{"program","/usr/bin/touch"},{"args",QJsonArray{auditTarget}},{"menuObjectName","sourceActions"},{"icon","camera"}}));
+        source.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(source.actions().contains(sourceRename)&&source.actions().contains(sourceFilters));
+        REQUIRE(!source.actions().contains(sourceRemove));
+        REQUIRE(!source.actions().contains(sourceMute));
+        REQUIRE(sourceMute->isChecked()&&sourceMute->isCheckable());
+        REQUIRE(!sourceRemove->isVisible()==false);
+        QAction *custom=nullptr;
+        for(auto *a:source.actions())if(a->text()=="Open audit log")custom=a;
+        REQUIRE(custom&&custom->property("_aftermarketCustomId").toString()=="open-audit");
+        REQUIRE(!custom->icon().isNull());
+        custom->trigger();
+        QElapsedTimer fired;fired.start();
+        while(!QFile::exists(auditTarget)&&fired.elapsed()<1200){app.processEvents();QThread::msleep(10);}
+        REQUIRE(QFile::exists(auditTarget));
+        source.hide();app.processEvents();
+        REQUIRE(source.actions()==sourceOriginal);
+        // Action editing is independent of the visual compact-menu toggle.
+        REQUIRE(controller.setCompactMenus(false));
+        source.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(!source.actions().contains(sourceRemove));
+        bool customStillPresent=false;
+        for(auto *a:source.actions())customStillPresent|=a->text()=="Open audit log";
+        REQUIRE(customStillPresent);
+        source.hide();app.processEvents();
+        REQUIRE(source.actions()==sourceOriginal);
+        REQUIRE(controller.setCompactMenus(true));
+        sourceRemove->trigger();REQUIRE(removeTriggered==1);
+        REQUIRE(sourceMute->isChecked());
+        REQUIRE(controller.hasHiddenRule(QJsonObject{{"text","Remove"},{"menuObjectName","sourceActions"}}));
+        REQUIRE(controller.setHiddenRule(QJsonObject{{"text","Remove"},{"menuObjectName","sourceActions"}},false));
+        REQUIRE(controller.setHiddenRule(QJsonObject{{"text","Mute"},{"menuObjectName","sourceActions"}},false));
+        REQUIRE(controller.removeCustomAction("open-audit"));
+        source.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(source.actions()==sourceOriginal);
+        source.hide();app.processEvents();
+        REQUIRE(write(R"({"enabled":true,"rules":[],"menuCustom":[{"id":"bad","label":"oops","program":"x","args":"not-an-array","menuObjectName":"sourceActions"}]})"));
+        REQUIRE(!controller.setHiddenRule(QJsonObject{{"text","Remove"}},true));
+        REQUIRE(write(R"({"enabled":true,"rules":[]})"));
         // The actual OBS Appearance combo uses a model, not a QMenu.
         QWidget settings;settings.setObjectName("OBSBasicSettings");
         QComboBox themes(&settings);themes.setObjectName("themeVariant");

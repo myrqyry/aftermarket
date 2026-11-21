@@ -15,6 +15,9 @@
 #include <QListWidget>
 #include <QTabWidget>
 #include <QLabel>
+#include <QTimer>
+#include <QDialogButtonBox>
+#include <QDialog>
 #include <QMainWindow>
 #include <QDockWidget>
 #include "panels.h"
@@ -64,6 +67,75 @@ int main(int argc,char **argv) {
         REQUIRE(c.effectiveRule(QJsonObject{{"text","Rename"}},{}).value("icon").toString()=="pencil");
         more->click();
         REQUIRE(!c.hasOverflowRule(chosen));
+        auto *hide=inspector.findChild<QCheckBox*>("augment-hide-entry");
+        REQUIRE(hide&&hide->isEnabled()&&!hide->isChecked());
+        hide->click();
+        REQUIRE(c.hasHiddenRule(chosen));
+        REQUIRE(c.allHiddenRules().size()==1);
+        auto *add=inspector.findChild<QPushButton*>("augment-add-entry");
+        REQUIRE(add&&add->isEnabled());
+        bool editorVisible=false;
+        QTimer::singleShot(0,&inspector,[&]{
+            auto *dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if(!dialog)return;
+            auto *label=dialog->findChild<QLineEdit*>("augment-custom-label");
+            auto *program=dialog->findChild<QLineEdit*>("augment-custom-program");
+            auto *args=dialog->findChild<QLineEdit*>("augment-custom-args");
+            if(!label||!program||!args)return;
+            editorVisible=true;
+            label->setText("Open audit log");
+            program->setText("/usr/bin/touch");
+            args->setText("\"/tmp/audit log\"");
+            if(auto *buttons=dialog->findChild<QDialogButtonBox*>())buttons->button(QDialogButtonBox::Save)->click();
+        });
+        add->click();
+        REQUIRE(editorVisible);
+        const auto custom=c.customActionsForMenu(snap.menuObjectName,snap.menuLabels);
+        REQUIRE(custom.size()==1);
+        REQUIRE(custom.at(0).toObject().value("label").toString()=="Open audit log");
+        REQUIRE(custom.at(0).toObject().value("args").toArray().size()==1);
+        REQUIRE(custom.at(0).toObject().value("args").toArray().at(0).toString()=="/tmp/audit log");
+        auto *manage=inspector.findChild<QPushButton*>("augment-manage-entries");
+        REQUIRE(manage&&manage->isEnabled());
+        int managedCount=0;
+        QTimer::singleShot(0,&inspector,[&]{
+            auto *dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if(!dialog)return;
+            auto *list=dialog->findChild<QListWidget*>("augment-managed-entries");
+            if(list) {
+                managedCount=list->count();
+                if(managedCount>0){
+                    list->setCurrentRow(0);
+                    for(auto *button:dialog->findChildren<QPushButton*>())
+                        if(button->text()=="Restore / remove"){button->click();break;}
+                }
+            }
+            dialog->accept();
+        });
+        manage->click();
+        REQUIRE(managedCount==2);
+        REQUIRE(!c.hasHiddenRule(chosen));
+        REQUIRE(c.removeCustomAction(custom.at(0).toObject().value("id").toString()));
+        REQUIRE(c.setHiddenRule(chosen,true));
+        augment::Inspector standalone(c);
+        auto *all=standalone.findChild<QPushButton*>("augment-manage-entries");
+        REQUIRE(all&&all->isEnabled());
+        bool globalRecovery=false;
+        QTimer::singleShot(0,&standalone,[&]{
+            auto *dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if(!dialog)return;
+            auto *filter=dialog->findChild<QCheckBox*>("augment-show-all-menu-rules");
+            auto *list=dialog->findChild<QListWidget*>("augment-managed-entries");
+            globalRecovery=filter&&filter->isChecked()&&list&&list->count()==1;
+            if(globalRecovery) {
+                list->setCurrentRow(0);
+                for(auto *button:dialog->findChildren<QPushButton*>())
+                    if(button->text()=="Restore / remove"){button->click();break;}
+            }
+            dialog->accept();
+        });
+        all->click();
+        REQUIRE(globalRecovery&&!c.hasHiddenRule(chosen));
     }
     auto selector=augment::selectorFor(snap,0,true);
     REQUIRE(selector.value("objectName").toString()=="actionRenameSource");

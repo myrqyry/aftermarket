@@ -56,7 +56,7 @@ QString logicalMenuName(const QMenu *menu) {
     return name.isValid()?name.toString():menu->objectName();
 }
 MenuLayout::MenuLayout(QMenu *m):menu(m){}
-void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow) {
+void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow,const QSet<QAction*> &explicitHidden,bool compact) {
     if(prepared||!enabled||menu->isTearOffEnabled())return;
     const auto actions=menu->actions();
     int count=0;
@@ -68,30 +68,47 @@ void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow) {
     if(!screen)screen=menu->screen();
     const int available=screen?screen->availableGeometry().height():800;
     const int cap=qMin(340,qMax(160,int(available*.48)));
-    if(count<=10&&menu->sizeHint().height()<=cap&&explicitOverflow.isEmpty())return;
+    const bool density=compact&&(count>10||menu->sizeHint().height()>cap);
+    if(!density&&explicitOverflow.isEmpty()&&explicitHidden.isEmpty())return;
     prepared=true;
+    menu->setProperty("_aftermarketSourceContext",sourceContextMenu(menu));
+    if(!explicitOverflow.isEmpty()||!explicitHidden.isEmpty()) {
+        for(auto *a:actions)originalActions.append(a);
+        menu->setProperty(labelsKey,nativeLabels(menu));
+    }
+    if(density) {
     originalStyle=menu->styleSheet();
     appliedStyle=originalStyle+QStringLiteral(
         "\nQMenu::item { padding: 2px 12px; margin: 0px; min-height: 16px; }"
         "\nQMenu::separator { height: 1px; margin: 3px 8px; }");
     menu->setStyleSheet(appliedStyle);
+    }
+    for(auto *a:actions)if(explicitHidden.contains(a)&&a->isVisible()&&!a->isSeparator()) {
+        menu->removeAction(a);
+        moved.append(Move{a,QPointer<QMenu>{}});
+    }
     if(explicitOverflow.isEmpty()||menu->property(pageKey).toBool())return;
-    const auto labels=nativeLabels(menu);
+    const auto labels=logicalMenuLabels(menu);
     const auto name=menu->objectName();
-    for(auto *a:actions)originalActions.append(a);
     menu->setProperty(labelsKey,labels);
     auto *page=new QMenu(QStringLiteral("More actions…"),menu);
     page->setProperty(pageKey,true);
     page->setProperty(labelsKey,labels);
     page->setProperty(nameKey,name);
-    page->setStyleSheet(appliedStyle);
+    if(density)page->setStyleSheet(appliedStyle);
     page->setLayoutDirection(menu->layoutDirection());
     page->setFont(menu->font());
     menu->addMenu(page)->setProperty(actionKey,true);
     pages.append(page);
-    for(auto *action:actions)if(explicitOverflow.contains(action)&&action->isVisible()&&!action->isSeparator()) {
+    for(auto *action:actions)if(explicitOverflow.contains(action)&&!explicitHidden.contains(action)&&action->isVisible()&&!action->isSeparator()) {
         menu->removeAction(action);page->addAction(action);moved.append({action,page});
     }
+}
+void MenuLayout::trackCustom(QAction *action) {
+    if(!action)return;
+    if(!prepared)prepared=true;
+    if(!menu->property(labelsKey).isValid())menu->setProperty(labelsKey,nativeLabels(menu));
+    custom.append(action);
 }
 void MenuLayout::present() {
 #ifdef AFTERMARKET_QT642_COLUMNS
@@ -103,7 +120,7 @@ void MenuLayout::present() {
     if(!d->itemsDirty&&menu->geometry()==arrangedGeometry)return;
     // Preserve the familiar vertical layout of Source context menus. Do not
     // disable the independent optional placement rules or compact spacing.
-    if(sourceContextMenu(menu))return;
+    if(menu->property("_aftermarketSourceContext").toBool()||sourceContextMenu(menu))return;
     if(!d->widgetItems.isEmpty()||d->tearoff||d->tornoff)return;
     const auto actions=menu->actions();
     if(actions.isEmpty())return;
@@ -174,17 +191,23 @@ void MenuLayout::restore() {
     if(columnsApplied&&qstrcmp(qVersion(),QT_VERSION_STR)==0)QMenuPrivate::get(menu)->itemsDirty=true;
 #endif
     columnsApplied=false;arrangedGeometry={};
+    // Custom entries exist only while this menu is open.
+    for(auto &item:custom)if(item) {
+        menu->removeAction(item);
+        delete item.data();
+    }
+    custom.clear();
     // Only restore surviving actions still owned by a generated page; do
     // not resurrect actions explicitly removed/deleted while the popup was open.
     for(auto it=originalActions.crbegin();it!=originalActions.crend();++it) {
         auto *a=it->data();if(!a||menu->actions().contains(a))continue;
         for(const auto &move:moved) {
-            if(move.action!=a||!move.page||!move.page->actions().contains(a))continue;
+            if(move.action!=a||(move.page&&!move.page->actions().contains(a)))continue;
             auto next=it.base(); // reverse_iterator::base points to the next original
             QAction *before=nullptr;
             for(;next!=originalActions.cend();++next)
                 if(*next&&menu->actions().contains(next->data())){before=next->data();break;}
-            move.page->removeAction(a);
+            if(move.page)move.page->removeAction(a);
             menu->insertAction(before,a);
             break;
         }
@@ -196,6 +219,8 @@ void MenuLayout::restore() {
     }
     pages.clear();moved.clear();originalActions.clear();
     menu->setProperty(labelsKey,QVariant());
-    if(menu->styleSheet()==appliedStyle)menu->setStyleSheet(originalStyle);
+    menu->setProperty("_aftermarketSourceContext",QVariant());
+    if(!appliedStyle.isEmpty()&&menu->styleSheet()==appliedStyle)menu->setStyleSheet(originalStyle);
+    appliedStyle.clear();originalStyle.clear();
 }
 }

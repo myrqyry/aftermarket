@@ -6,6 +6,10 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QColorDialog>
+#include <QDialogButtonBox>
+#include <QMessageBox>
+#include <QProcess>
+#include <QUuid>
 #include <QComboBox>
 #include <QSpinBox>
 #include "motion.h"
@@ -80,7 +84,7 @@ WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
         if (overflowAction(action) || action->isSeparator() || !action->isVisible()) continue;
         const bool reservation=action->property("_obsUiAugmentReservation").toBool();
         ActionSnapshot item{action->text(),action->objectName(),action->isCheckable(),
-            qobject_cast<QWidgetAction*>(action)!=nullptr,action->isVisible(),action->isEnabled(),
+            (action->property("_aftermarketCustomId").isValid()||qobject_cast<QWidgetAction*>(action)!=nullptr),action->isVisible(),action->isEnabled(),
             reservation ? action->property("_obsUiAugmentOriginalIcon").toBool() : !action->icon().isNull()};
         if (action==hit) s.selected=s.actions.size();
         s.actions.push_back(item);
@@ -120,6 +124,70 @@ QJsonObject selectorFor(const WidgetSnapshot &s,int row,bool scopeMenu) {
 }
 
 namespace {
+QJsonObject menuScope(const WidgetSnapshot &snapshot) {
+    if(!snapshot.isMenu)return {};
+    if(!snapshot.menuObjectName.isEmpty())return {{"menuObjectName",snapshot.menuObjectName}};
+    QJsonArray anchors;
+    QStringList seen;
+    for(const auto &label:snapshot.menuLabels) {
+        const auto norm=normalizeActionText(label);
+        if(norm.isEmpty()||seen.contains(norm))continue;
+        seen.append(norm);anchors.append(label);
+        if(anchors.size()==2)break;
+    }
+    if(anchors.isEmpty())return {};
+    return {{"menuContains",anchors}};
+}
+QJsonObject openCustomEditor(QWidget *parent,const QJsonObject &original) {
+    QDialog dialog(parent);
+    dialog.setWindowTitle(original.isEmpty()?"Add custom menu action":"Edit custom menu action");
+    dialog.setModal(true);dialog.setMinimumWidth(440);
+    auto *root=new QVBoxLayout(&dialog);
+    auto *form=new QFormLayout;root->addLayout(form);
+    auto *label=new QLineEdit(original.value("label").toString(),&dialog);label->setObjectName("augment-custom-label");
+    auto *program=new QLineEdit(original.value("program").toString(),&dialog);program->setObjectName("augment-custom-program");
+    program->setPlaceholderText("xdg-open or /absolute/path/to/program");
+    auto *args=new QLineEdit(&dialog);args->setObjectName("augment-custom-args");
+    QStringList previous;
+    for(const auto &value:original.value("args").toArray()) {
+        QString arg=value.toString();
+        if(arg.contains(QChar(' '))||arg.contains(QChar('"'))) {
+            arg.replace(QChar(92),QString(QChar(92))+QChar(92));
+            arg.replace(QChar(34),QString(QChar(92))+QChar(34));
+            arg=QString(QChar(34))+arg+QChar(34);
+        }
+        previous.append(arg);
+    }
+    args->setText(previous.join(QChar(' ')));
+    args->setPlaceholderText("Optional arguments; quote paths containing spaces");
+    auto *icon=new QComboBox(&dialog);icon->setObjectName("augment-custom-icon");
+    icon->addItem("No icon","");
+    for(const auto &name:iconNames())icon->addItem(previewIcon(name,parent->palette().color(QPalette::Text)),name,name);
+    const int selected=icon->findData(original.value("icon").toString());
+    if(selected>=0)icon->setCurrentIndex(selected);
+    form->addRow("Label",label);form->addRow("Executable",program);
+    form->addRow("Arguments",args);form->addRow("Icon",icon);
+    auto *hint=new QLabel("The executable is launched directly with these arguments. No implicit shell or interpolation. The action appears at the end of the captured menu.",&dialog);
+    hint->setWordWrap(true);root->addWidget(hint);
+    auto *error=new QLabel(&dialog);error->setWordWrap(true);error->setTextFormat(Qt::PlainText);root->addWidget(error);
+    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog);root->addWidget(buttons);
+    QObject::connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    QObject::connect(buttons,&QDialogButtonBox::accepted,&dialog,[&]{
+        if(label->text().trimmed().isEmpty()||program->text().trimmed().isEmpty()){
+            error->setText("Label and executable are required.");return;
+        }
+        dialog.accept();
+    });
+    if(dialog.exec()!=QDialog::Accepted)return {};
+    QJsonObject next=original;
+    next["label"]=label->text().trimmed();
+    next["program"]=program->text().trimmed();
+    next["args"]=QJsonArray::fromStringList(QProcess::splitCommand(args->text()));
+    const QString iconName=icon->currentData().toString();
+    if(iconName.isEmpty())next.remove("icon");
+    else next["icon"]=iconName;
+    return next;
+}
 QString mixerSource(const QWidget *widget) {
     for(auto *w=widget;w;w=w->parentWidget()) {
         if(!w->inherits("VolumeControl"))continue;
@@ -283,8 +351,8 @@ struct Inspector::Ui {
     QComboBox *icons=nullptr,*preset=nullptr;
     QSpinBox *duration=nullptr;
     QLineEdit *color=nullptr;
-    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr,*overflow=nullptr;
-    QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr;
+    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr,*overflow=nullptr,*hideEntry=nullptr;
+    QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr,*addEntry=nullptr,*manageEntries=nullptr;
     explicit Ui(Controller &c):controller(c){}
 };
 
@@ -367,6 +435,117 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     ui->overflow=new QCheckBox("Move to More actions",right);ui->overflow->setObjectName("augment-overflow");
     ui->overflow->setToolTip("Save this action's placement independently of its icon. Uncheck to restore it. No actions are hidden automatically.");
     rl->addWidget(ui->overflow);
+    ui->hideEntry=new QCheckBox("Hide this default entry",right);
+    ui->hideEntry->setObjectName("augment-hide-entry");
+    ui->hideEntry->setToolTip("Only hides the selected item from matching popup menus. OBS's QAction remains untouched; use Manage entries to restore.");
+    rl->addWidget(ui->hideEntry);
+    connect(ui->hideEntry,&QCheckBox::clicked,this,[this](bool hidden){
+        const int row=ui->actions->currentRow();
+        auto snapshot=ui->snapshot;
+        if(row<0||row>=snapshot.actions.size())return;
+        snapshot.actions[row].checkable=false;
+        const auto selector=selectorFor(snapshot,row,ui->scope->isChecked());
+        QString error;
+        if(ui->controller.setHiddenRule(selector,hidden,&error))
+            ui->status->setText(hidden?"Default entry hidden on next popup. Use Manage entries to restore.":"Entry restored on next popup.");
+        else ui->status->setText(error);
+        updatePreview();
+    });
+    auto *entryButtons=new QHBoxLayout;
+    ui->addEntry=new QPushButton("Add custom…",right);ui->addEntry->setObjectName("augment-add-entry");
+    ui->manageEntries=new QPushButton("Manage entries…",right);ui->manageEntries->setObjectName("augment-manage-entries");
+    entryButtons->addWidget(ui->addEntry);entryButtons->addWidget(ui->manageEntries);
+    rl->addLayout(entryButtons);
+    connect(ui->addEntry,&QPushButton::clicked,this,[this]{
+        if(!ui->snapshot.isMenu){ui->status->setText("Capture the target menu first.");return;}
+        auto entry=openCustomEditor(this,{});
+        if(entry.isEmpty())return;
+        const auto scope=menuScope(ui->snapshot);
+        if(scope.isEmpty()){ui->status->setText("Cannot scope this menu; capture a menu with identifiable actions.");return;}
+        for(auto it=scope.begin();it!=scope.end();++it)entry[it.key()]=it.value();
+        entry["id"]=QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QString error;
+        if(ui->controller.setCustomAction(entry,&error))
+            ui->status->setText("Custom action saved. Reopen the menu to see it.");
+        else ui->status->setText(error);
+    });
+    connect(ui->manageEntries,&QPushButton::clicked,this,[this]{
+        QDialog dialog(this);
+        dialog.setWindowTitle("Manage menu entries");
+        dialog.setMinimumSize(475,340);
+        auto *layout=new QVBoxLayout(&dialog);
+        auto *hint=new QLabel("Hidden defaults are reversible. Custom actions can be edited or removed here.",&dialog);
+        hint->setWordWrap(true);layout->addWidget(hint);
+        auto *showAll=new QCheckBox("Show all menu changes",&dialog);
+        showAll->setObjectName("augment-show-all-menu-rules");
+        showAll->setChecked(!ui->snapshot.isMenu);
+        layout->addWidget(showAll);
+        auto *list=new QListWidget(&dialog);list->setObjectName("augment-managed-entries");layout->addWidget(list,1);
+        auto *buttons=new QHBoxLayout;
+        auto *edit=new QPushButton("Edit custom…",&dialog);
+        auto *remove=new QPushButton("Restore / remove",&dialog);
+        buttons->addWidget(edit);buttons->addWidget(remove);layout->addLayout(buttons);
+        auto *close=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);layout->addWidget(close);
+        connect(close,&QDialogButtonBox::rejected,&dialog,&QDialog::accept);
+        auto refresh=[&]{
+            list->clear();
+            const auto hidden=showAll->isChecked()?ui->controller.allHiddenRules():
+                ui->controller.hiddenRulesForMenu(ui->snapshot.menuObjectName,ui->snapshot.menuLabels);
+            for(const auto &v:hidden) {
+                const auto rule=v.toObject();
+                const auto scope=rule.value("menuObjectName").toString();
+                const auto anchors=rule.value("menuContains").toArray();
+                const auto context=!scope.isEmpty()?scope:
+                    anchors.isEmpty()?QStringLiteral("All matching menus"):
+                    QStringLiteral("Menus containing: ")+anchors.at(0).toString();
+                auto *item=new QListWidgetItem("Hidden default · "+
+                    rule.value("text").toString(rule.value("objectName").toString())+"  ·  "+context,list);
+                item->setData(Qt::UserRole,rule);
+                item->setData(Qt::UserRole+1,"hidden");
+            }
+            const auto custom=showAll->isChecked()?ui->controller.allCustomActions():
+                ui->controller.customActionsForMenu(ui->snapshot.menuObjectName,ui->snapshot.menuLabels);
+            for(const auto &v:custom) {
+                const auto rule=v.toObject();
+                const auto scope=rule.value("menuObjectName").toString();
+                const auto anchors=rule.value("menuContains").toArray();
+                const auto context=!scope.isEmpty()?scope:
+                    anchors.isEmpty()?QStringLiteral("Unscoped"):
+                    QStringLiteral("Menus containing: ")+anchors.at(0).toString();
+                auto *item=new QListWidgetItem("Custom · "+rule.value("label").toString()+"  ·  "+context,list);
+                item->setData(Qt::UserRole,rule);
+                item->setData(Qt::UserRole+1,"custom");
+            }
+            remove->setEnabled(list->currentItem()!=nullptr);
+            edit->setEnabled(false);
+        };
+        connect(showAll,&QCheckBox::toggled,&dialog,[&](bool){refresh();});
+        connect(list,&QListWidget::currentItemChanged,&dialog,[&](QListWidgetItem *current){
+            remove->setEnabled(current);
+            edit->setEnabled(current&&current->data(Qt::UserRole+1).toString()=="custom");
+        });
+        connect(remove,&QPushButton::clicked,&dialog,[&]{
+            auto *item=list->currentItem();if(!item)return;
+            const auto rule=item->data(Qt::UserRole).toJsonObject();
+            QString error;
+            const bool ok=item->data(Qt::UserRole+1).toString()=="hidden"?
+                ui->controller.setHiddenRule(rule,false,&error):
+                ui->controller.removeCustomAction(rule.value("id").toString(),&error);
+            if(ok){refresh();ui->status->setText("Entry rule removed. Reopen the menu.");}
+            else QMessageBox::warning(&dialog,"Cannot change menu entry",error);
+        });
+        connect(edit,&QPushButton::clicked,&dialog,[&]{
+            auto *item=list->currentItem();if(!item||item->data(Qt::UserRole+1).toString()!="custom")return;
+            auto updated=openCustomEditor(&dialog,item->data(Qt::UserRole).toJsonObject());
+            if(updated.isEmpty())return;
+            QString error;
+            if(ui->controller.setCustomAction(updated,&error)){
+                refresh();ui->status->setText("Custom entry updated. Reopen the menu.");
+            } else QMessageBox::warning(&dialog,"Cannot update menu entry",error);
+        });
+        refresh();
+        dialog.exec();
+    });
     connect(ui->overflow,&QCheckBox::clicked,this,[this](bool enabled){
         auto snapshot=ui->snapshot;
         const int row=ui->actions->currentRow();
@@ -519,6 +698,12 @@ void Inspector::updatePreview() {
     {const QSignalBlocker blocked(ui->overflow);
         ui->overflow->setEnabled(!overflowSelector.isEmpty());
         ui->overflow->setChecked(!overflowSelector.isEmpty()&&ui->controller.hasOverflowRule(overflowSelector));}
+    {const QSignalBlocker blocked(ui->hideEntry);
+        const bool isDefault=overflowRow>=0&&overflowRow<ui->snapshot.actions.size()&&!ui->snapshot.actions.at(overflowRow).custom;
+        ui->hideEntry->setEnabled(isDefault&&!overflowSelector.isEmpty());
+        ui->hideEntry->setChecked(isDefault&&!overflowSelector.isEmpty()&&ui->controller.hasHiddenRule(overflowSelector));}
+    ui->addEntry->setEnabled(ui->snapshot.isMenu);
+    ui->manageEntries->setEnabled(true);
     const auto text=ui->color->text().trimmed();
     QColor color(text);
     const bool validColor=text.isEmpty()||color.isValid();

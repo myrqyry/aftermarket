@@ -17,7 +17,8 @@ bool overflowAction(const QAction *action);
 class MenuLayout {
 public:
     explicit MenuLayout(QMenu *menu);
-    void prepare(bool enabled,const QSet<QAction*> &explicitOverflow={});
+    void prepare(bool enabled,const QSet<QAction*> &explicitOverflow={},const QSet<QAction*> &explicitHidden={},bool compact=true);
+    void trackCustom(QAction *action);
     void present();
     void restore();
 private:
@@ -30,5 +31,6 @@ private:
     QList<QPointer<QMenu>> pages;
     struct Move {QPointer<QAction> action;QPointer<QMenu> page;};
     QList<Move> moved;
+    QList<QPointer<QAction>> custom;
 };
 }

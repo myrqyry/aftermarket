@@ -7,8 +7,8 @@ animate and transform existing controls without forking OBS or replacing its
 theme system. Built to complement Colorway: the theme defines the visual
 identity, while Aftermarket extends presentation and interaction at runtime.
 
-Current capabilities include custom context-menu icons, a native inspector,
-animated gradients, audio-reactive mixer effects, rotary gain controls with
+Current capabilities include context-menu icons, hiding default commands,
+custom executable actions, a native inspector, animated gradients, audio-reactive mixer effects, rotary gain controls with
 integrated peak meters, and collapsible docks.
 
 Formerly OBS UI Augment. The installed module, configuration directory and
@@ -112,6 +112,64 @@ runtime version. Other versions fall back to compact native rows rather
 than accessing mismatched private layout data. Short menus, embedded
 widget actions and tear-off menus keep their native layout. The active
 theme supplies colors and type.
+
+## Context-menu actions (Nemo-inspired)
+
+Aftermarket can now customize the **contents** of a native context menu,
+rather than only its appearance. Open **Tools → UI Augment Inspector**, pick
+the target menu, then use the **Menus & widgets** page:
+
+- **Hide this default entry** removes that selected command only from
+  matching popup menus. The actual OBS QAction, its signals, and its original
+  state are preserved. The entry returns when the rule is removed.
+- **Add custom…** creates a labelled entry with an optional icon, an
+  executable, and an argument list. These entries appear at the bottom of
+  the captured menu and execute only when selected.
+- **Manage entries…** edits or removes custom entries and restores hidden
+  defaults. **Show all menu changes** works even with no menu captured, so
+  it remains a recovery path if every entry was hidden.
+
+The editor scopes changes to the captured menu by its native object name
+when available, or by observed action labels for anonymous menus.
+Unchecking **Scope to observed menu** while hiding a native entry permits
+an explicitly broader match. No original OBS action is deleted.
+
+Custom commands invoke the specified executable directly with its argument
+list, **without automatically launching a shell or substituting selection
+values**. Enter trusted commands only. Example excerpt (merge into your
+existing `rules.json`; do not replace the entire file):
+
+```json
+{
+  "menuHidden": [
+    {"text": "Remove", "menuContains": ["Add Source", "Open Source Projector"]}
+  ],
+  "menuCustom": [
+    {
+      "id": "open-my-tools",
+      "label": "Open my tools",
+      "program": "xdg-open",
+      "args": ["/home/me/tools"],
+      "menuContains": ["Add Source", "Open Source Projector"],
+      "icon": "monitor"
+    }
+  ]
+}
+```
+
+These keys are added to the existing `rules.json`; they do not replace the
+original `rules`, `menuOverflow`, or gradient settings. Add commands from
+the inspector to generate unique IDs automatically.
+
+| Customized native menu | Recover or edit saved entries |
+| --- | --- |
+| ![OBS source menu with a custom command and a hidden default](docs/screenshots/readme/menu-custom-actions.png) | ![Manage hidden native actions and custom entries](docs/screenshots/readme/menu-actions-manager.png) |
+
+**Current scope:** flat native QMenus, direct executable actions, and rule
+management. Ordering custom commands, nested custom groups, selection/source
+argument placeholders, and importing Nemo `.nemo_action` files are not yet
+implemented. Native menus containing embedded widget actions are excluded
+from the default removal layout for safety.
 
 ## Motion
 

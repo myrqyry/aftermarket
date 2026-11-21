@@ -3,6 +3,7 @@
 #include <QString>
 #include <QStringList>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QIcon>
 #include <QColor>
 #include <memory>
@@ -23,6 +24,14 @@ public:
     void setAudioProvider(AudioProvider provider,AudioReset reset={});
     QJsonObject gradientSettings() const;
     bool setGradientSettings(const QJsonObject &, QString *error = nullptr, const QJsonObject *expected = nullptr);
+    bool hasHiddenRule(const QJsonObject &selector) const;
+    bool setHiddenRule(const QJsonObject &selector,bool hidden,QString *error=nullptr);
+    QJsonArray allHiddenRules() const;
+    QJsonArray allCustomActions() const;
+    QJsonArray hiddenRulesForMenu(const QString &menuName,const QStringList &labels) const;
+    QJsonArray customActionsForMenu(const QString &menuName,const QStringList &labels) const;
+    bool setCustomAction(const QJsonObject &entry,QString *error=nullptr);
+    bool removeCustomAction(const QString &id,QString *error=nullptr);
     bool hasOverflowRule(const QJsonObject &selector) const;
     bool setOverflowRule(const QJsonObject &selector,bool enabled,QString *error=nullptr);
     bool compactMenusEnabled() const;

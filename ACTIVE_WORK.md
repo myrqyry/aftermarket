@@ -185,3 +185,37 @@ remained 500x204 with two columns. Theme-picker adapter unchanged.
 No change to user rules, theme files or the live OBS process. The signature
 uses OBS's English Source action labels; localized or unconventional third-
 party Source menus may require an improved contextual locator.
+
+## Slice 15 — native menu content editing (2026-11-20)
+
+User requested Linux Mint Nemo Actions-style customization: remove selected
+defaults and add user-defined entries. Inspected installed actual Nemo
+.nemo_action format for Name, Exec, icon and conditional selection inspiration.
+Added menuHidden (independent scoped, reversible removal of QAction from
+QMenu, without mutating or deleting the action) and menuCustom (stable ID,
+label, executable, argv array, optional known icon, explicit menu scope).
+Actual execution uses QProcess::startDetached, never an implicit shell.
+Icon and motion rules remain independent. Native action ordering and state
+restore when menu closes. Hidden beats conflicting overflow placement.
+MenuLayout preserves Source context's single-column identity before hiding
+sentinel actions. Custom entries are popup-lifetime objects, deleted on close.
+A new Inspector checkbox hides the selected default; Add custom... opens a
+label/program/arguments/icon editor; Manage entries... restores hidden
+defaults, edits/deletes custom entries, and has a Show all view reachable
+without menu capture. Atomic file editing, schema validation and unknown
+settings preservation retained. Only append custom actions; no reordering,
+grouping, native binding, selection placeholders or Nemo file import yet.
+
+TDD: RED missing APIs; GREEN QAction restoration, untouched signal
+connection and checkable state, exact program argv to temp test file,
+menu scoping, conflicting hidden/overflow, user config validation, model
+and Inspector UI actions, global recovery without capture. Actual isolated
+OBS 32.2.0/Colorway Sources menu with Remove hidden, Test custom entry
+at bottom, physically clicked entry and verified generated test file.
+Native menu and global management dialog captured from isolated OBS.
+Do not assert the user's live source-specific command behavior was tested
+or that arbitrary external programs succeed in all environments.
+Existing live OBS and user's rules unchanged; local commit/install only,
+no automatic GitHub push. Further hardening: dynamic menu rebuild/reuse,
+internationalized anonymous selectors, program launch failure feedback,
+custom sorting/submenus, and selection-aware arguments.
