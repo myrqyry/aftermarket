@@ -12,14 +12,17 @@
 #include <QFileInfo>
 #include "augment.h"
 #include "obs-audio.h"
+#include "obs-transform.h"
 OBS_DECLARE_MODULE()
 static augment::Controller *controller = nullptr;
 static std::unique_ptr<augment::ObsAudio> audio;
+static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
 static QPointer<QAction> toolsAction, panelsAction;
 static std::unique_ptr<augment::Panels> panels;
 static void cleanupUi() {
     delete inspector.data();
+    transforms.reset(); // Restore original OBS accessibility colors before exit-save.
     panels.reset();
     delete panelsAction.data();
     if (toolsAction) {
@@ -60,6 +63,9 @@ MODULE_EXPORT bool obs_module_load(void) {
         inspector->activateWindow();
     });
     panels=std::make_unique<augment::Panels>();
+    transforms=std::make_unique<augment::ObsTransformStyle>(
+        static_cast<QWidget*>(obs_frontend_get_main_window()),
+        []{return controller&&controller->modernTransformFrame();});
     panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
     if(panelsAction) QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
         if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get());

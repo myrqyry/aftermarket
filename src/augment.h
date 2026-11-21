@@ -38,6 +38,8 @@ public:
     bool setOverflowRule(const QJsonObject &selector,bool enabled,QString *error=nullptr);
     bool showSubmenuSelections() const;
     bool setShowSubmenuSelections(bool enabled,QString *error=nullptr);
+    bool modernTransformFrame() const;
+    bool setModernTransformFrame(bool enabled,QString *error=nullptr);
     bool compactMenusEnabled() const;
     bool setCompactMenus(bool enabled, QString *error = nullptr);
     bool motionEnabled() const;

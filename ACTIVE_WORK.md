@@ -393,3 +393,57 @@ value labels. Replaced README's prior captured screenshot with verified
 native menu pixels. No modification to user's real OBS state or rules,
 no GitHub push. Further validation: other platforms/themes, very narrow
 screens and custom QStyle arrangements.
+
+## Slice 20 — theme-aware native transform frame and rounded visual handles (2026-11-20)
+
+User supplied actual OBS preview screenshot of red square transformation
+handles and asked for more modern, Colorway/theme-aware frame and points.
+Inspected OBS 32.2.0 upstream OBSBasicPreview.cpp and OBSBasic_Preview.cpp.
+OBS draws selected/crop/hover transforms with libobs graphics in RenderMain,
+not Qt widgets. Native GetSelectionColor/GetCropColor/GetHoverColor read
+Accessibility OverrideColors and SelectRed/SelectGreen/SelectBlue from OBS
+user config; native grip picking uses HANDLE_RADIUS 4 and selection radius 6.
+Do not falsely claim that styling enlarged native hit regions.
+
+Added opt-in root modernTransformFrame false default, atomic Controller
+getter/setter and immediate Inspector Gradients tab toggle. Runtime
+NativeTransformColors uses OBS frontend's user config; saves prior presence
+and values of the four affected keys, sets theme palette Link/Highlight/
+bright Link (packed 0xAABBGGRR, alpha=255), and restores on disable or
+frontend exit/unload. If an external settings editor modifies any applied
+value, it relinquishes the changed key, restores unaffected values and
+does not immediately overwrite the external edit. No user ini saves from
+the plugin. A theme-dependent state change updates the in-memory colors.
+
+A Qt child drawing overlay was tested and observed BEHIND OBS's native
+graphics. A native X11 child did not fix z-order. Using a transparent
+mouse-through Qt Tool transient window with a compositor did: actual
+Colorway/OBS 32.2.0 preview showed a contrast halo, thin accent border,
+round dark-filled 6.4px corner and 5.1px edge handles, with accented hover
+states. Original OBS GPU display remains untouched. XTest physically dragged
+a real native source corner (selected scene quad moved from 269.6,10.0 to
+245.6,-3.5); overlay followed and input still passed to OBS. An explicit
+disable/re-enable in a large fitted preview showed square native handles
+and rounded styled handles respectively with measured changed pixels.
+Documentation uses the actual larger preview capture.
+
+Quad coordinates derived from selected unlocked visible video scene items'
+libobs box transform, mapped to current fitted preview with OBS's 10px
+preview edge inset. The percentage label is truncated from actual scaling;
+decorations only show when its current value matches the fitted transform.
+Custom fixed zoom (including tested 12%) hides the floating art rather than
+risk incorrect positions, while native transform handles still work. Groups
+are skipped as their child-space transforms need separate handling.
+Tool window hides when OBS is minimized/inactive or a popup takes focus;
+no extra input capture or render output modification.
+
+TDD tests: transform-visual pixel shape, empty state, transparent mouse
+input, tool-window flags, fitted-zoom guard; transform-color preserves
+existing and missing config keys, follows theme updates, avoids clobbering
+external edits; Inspector controller toggle/default. Real isolated OBS
+Colorway X11, compositor and Xvfb GUI checked selection, hover/resize,
+custom zoom hide, live opt-out, restored native visuals. Full suite includes
+these two new tests. Real user profile, scenes and live OBS process not
+changed. No push unless explicitly requested. Current limits: native hit
+radius unchanged, groups skipped, graphics-layer compositor required for
+round art, no Wayland/Windows/macOS validation, custom zoom not covered.

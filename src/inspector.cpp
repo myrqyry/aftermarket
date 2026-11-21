@@ -319,6 +319,20 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto *theme=new QPushButton("Use theme",gradient);colorRow->addWidget(colors,1);colorRow->addWidget(pickColor);colorRow->addWidget(theme);form->addRow("Colors",colorRow);
     auto *period=new QSpinBox(gradient);period->setObjectName("augment-gradient-period");period->setRange(400,12000);period->setSingleStep(100);period->setSuffix(" ms");form->addRow("Loop duration",period);
     gl->addLayout(form);
+    heading("Preview selection","Colorway-aware native transform outlines and round visual handles. Original OBS dragging and hit targets stay unchanged.",gl,gradient);
+    auto *modernTransforms=check("Modern transform frame and handles","augment-modern-transform",gl,gradient);
+    modernTransforms->setChecked(controller.modernTransformFrame());
+    modernTransforms->setToolTip("Use the active theme accent for OBS's native selection, crop, and hover colors, with a visual-only rounded-handle layer. Off restores the previous OBS accessibility colors.");
+    QObject::connect(modernTransforms,&QCheckBox::toggled,gradient,[&controller,modernTransforms,status](bool value){
+        QString error;
+        if(controller.setModernTransformFrame(value,&error))
+            status->setText(value?"Transform styling enabled. Native handles retain OBS's original click radius.":"Transform styling disabled. Original OBS colors will be restored.");
+        else {
+            const QSignalBlocker blocker(modernTransforms);
+            modernTransforms->setChecked(controller.modernTransformFrame());
+            status->setText(error);
+        }
+    });
     auto *preview=new QLabel(gradient);preview->setObjectName("augment-gradient-preview");preview->setMinimumHeight(32);preview->setAlignment(Qt::AlignCenter);gl->addWidget(preview);
     auto *colorHint=new QLabel(gradient);colorHint->setWordWrap(true);gl->addWidget(colorHint);gl->addStretch();
     tabs->addTab(mixer,"Mixer");tabs->addTab(gradient,"Gradients");
@@ -373,6 +387,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     };
     auto load=[=,&controller]{
         state->baseline=controller.gradientSettings();GradientSpec spec;GradientSpec::parse(state->baseline,spec);
+        {const QSignalBlocker blocker(modernTransforms);modernTransforms->setChecked(controller.modernTransformFrame());}
         knobs->setChecked(spec.knobs);knobMeters->setChecked(spec.knobMeters);all->setChecked(spec.knobSources.isEmpty());populate(spec.knobSources);
         reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);
         QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());colors->setText(hex.join(", "));period->setValue(spec.period);

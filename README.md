@@ -83,6 +83,46 @@ heuristic and rule precedence are unchanged.
 
 ![Captured native menu](docs/screenshots/readme/workspace-menus.png)
 
+## Theme-aware transform selection
+
+OBS's native selection frame normally uses red borders with square resize
+handles. Aftermarket now offers **Modern transform frame and handles** in
+**Tools → UI Augment Inspector → Gradients → Preview selection**.
+This option is **off by default**, applies immediately, and is independent
+of gradient tracks and the Motion toggle.
+
+- Uses the active Qt/Colorway theme's link/accent color for **native selection
+  borders**, highlight for crop, and a brighter accent for hover. This uses
+  OBS's own accessibility color override rather than coloring rendered video.
+- Draws a thin, contrast-backed frame with **rounded corner handles** and
+  smaller circular edge handles. Hover gives a stronger fill. It follows live
+  source transforms, including ordinary resize and rotation.
+- The decoration is a **transparent mouse-through companion window**, not
+  another scene renderer and not a replacement for OBS transform events.
+  Original native handles still receive every click and drag.
+- **Scope:** OBS 32.2.0 on composited Linux/X11 was tested. The rounded
+  overlay is deliberately hidden at custom zoom/pan levels when its
+  approximate projection cannot be trusted, or when the OBS window is not
+  active. OBS's native selection remains usable. Group transforms and
+  other platforms need separate validation.
+
+<details><summary>Important behavior and limitations</summary>
+
+The visible handles are larger, but **OBS's actual mouse hit targets are not
+enlarged**. Enlarging them would require changing OBS native selection
+hit-testing and is not part of this visual pass. Custom zoom and grouped
+sources retain native handles rather than showing misplaced decorations.
+
+The option persists as root-level `"modernTransformFrame": true` in
+`rules.json`. While active, the plugin keeps a snapshot of the previous
+OBS accessibility colors and restores them when disabled or unloaded,
+preserving external edits rather than overwriting them. Existing user
+settings are not changed by installation.
+
+</details>
+
+![Actual OBS/Colorway transform frame with a thin accent outline and rounded handles](docs/screenshots/readme/transform-modern.png)
+
 ## Dockable video preview
 
 The preview normally stays in the center of OBS. To move it into the native

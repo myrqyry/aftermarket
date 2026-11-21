@@ -32,6 +32,12 @@ int main(int argc,char **argv) {
     auto read=[&](){QFile f(path);f.open(QIODevice::ReadOnly);return f.readAll();};
     REQUIRE(write(R"({"enabled":true,"inspect":false,"extra":"keep","rules":[{"text":"Rename","icon":"pencil"},{"text":"Copy","icon":"copy"}]})"));
     augment::Controller c(path);
+    REQUIRE(!c.modernTransformFrame());
+    REQUIRE(c.setModernTransformFrame(true));
+    REQUIRE(c.modernTransformFrame());
+    REQUIRE(c.setModernTransformFrame(false));
+    REQUIRE(!c.modernTransformFrame());
+
     {
         augment::Inspector inspector(c);
         auto *compact=inspector.findChild<QCheckBox*>("augment-compact-menus");
