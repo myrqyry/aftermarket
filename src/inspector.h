@@ -13,13 +13,18 @@ class Panels;
 struct ActionSnapshot {
     QString text, objectName;
     bool checkable=false, custom=false, visible=false, enabled=false, nativeIcon=false;
+    QString scopeMenuName;
+    QStringList scopeLabels;
+    int depth=0;
+    bool checked=false, separator=false, hasSubmenu=false;
+    QString selectedChoice;
     bool eligible() const;
 };
 struct WidgetSnapshot {
     QString type, objectName, ancestry, geometry, accessibility;
     QString menuObjectName, mixerSource;
     QStringList menuLabels;
-    QVector<ActionSnapshot> actions;
+    QVector<ActionSnapshot> actions,allActions;
     int selected=-1;
     bool isMenu=false;
     bool valid() const {return !type.isEmpty();}

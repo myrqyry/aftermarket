@@ -19,6 +19,7 @@
 #include <QThread>
 #include <QIcon>
 #include <QWidgetAction>
+#include <QPushButton>
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
 int main(int argc, char **argv) {
@@ -315,6 +316,97 @@ int main(int argc, char **argv) {
         longMenu.popup(QPoint(50,50));app.processEvents();
         REQUIRE(longMenu.actions()==originals&&longMenu.styleSheet()==style);
         longMenu.hide();app.processEvents();
+    }
+    {
+        REQUIRE(write(R"({"enabled":true,"rules":[],"showSubmenuSelections":false})"));
+        augment::Controller c(path);
+        QMenu root;
+        auto *scale=root.addMenu("Scale Filtering");
+        scale->setObjectName("filterOptions");
+        QAction *disable=scale->addAction("Disable");disable->setCheckable(true);
+        QAction *bilinear=scale->addAction("Bilinear");bilinear->setCheckable(true);
+        QAction *lanczos=scale->addAction("Lanczos");lanczos->setCheckable(true);lanczos->setChecked(true);
+        auto *color=root.addMenu("Set Color");
+        auto *swatch=color->addAction("");
+        swatch->setCheckable(true);swatch->setChecked(true);
+        QPixmap red(18,18);red.fill(QColor("#ca4141"));swatch->setIcon(QIcon(red));
+        swatch->setData(QColor("#ca4141"));
+        auto *other=color->addAction("Clear");other->setCheckable(true);
+        auto *empty=root.addMenu("Other");empty->addAction("Open dialog");
+        root.addSeparator();
+        auto *rename=root.addAction("Rename");
+        root.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(scale->menuAction()->text()=="Scale Filtering");
+        root.hide();app.processEvents();
+        REQUIRE(c.setShowSubmenuSelections(true));
+        REQUIRE(c.showSubmenuSelections());
+        root.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(scale->menuAction()->text().contains("Lanczos"));
+        REQUIRE(color->menuAction()->text().contains("#ca4141"));
+        REQUIRE(empty->menuAction()->text()=="Other");
+        auto snap=augment::inspectWidget(&root,root.mapToGlobal(root.actionGeometry(scale->menuAction()).center()));
+        REQUIRE(snap.isMenu&&snap.actions.size()==4);
+        REQUIRE(snap.allActions.size()>=10);
+        REQUIRE(snap.allActions.at(0).text=="Scale Filtering");
+        REQUIRE(snap.allActions.at(1).text=="Disable"&&snap.allActions.at(1).depth==1);
+        REQUIRE(snap.allActions.at(3).text=="Lanczos"&&snap.allActions.at(3).checked);
+        snap.actions=snap.allActions;
+        snap.actions[3].checkable=false; // checkable entries are scopeable for placement, not icon painting
+        const auto nestedSelector=augment::selectorFor(snap,3,true);
+        REQUIRE(nestedSelector.value("menuObjectName").toString()=="filterOptions");
+        REQUIRE(snap.allActions.at(3).scopeLabels.contains("Bilinear"));
+        root.hide();app.processEvents();
+        REQUIRE(scale->menuAction()->text()=="Scale Filtering");
+        REQUIRE(color->menuAction()->text()=="Set Color");
+        // OBS's preset color buttons are not checkable QActions. The chosen
+        // one receives a 2px border on its QWidgetAction button.
+        swatch->setChecked(false);
+        auto *colors=new QWidget;
+        colors->setObjectName("ColorSelect");
+        auto *preset=new QPushButton(colors);
+        preset->setObjectName("preset3");preset->setProperty("bgColor",3);
+        preset->setStyleSheet("border: 2px solid black");
+        auto *swatches=new QWidgetAction(color);
+        swatches->setDefaultWidget(colors);
+        color->addAction(swatches);
+        root.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(color->menuAction()->text().contains("Green"));
+        const auto colorSnapshot=augment::inspectWidget(&root,
+            root.mapToGlobal(root.actionGeometry(color->menuAction()).center()));
+        bool greenPreset=false;
+        for(const auto &a:colorSnapshot.allActions)if(a.text=="Green"&&a.checked&&a.depth==2)
+            greenPreset=true;
+        REQUIRE(greenPreset);
+        root.hide();app.processEvents();
+        REQUIRE(color->menuAction()->text()=="Set Color");
+        lanczos->setChecked(false);bilinear->setChecked(true);
+        root.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(scale->menuAction()->text().contains("Bilinear"));
+        root.hide();app.processEvents();
+        bilinear->setChecked(false);disable->setChecked(true);
+        REQUIRE(c.setShowSubmenuSelections(false));
+        root.popup(QPoint(50,50));app.processEvents();
+        REQUIRE(scale->menuAction()->text()=="Scale Filtering");
+        root.hide();app.processEvents();
+        REQUIRE(c.setShowSubmenuSelections(true));
+        QMenu lazyRoot;
+        auto *lazy=lazyRoot.addMenu("Lazy options");
+        auto *first=lazy->addAction("First");first->setCheckable(true);first->setChecked(true);
+        auto *second=lazy->addAction("Second");second->setCheckable(true);
+        QObject::connect(lazy,&QMenu::aboutToShow,lazy,[&] {
+            first->setChecked(false);second->setChecked(true);
+        });
+        lazyRoot.popup(QPoint(60,60));app.processEvents();
+        REQUIRE(lazy->menuAction()->text().contains("First"));
+        lazy->popup(QPoint(290,60));app.processEvents();
+        REQUIRE(lazy->menuAction()->text().contains("Second"));
+        lazy->hide();lazyRoot.hide();app.processEvents();
+        REQUIRE(lazy->menuAction()->text()=="Lazy options");
+        // Multiple checked options are not an unambiguous single choice.
+        first->setChecked(true);
+        lazyRoot.popup(QPoint(60,60));app.processEvents();
+        REQUIRE(lazy->menuAction()->text()=="Lazy options");
+        lazyRoot.hide();app.processEvents();
     }
     std::cout << "menu rendering, preservation, reload, cleanup passed\n";
 }

@@ -34,9 +34,12 @@
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QSet>
+#include <QMap>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidgetAction>
+#include <QPushButton>
 #include <algorithm>
 
 namespace augment {
@@ -48,11 +51,73 @@ QString identity(const QWidget *w) {
 QJsonObject targetFor(const WidgetSnapshot &s,int row) {
     if (row<0 || row>=s.actions.size()) return {};
     const auto &a=s.actions.at(row);
-    return {{"text",a.text},{"objectName",a.objectName},{"menuObjectName",s.menuObjectName}};
+    return {{"text",a.text},{"objectName",a.objectName},
+            {"menuObjectName",a.scopeMenuName.isEmpty()?s.menuObjectName:a.scopeMenuName}};
+}
+QStringList actionLabels(const WidgetSnapshot &s,int row) {
+    if(row>=0&&row<s.actions.size()&&!s.actions.at(row).scopeLabels.isEmpty())
+        return s.actions.at(row).scopeLabels;
+    return s.menuLabels;
+}
+QString originalText(const QAction *a) {
+    return a->property("_aftermarketBaseText").isValid()?
+        a->property("_aftermarketBaseText").toString():a->text();
+}
+ActionSnapshot captureAction(const QAction *action,const QMenu *parent,int depth) {
+    const bool reservation=action->property("_obsUiAugmentReservation").toBool();
+    QString original=originalText(action);
+    if(auto *widgetAction=qobject_cast<const QWidgetAction*>(action);
+       original.isEmpty()&&widgetAction&&widgetAction->defaultWidget()&&
+       widgetAction->defaultWidget()->objectName()=="ColorSelect")
+        original="Color presets";
+    ActionSnapshot result{original,action->objectName(),action->isCheckable(),
+        (action->property("_aftermarketCustomId").isValid()||qobject_cast<const QWidgetAction*>(action)!=nullptr),
+        action->isVisible(),action->isEnabled(),
+        reservation?action->property("_obsUiAugmentOriginalIcon").toBool():!action->icon().isNull()};
+    result.scopeMenuName=logicalMenuName(parent);
+    result.scopeLabels=logicalMenuLabels(parent);
+    result.depth=depth;
+    result.checked=action->isChecked();
+    result.separator=action->isSeparator();
+    result.hasSubmenu=action->menu()!=nullptr;
+    if(action->menu())result.selectedChoice=submenuSelection(action->menu());
+    return result;
+}
+void captureTree(const QMenu *menu,int depth,QSet<const QMenu*> &visited,QVector<ActionSnapshot> &out) {
+    if(!menu||depth>7||visited.contains(menu)||out.size()>=500)return;
+    visited.insert(menu);
+    for(const auto *action:menu->actions()){
+        if(overflowAction(action))continue;
+        out.append(captureAction(action,menu,depth));
+        if(const auto *widgetAction=qobject_cast<const QWidgetAction*>(action)) {
+            const auto *widget=widgetAction->defaultWidget();
+            if(widget&&widget->objectName()=="ColorSelect") {
+                QMap<int,const QPushButton*> swatches;
+                for(const auto *button:widget->findChildren<QPushButton*>()) {
+                    const int index=button->property("bgColor").toInt();
+                    if(button->objectName().startsWith("preset")&&!presetColorLabel(index).isEmpty())
+                        swatches.insert(index,button);
+                }
+                for(auto i=swatches.cbegin();i!=swatches.cend();++i) {
+                    const auto *button=i.value();
+                    QString css=button->styleSheet().toLower();css.remove(QChar(' '));
+                    ActionSnapshot preset;
+                    preset.text=presetColorLabel(i.key());preset.objectName=button->objectName();
+                    preset.custom=true;preset.visible=true;preset.enabled=button->isEnabled();
+                    preset.checked=css.contains("border:2pxsolidblack");
+                    preset.depth=depth+1;preset.scopeMenuName=logicalMenuName(menu);
+                    preset.scopeLabels=logicalMenuLabels(menu);
+                    out.append(preset);
+                }
+            }
+        }
+        if(action->menu())captureTree(action->menu(),depth+1,visited,out);
+        if(out.size()>=500)break;
+    }
 }
 }
 bool ActionSnapshot::eligible() const {
-    return visible && !checkable && !custom &&
+    return visible && !separator && !checkable && !custom &&
         (!objectName.isEmpty() || !normalizeActionText(text).isEmpty());
 }
 WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
@@ -80,15 +145,13 @@ WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
     s.menuObjectName=logicalMenuName(menu);
     s.menuLabels=logicalMenuLabels(menu);
     const auto *hit=menu->actionAt(menu->mapFromGlobal(globalPosition));
-    for (auto *action : menu->actions()) {
-        if (overflowAction(action) || action->isSeparator() || !action->isVisible()) continue;
-        const bool reservation=action->property("_obsUiAugmentReservation").toBool();
-        ActionSnapshot item{action->text(),action->objectName(),action->isCheckable(),
-            (action->property("_aftermarketCustomId").isValid()||qobject_cast<QWidgetAction*>(action)!=nullptr),action->isVisible(),action->isEnabled(),
-            reservation ? action->property("_obsUiAugmentOriginalIcon").toBool() : !action->icon().isNull()};
-        if (action==hit) s.selected=s.actions.size();
-        s.actions.push_back(item);
+    for (auto *action:menu->actions()) {
+        if(overflowAction(action)||action->isSeparator()||!action->isVisible())continue;
+        if(action==hit)s.selected=s.actions.size();
+        s.actions.append(captureAction(action,menu,0));
     }
+    QSet<const QMenu*> visited;
+    captureTree(menu,0,visited,s.allActions);
     return s;
 }
 WidgetSnapshot inspectAt(const QPoint &globalPosition) {
@@ -99,18 +162,24 @@ WidgetSnapshot inspectAt(const QPoint &globalPosition) {
     return inspectWidget(QApplication::widgetAt(globalPosition),globalPosition);
 }
 QJsonObject selectorFor(const WidgetSnapshot &s,int row,bool scopeMenu) {
-    if (!s.isMenu || row<0 || row>=s.actions.size() || !s.actions.at(row).eligible()) return {};
+    if (!s.isMenu || row<0 || row>=s.actions.size()) return {};
     const auto &a=s.actions.at(row);
+    // A checkable child can be scoped and hidden even though the independent
+    // icon painter does not decorate checkable rows.
+    if(!a.visible||a.separator||a.custom||
+       (a.objectName.isEmpty()&&normalizeActionText(a.text).isEmpty()))return {};
     QJsonObject selector;
     if (!a.objectName.isEmpty()) selector["objectName"]=a.objectName;
     else selector["text"]=a.text;
     if (!scopeMenu) return selector;
-    if (!s.menuObjectName.isEmpty()) selector["menuObjectName"]=s.menuObjectName;
+    const auto menuName=a.scopeMenuName.isEmpty()?s.menuObjectName:a.scopeMenuName;
+    if (!menuName.isEmpty()) selector["menuObjectName"]=menuName;
     else {
         // Anonymous menus have no durable Qt ID. Anchor on two other observed labels.
         QStringList anchors, seen;
         const auto own=normalizeActionText(a.text);
-        for (const auto &label:s.menuLabels) {
+        const auto siblingLabels=a.scopeLabels.isEmpty()?s.menuLabels:a.scopeLabels;
+        for (const auto &label:siblingLabels) {
             const auto normalized=normalizeActionText(label);
             if (normalized.isEmpty() || normalized==own || seen.contains(normalized)) continue;
             seen.append(normalized);
@@ -337,7 +406,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
 }
 struct Inspector::Ui {
     Controller &controller;
-    WidgetSnapshot snapshot;
+    WidgetSnapshot snapshot,captured;
     QTimer *timer=nullptr;
     QTabWidget *tabs=nullptr;
     QLineEdit *filter=nullptr;
@@ -351,7 +420,7 @@ struct Inspector::Ui {
     QComboBox *icons=nullptr,*preset=nullptr;
     QSpinBox *duration=nullptr;
     QLineEdit *color=nullptr;
-    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr,*overflow=nullptr,*hideEntry=nullptr;
+    QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr,*overflow=nullptr,*hideEntry=nullptr,*includeSubmenus=nullptr,*showValues=nullptr;
     QPushButton *save=nullptr,*remove=nullptr,*pick=nullptr,*copy=nullptr,*choose=nullptr,*addEntry=nullptr,*manageEntries=nullptr;
     explicit Ui(Controller &c):controller(c){}
 };
@@ -400,7 +469,14 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     ui->ancestry->setPlaceholderText("Widget ancestry");detailsLayout->addWidget(ui->ancestry);
     auto *split=new QSplitter(Qt::Horizontal,this);split->setChildrenCollapsible(false);menuLayout->addWidget(split,1);
     auto *left=new QWidget(split);auto *ll=new QVBoxLayout(left);ll->setContentsMargins(0,0,5,0);ll->setSpacing(4);
-    ll->addWidget(new QLabel("Menu actions",left));
+    auto *listHeader=new QHBoxLayout;
+    listHeader->addWidget(new QLabel("Menu actions",left));
+    listHeader->addStretch();
+    ui->includeSubmenus=new QCheckBox("List submenu items",left);
+    ui->includeSubmenus->setObjectName("augment-list-submenus");
+    ui->includeSubmenus->setToolTip("Include nested actions, check states, disabled rows and separators available in the captured Qt menu. Dynamically built submenus are shown only after OBS populates them.");
+    listHeader->addWidget(ui->includeSubmenus);
+    ll->addLayout(listHeader);
     ui->filter=new QLineEdit(left);ui->filter->setObjectName("augment-menu-filter");ui->filter->setPlaceholderText("Filter actions…");ll->addWidget(ui->filter);
     connect(ui->filter,&QLineEdit::textChanged,this,[this](const QString &text){
         for(int i=0;i<ui->actions->count();++i)ui->actions->item(i)->setHidden(!ui->actions->item(i)->text().contains(text,Qt::CaseInsensitive));
@@ -429,7 +505,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     ui->duration=new QSpinBox(right);ui->duration->setObjectName("augment-motion-duration");
     ui->duration->setRange(60,600);ui->duration->setSingleStep(20);ui->duration->setSuffix(" ms");ui->duration->setValue(160);
     motionRow->addWidget(ui->duration);rl->addLayout(motionRow);
-    ui->scope=new QCheckBox("Scope to observed menu",right);ui->scope->setChecked(true);
+    ui->scope=new QCheckBox("Scope to observed menu",right);ui->scope->setObjectName("augment-scope");ui->scope->setChecked(true);
     ui->replace=new QCheckBox("Replace existing native icon",right);
     rl->addWidget(ui->scope);rl->addWidget(ui->replace);
     ui->overflow=new QCheckBox("Move to More actions",right);ui->overflow->setObjectName("augment-overflow");
@@ -439,6 +515,21 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     ui->hideEntry->setObjectName("augment-hide-entry");
     ui->hideEntry->setToolTip("Only hides the selected item from matching popup menus. OBS's QAction remains untouched; use Manage entries to restore.");
     rl->addWidget(ui->hideEntry);
+    ui->showValues=new QCheckBox("Show selected submenu choices",right);
+    ui->showValues->setObjectName("augment-show-submenu-selections");
+    ui->showValues->setToolTip("Show the one checked native submenu choice alongside its parent, when OBS exposes one. Applied the next time a menu opens; original labels restore on close.");
+    ui->showValues->setChecked(controller.showSubmenuSelections());
+    rl->addWidget(ui->showValues);
+    connect(ui->showValues,&QCheckBox::toggled,this,[this](bool enabled){
+        QString error;
+        if(ui->controller.setShowSubmenuSelections(enabled,&error))
+            ui->status->setText(enabled?"Checked submenu choices will appear on parent labels when menus reopen.":"Original parent labels will be used on next popup.");
+        else {
+            const QSignalBlocker blocker(ui->showValues);
+            ui->showValues->setChecked(ui->controller.showSubmenuSelections());
+            ui->status->setText(error);
+        }
+    });
     connect(ui->hideEntry,&QCheckBox::clicked,this,[this](bool hidden){
         const int row=ui->actions->currentRow();
         auto snapshot=ui->snapshot;
@@ -590,6 +681,10 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
         show();
         setAttribute(Qt::WA_ShowWithoutActivating,false);
     });
+    connect(ui->includeSubmenus,&QCheckBox::toggled,this,[this](bool){
+        const auto original=ui->captured;
+        if(original.isMenu)capture(original);
+    });
     connect(ui->actions,&QListWidget::currentRowChanged,this,[this](int row){selectRow(row);});
     connect(ui->icons,&QComboBox::currentTextChanged,this,[this]{updatePreview();});
     connect(ui->preset,&QComboBox::currentTextChanged,this,[this]{updatePreview();});
@@ -622,7 +717,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
             ui->status->setText("Exact rule removed. Reopen the target menu.");
             selectRow(ui->actions->currentRow());
             if(auto *item=ui->actions->currentItem()) {
-                const auto rule=ui->controller.effectiveRule(targetFor(ui->snapshot,ui->actions->currentRow()),ui->snapshot.menuLabels);
+                const auto rule=ui->controller.effectiveRule(targetFor(ui->snapshot,ui->actions->currentRow()),actionLabels(ui->snapshot,ui->actions->currentRow()));
                 item->setIcon(rule.isEmpty()?QIcon{}:previewIcon(rule.value("icon").toString(),palette().color(QPalette::Text)));
             }
         } else ui->status->setText(error);
@@ -639,28 +734,53 @@ void Inspector::startPick() {
     hide();ui->timer->start(ui->pickDelay->value()*1000);
 }
 void Inspector::capture(const WidgetSnapshot &snapshot) {
-    ui->snapshot=snapshot;
-    ui->tabs->setCurrentIndex(snapshot.mixerSource.isEmpty()?0:1);
+    ui->captured=snapshot;
+    auto visible=snapshot;
+    if(snapshot.isMenu&&ui->includeSubmenus->isChecked())visible.actions=snapshot.allActions;
+    ui->snapshot=visible;
+    ui->tabs->setCurrentIndex(visible.mixerSource.isEmpty()?0:1);
     if(snapshot.valid()&&!snapshot.isMenu&&snapshot.mixerSource.isEmpty())ui->advanced->setChecked(true);
     ui->filter->clear();
     {const QSignalBlocker blocker(ui->motion);ui->motion->setChecked(ui->controller.motionEnabled());}
     {const QSignalBlocker blocker(ui->compactMenus);ui->compactMenus->setChecked(ui->controller.compactMenusEnabled());}
+    {const QSignalBlocker blocker(ui->showValues);ui->showValues->setChecked(ui->controller.showSubmenuSelections());}
     {
         QSignalBlocker blocker(ui->actions);
         ui->actions->clear();
-        for (const auto &a:snapshot.actions) {
+        for (const auto &a:visible.actions) {
             QString label=a.text.section(QChar(9),0,0);
             label.replace("&&",QString(QChar(1)));label.remove('&');label.replace(QChar(1),'&');label=label.trimmed();
-            if(label.isEmpty())label=a.objectName;
+            if(a.separator)label="────────";
+            else if(label.isEmpty())label=a.objectName.isEmpty()?"(unnamed action)":a.objectName;
+            if(a.checked)label="✓ "+label;
+            if(a.hasSubmenu)label+="  ▸"+(a.selectedChoice.isEmpty()?QString{}:"  "+a.selectedChoice);
+            if(a.depth>0)label=QString("  ").repeated(qMin(a.depth,8))+"↳ "+label;
+            if(!a.visible)label+="  (hidden)";
+            else if(!a.enabled)label+="  (disabled)";
             auto *item=new QListWidgetItem(label,ui->actions);
-            if (!a.eligible()) item->setToolTip("Not supported by the menu painter.");
+            if (a.separator) {
+                item->setFlags(Qt::NoItemFlags);
+                item->setToolTip("Native separator");
+            } else if (!a.eligible()) item->setToolTip("Available for inspection; icon painting is limited to ordinary non-checkable actions.");
             else if (a.nativeIcon) item->setToolTip("Has a native icon; use Replace existing to override.");
             if(!a.objectName.isEmpty())item->setToolTip(item->toolTip()+"\n#"+a.objectName);
-            auto rule=ui->controller.effectiveRule(targetFor(snapshot,ui->actions->count()-1),snapshot.menuLabels);
+            const int idx=ui->actions->count()-1;
+            const auto rule=ui->controller.effectiveRule(targetFor(visible,idx),actionLabels(visible,idx));
             if(!rule.isEmpty())item->setIcon(previewIcon(rule.value("icon").toString(),palette().color(QPalette::Text)));
         }
-        const int row=snapshot.selected>=0 ? snapshot.selected : (snapshot.actions.isEmpty()?-1:0);
-        ui->actions->setCurrentRow(row);
+        int row=visible.selected>=0 ? visible.selected : (visible.actions.isEmpty()?-1:0);
+        if(ui->includeSubmenus->isChecked()&&snapshot.selected>=0&&snapshot.selected<snapshot.actions.size()) {
+            row=-1;
+            const auto &chosen=snapshot.actions.at(snapshot.selected);
+            for(int i=0;i<visible.actions.size();++i)
+                if(visible.actions.at(i).depth==0&&visible.actions.at(i).text==chosen.text&&
+                   visible.actions.at(i).objectName==chosen.objectName){row=i;break;}
+        }
+        if(row<0&&!visible.actions.isEmpty())row=0;
+        if(row>=0&&row<ui->actions->count()&&ui->actions->item(row)->flags()!=Qt::NoItemFlags)
+            ui->actions->setCurrentRow(row);
+        else for(int i=0;i<ui->actions->count();++i)
+            if(ui->actions->item(i)->flags()!=Qt::NoItemFlags){ui->actions->setCurrentRow(i);break;}
     }
     ui->type->setText(snapshot.valid() ? snapshot.type+(snapshot.objectName.isEmpty()?"":"  #"+snapshot.objectName) : "No OBS widget under the pointer");
     ui->geometry->setText(snapshot.geometry+(snapshot.accessibility.isEmpty()?"":"  ·  "+snapshot.accessibility));
@@ -679,7 +799,7 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
 void Inspector::openPanels(){if(ui->tabs->count()>3)ui->tabs->setCurrentIndex(3);}
 void Inspector::selectRow(int row) {
     const auto target=targetFor(ui->snapshot,row);
-    const auto rule=target.isEmpty()?QJsonObject{}:ui->controller.effectiveRule(target,ui->snapshot.menuLabels);
+    const auto rule=target.isEmpty()?QJsonObject{}:ui->controller.effectiveRule(target,actionLabels(ui->snapshot,row));
     const QSignalBlocker a(ui->icons),b(ui->color),c(ui->replace),d(ui->preset),e(ui->duration);
     ui->icons->setCurrentText(rule.value("icon").toString("plus"));
     ui->color->setText(rule.value("color").toString());
@@ -690,7 +810,9 @@ void Inspector::selectRow(int row) {
 }
 void Inspector::updatePreview() {
     auto selector=selectorFor(ui->snapshot,ui->actions->currentRow(),ui->scope->isChecked());
-    const bool eligible=!selector.isEmpty();
+    const int selectedRow=ui->actions->currentRow();
+    const bool eligible=!selector.isEmpty()&&selectedRow>=0&&
+        selectedRow<ui->snapshot.actions.size()&&ui->snapshot.actions.at(selectedRow).eligible();
     auto overflowSnapshot=ui->snapshot;
     const int overflowRow=ui->actions->currentRow();
     if(overflowRow>=0&&overflowRow<overflowSnapshot.actions.size())overflowSnapshot.actions[overflowRow].checkable=false;
@@ -716,7 +838,14 @@ void Inspector::updatePreview() {
     if(eligible)native=ui->snapshot.actions.at(ui->actions->currentRow()).nativeIcon;
     ui->save->setEnabled(eligible && validColor && (!native || ui->replace->isChecked()));
     ui->copy->setEnabled(eligible && validColor);
-    if(!eligible) {ui->selector->clear();ui->scopeHint->setText("Choose an ordinary menu action to edit.");return;}
+    if(!eligible) {
+        ui->selector->setPlainText(selector.isEmpty()?QString{}:
+            QString::fromUtf8(QJsonDocument(selector).toJson(QJsonDocument::Indented)));
+        ui->scopeHint->setText(selector.isEmpty()?
+            "Choose an action to inspect or manage.":
+            "This native entry can be scoped or hidden. Its checkable or custom control is not eligible for icon painting.");
+        return;
+    }
     QString hint=selector.contains("menuObjectName")?"Exact menu object name.":
         selector.contains("menuContains")?"Anonymous menu: matched by two observed labels (when available).":
         selector.contains("objectName")?"Matches this action ID across menus.":"Matches this label across menus.";

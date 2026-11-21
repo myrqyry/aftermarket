@@ -12,6 +12,8 @@
 class QMenu;
 namespace augment {
 QString normalizeActionText(QString text);
+QString submenuSelection(const QMenu *menu);
+QString presetColorLabel(int index);
 QStringList iconNames();
 QIcon previewIcon(const QString &name, const QColor &color);
 using Logger = std::function<void(const QString &)>;
@@ -34,6 +36,8 @@ public:
     bool removeCustomAction(const QString &id,QString *error=nullptr);
     bool hasOverflowRule(const QJsonObject &selector) const;
     bool setOverflowRule(const QJsonObject &selector,bool enabled,QString *error=nullptr);
+    bool showSubmenuSelections() const;
+    bool setShowSubmenuSelections(bool enabled,QString *error=nullptr);
     bool compactMenusEnabled() const;
     bool setCompactMenus(bool enabled, QString *error = nullptr);
     bool motionEnabled() const;

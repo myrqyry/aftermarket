@@ -15,6 +15,7 @@
 #include <QListWidget>
 #include <QTabWidget>
 #include <QLabel>
+#include <QPlainTextEdit>
 #include <QTimer>
 #include <QDialogButtonBox>
 #include <QDialog>
@@ -136,6 +137,39 @@ int main(int argc,char **argv) {
         });
         all->click();
         REQUIRE(globalRecovery&&!c.hasHiddenRule(chosen));
+    }
+    {
+        QMenu root;
+        auto *scale=root.addMenu("Scale Filtering");
+        scale->setObjectName("scale-options");
+        auto *lanczos=scale->addAction("Lanczos");lanczos->setCheckable(true);lanczos->setChecked(true);
+        scale->addAction("Bilinear");
+        root.addAction("Rename");
+        root.popup(QPoint(50,50));app.processEvents();
+        const auto nested=augment::inspectWidget(&root,root.mapToGlobal(root.actionGeometry(scale->menuAction()).center()));
+        root.hide();app.processEvents();
+        augment::Inspector editor(c);
+        editor.capture(nested);
+        auto *list=editor.findChild<QListWidget*>("augment-actions");
+        auto *include=editor.findChild<QCheckBox*>("augment-list-submenus");
+        auto *selected=editor.findChild<QCheckBox*>("augment-show-submenu-selections");
+        REQUIRE(list&&include&&selected);
+        REQUIRE(list->count()==2);
+        include->setChecked(true);
+        REQUIRE(list->count()==4);
+        REQUIRE(list->item(1)->text().contains("Lanczos"));
+        list->setCurrentRow(1);
+        auto *hint=editor.findChild<QPlainTextEdit*>("augment-selector");
+        auto *scope=editor.findChild<QCheckBox*>("augment-scope");
+        REQUIRE(hint&&scope);
+        REQUIRE(QJsonDocument::fromJson(hint->toPlainText().toUtf8()).object().value("menuObjectName")=="scale-options");
+        selected->click();
+        REQUIRE(c.showSubmenuSelections());
+        REQUIRE(QJsonDocument::fromJson(read()).object().value("extra").toString()=="keep");
+        selected->click();
+        REQUIRE(!c.showSubmenuSelections());
+        include->setChecked(false);
+        REQUIRE(list->count()==2);
     }
     auto selector=augment::selectorFor(snap,0,true);
     REQUIRE(selector.value("objectName").toString()=="actionRenameSource");

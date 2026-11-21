@@ -30,6 +30,7 @@
 #include <QStyle>
 #include <QSvgRenderer>
 #include <QWidgetAction>
+#include <QPushButton>
 #include <QDebug>
 #include <algorithm>
 #include <vector>
@@ -105,6 +106,64 @@ QString normalizeActionText(QString text) {
     return text.trimmed().toCaseFolded();
 }
 
+QString presetColorLabel(int index) {
+    static const QStringList palette={
+        "Red","Yellow","Green","Cyan","Blue","Magenta","Dark gray","White"};
+    return index>=1&&index<=palette.size()?palette.at(index-1):QString{};
+}
+// Only a single explicitly checked native action establishes selection.
+ // Multiple checked commands may represent independent toggles; never infer
+ // a single active choice from the first one or from action order.
+QString submenuSelection(const QMenu *submenu) {
+    if(!submenu)return {};
+    const QAction *selected=nullptr;
+    for(const auto *a:submenu->actions())if(a->isVisible()&&a->isEnabled()&&a->isCheckable()&&a->isChecked()&&!a->isSeparator()) {
+        if(selected)return {};
+        selected=a;
+    }
+    if(!selected) {
+        // OBS 32.2 ColorSelect embeds eight QPushButtons in a QWidgetAction.
+        // Its selected preset is encoded as a 2px border, not a checked
+        // QAction. Recognize this exact native signal without inspecting OBS
+        // source data or guessing from mouse coordinates.
+        int selectedPreset=0;
+        for(const auto *action:submenu->actions()) {
+            const auto *widgetAction=qobject_cast<const QWidgetAction*>(action);
+            const auto *widget=widgetAction?widgetAction->defaultWidget():nullptr;
+            if(!widget||widget->objectName()!="ColorSelect")continue;
+            for(const auto *button:widget->findChildren<QPushButton*>()) {
+                const auto id=button->property("bgColor").toInt();
+                if(!button->objectName().startsWith("preset")||id<1||id>8)continue;
+                QString css=button->styleSheet().toLower();css.remove(QChar(' '));
+                if(!css.contains("border:2pxsolidblack"))continue;
+                if(selectedPreset)return {}; // ambiguous, don't invent a value
+                selectedPreset=id;
+            }
+        }
+        return presetColorLabel(selectedPreset);
+    }
+    QString label=selected->text().section(QChar(9),0,0);
+    label.replace("&&",QString(QChar(1)));label.remove('&');label.replace(QChar(1),'&');
+    label=label.trimmed();
+    if(!label.isEmpty())return label;
+    const auto data=selected->data();
+    const auto color=data.canConvert<QColor>()?data.value<QColor>():QColor();
+    if(color.isValid())return color.name();
+    // The OBS color picker may expose anonymous checked swatch icons.
+    // Sample only opaque, near-solid center pixels; otherwise leave blank.
+    if(!selected->icon().isNull()) {
+        const auto pm=selected->icon().pixmap(18,18);
+        if(!pm.isNull()) {
+            const auto image=pm.toImage();
+            const auto mid=image.pixelColor(image.width()/2,image.height()/2);
+            const auto around=image.pixelColor(qMax(0,image.width()/2-2),image.height()/2);
+            if(mid.alpha()>225&&around.alpha()>225&&
+                qAbs(mid.red()-around.red())<10&&qAbs(mid.green()-around.green())<10&&qAbs(mid.blue()-around.blue())<10)
+                return mid.name();
+        }
+    }
+    return {};
+}
 QStringList iconNames() {
     auto names = shapes.keys();
     names.sort();
@@ -157,7 +216,7 @@ struct Rules {
     QString path;
     Logger logger;
     QByteArray lastRead;
-    bool enabled = true, inspect = false, motion = false, compactMenus = true;
+    bool enabled = true, inspect = false, motion = false, compactMenus = true, showSubmenuSelections = false;
     std::vector<Rule> entries, overflowEntries, hiddenEntries;
     struct Custom {
         QString id,label,program,icon,menuObjectName;
@@ -190,7 +249,8 @@ struct Rules {
         auto root = doc.object();
         if (!root.value("rules").isArray() || (root.contains("enabled") && !root.value("enabled").isBool()) ||
             (root.contains("inspect") && !root.value("inspect").isBool()) ||
-            (root.contains("motion") && !root.value("motion").isBool()) || (root.contains("compactMenus") && !root.value("compactMenus").isBool())) return false;
+            (root.contains("motion") && !root.value("motion").isBool()) || (root.contains("compactMenus") && !root.value("compactMenus").isBool()) ||
+            (root.contains("showSubmenuSelections")&&!root.value("showSubmenuSelections").isBool())) return false;
         GradientSpec nextGradient;
         if(!GradientSpec::parse(root.value("gradient"),nextGradient))return false;
         std::vector<Rule> next;
@@ -286,6 +346,7 @@ struct Rules {
         inspect = root.value("inspect").toBool(false);
         motion = root.value("motion").toBool(false);
         compactMenus = root.value("compactMenus").toBool(true);
+        showSubmenuSelections = root.value("showSubmenuSelections").toBool(false);
         entries = std::move(next);
         gradient=nextGradient;
         gradientRaw=root.value("gradient").toObject();
@@ -325,6 +386,12 @@ class Overlay final : public QWidget {
         QPixmap cachedIcon;
         qreal cachedDpr=0;
     };
+    struct SubmenuStatus {
+        QPointer<QAction> action;
+        QString original, applied;
+        QMetaObject::Connection connection;
+    };
+    std::vector<SubmenuStatus> submenuStatus_;
     QMenu *menu;
     MenuLayout layout;
     std::vector<Slot> slots_;
@@ -380,6 +447,13 @@ public:
         QTimer::singleShot(0,this,[this]{if(!menu->isVisible())layout.restore();});
     }
     void restore() {
+        for(auto &status:submenuStatus_) {
+            QObject::disconnect(status.connection);
+            if(!status.action)continue;
+            if(status.action->text()==status.applied)status.action->setText(status.original);
+            status.action->setProperty("_aftermarketBaseText",QVariant());
+        }
+        submenuStatus_.clear();
         clock_->stop();elapsed_.invalidate();hovered_.clear();motionEnabled_=false;
         hide();
         auto old = std::move(slots_);
@@ -451,6 +525,43 @@ public:
             a->setProperty("_obsUiAugmentReservation",true);
             a->setIcon(reservation);
             a->setIconVisibleInMenu(true);
+        }
+        if(rules.enabled&&rules.showSubmenuSelections&&!menu->property("_aftermarketOverflowPage").toBool()) {
+            for(auto *action:menu->actions())if(action->menu()&&!action->property("_aftermarketOverflowAction").toBool()) {
+                auto *child=action->menu();
+                submenuStatus_.push_back({action,action->text(),{},{}});
+                const auto index=submenuStatus_.size()-1;
+                auto updateStatus=[this,index]{
+                    if(index>=submenuStatus_.size())return;
+                    auto &slot=submenuStatus_[index];
+                    if(!slot.action||!slot.action->menu())return;
+                    auto current=slot.action->text();
+                    if(!slot.applied.isEmpty()&&current!=slot.applied&&current!=slot.original)
+                        slot.original=current; // host changed the label, respect it
+                    const auto choice=submenuSelection(slot.action->menu());
+                    const auto next=choice.isEmpty()?slot.original:slot.original+"  ·  "+choice;
+                    if(current!=next)slot.action->setText(next);
+                    slot.applied=next;
+                    slot.action->setProperty("_aftermarketBaseText",slot.original);
+                };
+                updateStatus();
+                submenuStatus_[index].connection=connect(child,&QMenu::aboutToShow,this,[this,index] {
+                    // Qt/OBS may refresh check marks during aboutToShow. Read
+                    // them on the following event-loop turn, not beforehand.
+                    QTimer::singleShot(0,this,[this,index] {
+                        if(!menu->isVisible()||index>=submenuStatus_.size())return;
+                        auto &slot=submenuStatus_[index];
+                        if(!slot.action||!slot.action->menu())return;
+                        const auto choice=submenuSelection(slot.action->menu());
+                        const auto next=choice.isEmpty()?slot.original:slot.original+"  ·  "+choice;
+                        if(slot.action->text()==slot.applied&&slot.action->text()!=next) {
+                            slot.action->setText(next);
+                            slot.applied=next;
+                            menu->adjustSize();
+                        }
+                    });
+                });
+            }
         }
         if (rules.inspect && !slots_.empty())
             rules.log(QString("Painted menu candidates: %1").arg(slots_.size()));
@@ -589,7 +700,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -606,6 +717,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     }
     else if (motion) root["motion"]=*motion;
     else if (compactMenus) root["compactMenus"]=*compactMenus;
+    else if (submenuSelections) root["showSubmenuSelections"]=*submenuSelections;
     else if(hidden) {
         const auto selector=canonicalSelector(entry);
         if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
@@ -675,6 +787,10 @@ QJsonObject Controller::gradientSettings() const {state->rules.refresh();return 
 bool Controller::setGradientSettings(const QJsonObject &spec,QString *error,const QJsonObject *expected) {
     if(!editRules(state->rules,{},false,error,nullptr,&spec,expected))return false;
     state->refreshGradients();return true;
+}
+bool Controller::showSubmenuSelections() const {state->rules.refresh();return state->rules.showSubmenuSelections;}
+bool Controller::setShowSubmenuSelections(bool enabled,QString *error) {
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&enabled);
 }
 bool Controller::compactMenusEnabled() const {state->rules.refresh();return state->rules.compactMenus;}
 bool Controller::setCompactMenus(bool enabled,QString *error) {

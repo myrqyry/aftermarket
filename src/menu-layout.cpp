@@ -27,7 +27,7 @@ bool sourceContextMenu(const QMenu *menu) {
     QSet<QString> labels;
     for(const auto *a:menu->actions()) {
         if(!a->isVisible()||a->isSeparator())continue;
-        QString label=a->text().section(QChar('\t'),0,0);
+        QString label=(a->property("_aftermarketBaseText").isValid()?a->property("_aftermarketBaseText").toString():a->text()).section(QChar('\t'),0,0);
         label.remove(QChar('&'));
         label=label.trimmed().toCaseFolded();
         if(label.endsWith(QStringLiteral("...")))label.chop(3);
@@ -42,7 +42,8 @@ bool sourceContextMenu(const QMenu *menu) {
 QStringList nativeLabels(const QMenu *menu) {
     QStringList labels;
     for(const auto *a:menu->actions())
-        if(a->isVisible()&&!a->isSeparator()&&!overflowAction(a))labels.append(a->text());
+        if(a->isVisible()&&!a->isSeparator()&&!overflowAction(a))
+            labels.append(a->property("_aftermarketBaseText").isValid()?a->property("_aftermarketBaseText").toString():a->text());
     return labels;
 }
 }

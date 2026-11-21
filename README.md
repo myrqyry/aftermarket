@@ -113,7 +113,7 @@ than accessing mismatched private layout data. Short menus, embedded
 widget actions and tear-off menus keep their native layout. The active
 theme supplies colors and type.
 
-## Context-menu actions (Nemo-inspired)
+## Context-menu actions
 
 Aftermarket can now customize the **contents** of a native context menu,
 rather than only its appearance. Open **Tools → UI Augment Inspector**, pick
@@ -167,9 +167,36 @@ the inspector to generate unique IDs automatically.
 
 **Current scope:** flat native QMenus, direct executable actions, and rule
 management. Ordering custom commands, nested custom groups, selection/source
-argument placeholders, and importing Nemo `.nemo_action` files are not yet
+argument placeholders, and importing external menu-action definitions are not yet
 implemented. Native menus containing embedded widget actions are excluded
 from the default removal layout for safety.
+
+## Submenu inspection and selected choices
+
+In **Tools → UI Augment Inspector → Menus & widgets**, check **List submenu
+items** to expand a captured menu into a browsable tree. It includes
+currently available nested actions, checked states, disabled rows,
+separators, and OBS's color-preset buttons. Leave it unchecked for the
+original concise top-level list. Selecting a nested action retains that
+action's own submenu scope when inspecting or saving supported rules.
+
+Enable **Show selected submenu choices** to append the one explicitly
+selected choice to its parent in the *open* native menu:
+
+- **Scale Filtering · Lanczos** (or Disable, Bilinear, Bicubic, etc.)
+- **Blending Mode · Normal**
+- **Set Color · Red** (also supports OBS's eight selected preset swatches)
+
+The toggle is off by default and persists as the root-level
+`"showSubmenuSelections": true` option in `rules.json`. It does not
+rename or replace native actions permanently: their original labels are
+restored on menu dismissal. If a submenu exposes no unambiguous checked
+choice, the parent remains unchanged. Dynamically populated submenus
+may need to be opened before capturing their full list.
+
+| Selected choices in OBS | Expanded inspector menu tree |
+| --- | --- |
+| ![Native OBS source menu showing selected color and Lanczos filtering](docs/screenshots/readme/menu-selected-choices.png) | ![Inspector listing nested native menu items and selected color preset](docs/screenshots/readme/inspector-menu-tree.png) |
 
 ## Motion
 
