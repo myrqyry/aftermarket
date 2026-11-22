@@ -280,7 +280,11 @@ int main(int argc, char **argv) {
         // The actual OBS Appearance combo uses a model, not a QMenu.
         QWidget settings;settings.setObjectName("OBSBasicSettings");
         QComboBox themes(&settings);themes.setObjectName("themeVariant");
-        for(int i=0;i<120;++i)themes.addItem(QString("Colorway %1").arg(i),i);
+        // The real picker contains 166 styles, many with long shared prefixes.
+        // Each column must display enough text to distinguish them.
+        for(int i=0;i<166;++i)
+            themes.addItem(i<52 ? QString("Catppuccin Macchiato — Variant %1").arg(i)
+                                : QString("Colorway %1").arg(i),i);
         settings.show();themes.show();app.processEvents();
         int activated=-1;
         QObject::connect(&themes,&QComboBox::activated,[&](int row){activated=row;});
@@ -290,10 +294,17 @@ int main(int argc, char **argv) {
         auto *picker=settings.findChild<QWidget*>("aftermarket-theme-picker");
         REQUIRE(picker&&picker->isVisible());
         auto *grid=picker->findChild<QListWidget*>();
-        REQUIRE(grid&&grid->count()==120&&grid->isWrapping());
+        REQUIRE(grid&&grid->count()==166&&grid->isWrapping());
+        // Before the fix, a 180px grid cell could paint its item in only
+        // ~83px (the text's natural width), leaving wide empty gaps and
+        // shortening related Colorway variants to indistinguishable names.
+        REQUIRE(grid->visualItemRect(grid->item(0)).width()>=grid->gridSize().width()-4);
+        REQUIRE(grid->visualItemRect(grid->item(1)).width()>=grid->gridSize().width()-4);
         REQUIRE(grid->visualItemRect(grid->item(0)).x()!=grid->visualItemRect(grid->item(1)).x());
         auto *search=picker->findChild<QLineEdit*>();
         REQUIRE(search);
+        search->setText("Macchiato");app.processEvents();
+        REQUIRE(!grid->item(0)->isHidden()&&grid->item(83)->isHidden());
         search->setText("Colorway 83");
         app.processEvents();
         REQUIRE(grid->item(0)->isHidden()&&!grid->item(83)->isHidden());
@@ -309,7 +320,7 @@ int main(int argc, char **argv) {
         QApplication::sendEvent(grid->viewport(),&down);
         QApplication::sendEvent(grid->viewport(),&up);
         app.processEvents();
-        REQUIRE(themes.count()==120&&themes.currentIndex()==83&&activated==83);
+        REQUIRE(themes.count()==166&&themes.currentIndex()==83&&activated==83);
         settings.hide();
         REQUIRE(controller.setCompactMenus(false));
         REQUIRE(!controller.compactMenusEnabled());

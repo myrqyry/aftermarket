@@ -521,3 +521,30 @@ Remaining: varied OBS versions/platforms, live runtime source churn,
 more complex tab groups, native UI update during dock relayout, monitoring
 on multiple audio devices, user-defined back providers, size presets, and
 long-running performance/teardown stress. No remote push.
+
+## Slice 23 — Theme/Style picker text clipping regression (2026-11-21)
+
+User supplied a photo of OBS Settings → Appearance → Style, with 166 Colorway
+variants spread across four spaced columns. Labels were rendered as repeated
+`Catpp...`/`EarthB...` fragments despite abundant blank width per column.
+Inspected current Qt picker and actual Colorway metadata: the source strings
+are intact; `QListWidget::setGridSize` spaces items but does not size their
+delegate paint rectangles. A Qt offscreen probe showed 180px grid step with
+only 83px visual item width. This was presentation clipping, not bad data.
+
+TDD: extended the actual popup test to 166 items with 52 long, similarly
+prefixed Catppuccin names. Required `visualItemRect.width` to match each
+allocated grid cell; observed a failing assertion on the old implementation.
+Fixed with explicit `QListWidgetItem::setSizeHint(gridSize)` for all items
+after determining grid width. Focused menu test then passed, including text
+filtering, scroll/selection of item 83, original combo activation, and native
+model preservation. The guard preserves screen-based column bounds and
+tooltips for genuinely overlong labels.
+
+Isolated OBS 32.2.0/Colorway with copied user theme files launched and showed
+native Appearance controls without a crash; however the isolated OBS profile
+exposes only one selectable Style despite 332 copied .ovt files (pre-existing
+test-profile limitation). Thus the full 166-entry *real OBS* popup was not
+visually validated in that instance. The changed code is also subject to the
+existing theme-picker opt-in gating via Compact menus. User's OBS instance and
+settings were not changed. No push.

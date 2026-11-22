@@ -233,8 +233,11 @@ again in More actions and uncheck it to restore its normal placement.
 
 For OBS Appearance settings, the Theme and Style combo boxes with at least
 16 choices open a searchable, scrollable grid; all choices remain present
-until the user deliberately filters them. Selection commits to the original
-combo box's model. Unrelated and editable combo boxes are left unchanged.
+until the user deliberately filters them. Long theme names use the full
+allocated grid-cell width rather than being clipped to their intrinsic label
+size; titles exceeding screen-constrained cells still have tooltips. Selection
+commits to the original combo box's model. Unrelated and editable combo boxes
+are left unchanged.
 
 The native column adapter is built for Qt 6.4.2 with its private development
 headers (on Debian/Ubuntu, qt6-base-private-dev) and requires a matching

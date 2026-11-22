@@ -67,6 +67,13 @@ bool openPicker(QComboBox *combo) {
     itemWidth=qMin(itemWidth,qMax(140,(area.width()-52)/2));
     const int columns=qBound(1,(area.width()-48)/itemWidth,5);
     list->setGridSize(QSize(itemWidth,rowHeight));
+    // QListView's gridSize positions cells but does NOT size the item delegate.
+    // Without an explicit item hint the text is still painted in its natural
+    // narrow rect, so large spaced-out columns show only 'Catpp...' fragments.
+    // Give the original labels their full grid cell; keep elision only when a
+    // label genuinely exceeds the available width.
+    for(int i=0;i<list->count();++i)
+        list->item(i)->setSizeHint(QSize(itemWidth,rowHeight));
     const int visibleRows=qMin(qCeil(double(list->count())/columns),qMax(3,(qMin(540,area.height())-90)/rowHeight));
     const QSize size(qMin(area.width(),columns*itemWidth+48),qMin(area.height(),visibleRows*rowHeight+90));
     auto refresh=[list,countLabel](const QString &query){
