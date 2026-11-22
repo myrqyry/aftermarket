@@ -733,3 +733,44 @@ will load when OBS is next opened. `mixerBackside` remains off by default:
 enable through Tools → UI Augment Inspector → Panels, then flip Audio Mixer.
 No push. This is native tracks 1–6 + monitoring, NOT an independent arbitrary
 DSP/audio bus engine.
+
+## Slice 27 — compact, draggable native Audio Mixer patchbay (2026-11-21)
+
+Mat's real dock feedback: patchbay graph was much too large; it needed
+drag-and-drop and an option to see all source connections. Inspected actual
+`AudioPatchbay::Canvas`: fixed 54px vertical row spacing, 365px minimum
+graph height, 310px minimum width, and click-only input.
+
+TDD first: added failing test requiring graph minimum height <=170px instead
+of 365px, source->track pointer drag independent of the currently selected
+source, idempotent repeat drops, rejection of drops outside valid nodes,
+and a visible-cable count / pixel-rendering test for Show all wires. Added
+`ObsRouting::setTrack(uuid,track,connected)` using existing owned OBS source
+refs and current native mixer mask, calling the public setter only if the
+bit actually changes. The original track buttons still toggle and monitoring
+remains untouched. Dragging to an already connected track is not a disconnect.
+Backend is authoritative on every drop, so stale source UUIDs cannot redirect
+edits. Qt tests passed with an injected set-track callback and precise
+mouse press/move/release events.
+
+Reworked the Canvas to a 240px minimum width, 18-32px adaptive vertical
+step, compact node rectangles, <=166px minimum height for two sources, drag
+preview and track hover feedback; source clicks still focus. Native Qt
+QPalette colors drive all artwork. The optional Show all wires checkbox is
+off by default and purely visual. Other source routes are drawn behind the
+selected route with a legible theme-derived tint; selected routes render
+last. Existing selection-specific track buttons and monitoring controls stay
+accessible. Show all is session-only (not a new persistent rules key).
+
+Real OBS 32.2.0/Colorway under an isolated Xvfb :112 copied profile:
+after changing the patchbay in the rebuilt module, all six track targets
+were visible in the short Audio Mixer dock; dragged Silent test source to
+track 2 using actual XTest pointer press, move, release. The new cable
+appeared and track 2 checkbox became checked. A normal OBS File → Exit
+persisted Silent test `mixers=43` (tracks 1,2,4,6) from initial 41
+(1,4,6); Tone test stayed `mixers=1`. Checked Show all wires and verified
+that Tone test's route became visible alongside selected Silent test.
+Updated screenshot `docs/screenshots/readme/mixer-patchbay.webp` from
+the actual isolated OBS application. No external audio bus/engine added.
+User OBS process remained running independently; no scene/recording changes
+were made to the user's profile.

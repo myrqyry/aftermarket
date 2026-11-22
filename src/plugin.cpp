@@ -57,7 +57,11 @@ static bool setAudioMixerBackside(bool enabled) {
     auto *patchbay=new augment::AudioPatchbay(
         []{return augment::ObsRouting::list();},
         [](const QString &id,int track){return augment::ObsRouting::toggleTrack(id,track);},
-        [](const QString &id,int mode){return augment::ObsRouting::setMonitoring(id,mode);}
+        [](const QString &id,int mode){return augment::ObsRouting::setMonitoring(id,mode);},
+        nullptr,
+        [](const QString &id,int track,bool connected){
+            return augment::ObsRouting::setTrack(id,track,connected);
+        }
     );
     if(!dockFaces->attach(dock,patchbay)){delete patchbay;return false;}
     return true;

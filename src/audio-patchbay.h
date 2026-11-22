@@ -7,6 +7,7 @@
 class QLabel;
 class QComboBox;
 class QToolButton;
+class QCheckBox;
 class QTimer;
 namespace augment {
 struct RouteSource {
@@ -22,23 +23,30 @@ public:
     using Query=std::function<QVector<RouteSource>()>;
     using ToggleTrack=std::function<bool(const QString &,int)>;
     using ChangeMonitoring=std::function<bool(const QString &,int)>;
-    AudioPatchbay(Query query,ToggleTrack toggle,ChangeMonitoring monitor,QWidget *parent=nullptr);
+    using SetTrack=std::function<bool(const QString &,int,bool)>;
+    AudioPatchbay(Query query,ToggleTrack toggle,ChangeMonitoring monitor,
+                  QWidget *parent=nullptr,SetTrack setTrack={});
     void refresh();
     int routeCount() const;
     QString selectedId() const;
     bool selectSource(const QString &id);
     bool toggleTrack(int track);
+    bool connectRoute(const QString &id,int track);
     bool setMonitoring(int mode);
+    bool showAllWires() const;
+    int visibleCableCount() const;
 private:
     class Canvas;
     Query query;
     ToggleTrack toggle;
     ChangeMonitoring monitor;
+    SetTrack setTrack;
     QVector<RouteSource> routes;
     QString selected;
     Canvas *canvas=nullptr;
     QLabel *status=nullptr;
     QComboBox *sources=nullptr,*monitoring=nullptr;
+    QCheckBox *allWires=nullptr;
     QToolButton *tracks[6]={};
     QTimer *timer=nullptr;
     void syncControls();

@@ -143,18 +143,29 @@ This feature is **off by default** and stored as `"mixerBackside": true` in
 `rules.json` when enabled. The original Audio Mixer remains unchanged behind
 the flip button; floating and tabified docks retain OBS's own controls. The
 backside draws actual source-to-track connections and exposes six track
-toggles and the three OBS monitoring modes. Selecting a source uses its OBS
-UUID (not its display name). The interface refreshes from OBS while visible,
-so changes in Advanced Audio Properties appear here, and vice versa.
+toggles and the three OBS monitoring modes. The graph uses compact, adaptive
+row spacing so tracks 1–6 fit into short docks instead of requiring a large
+minimum height. Selecting a source uses its OBS UUID (not its display name).
+The interface refreshes from OBS while visible, so changes in Advanced Audio
+Properties appear here, and vice versa.
+
+**Drag a source node onto a numbered track** to connect it in native OBS.
+The cable is previewed while dragging. Dropping on an already connected
+track leaves the route intact; use the numbered track button below the graph
+(or click the track node with the source selected) to toggle it off. By default
+the graph shows only the selected source's wires. Check **Show all wires**
+for every source's routes, with the selected source emphasized. This display
+checkbox is session-only; it does not change audio state. Colors are derived
+from the current OBS/Qt theme.
 
 Tracks **1–6** are native OBS assignments, not newly invented buses or six
 independent hardware outputs. Stream/record output-track selection and detailed
 audio options stay in OBS's own Settings and Advanced Audio Properties. Source
 routing changes save through OBS's usual scene collection, not a separate
-patchbay configuration. The graphic is scrollable in narrow docks; custom
+patchbay configuration. With many sources the graph can still scroll; custom
 backside editors, size presets and arbitrary audio patching are not yet built.
 
-![Real OBS/Colorway Audio Mixer backside showing native audio tracks 1, 4 and 6](docs/screenshots/readme/mixer-patchbay.webp)
+![Compact native OBS routing graph with all source wires visible](docs/screenshots/readme/mixer-patchbay.webp)
 
 ![Mixer page in OBS](docs/screenshots/readme/workspace-mixer.png)
 

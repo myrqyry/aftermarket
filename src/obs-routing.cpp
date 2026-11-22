@@ -42,6 +42,19 @@ bool ObsRouting::toggleTrack(const QString &uuid,int track){
     obs_source_release(source);
     return true;
 }
+bool ObsRouting::setTrack(const QString &uuid,int track,bool connected){
+    if(track<1||track>6)return false;
+    auto *source=sourceById(uuid);
+    if(!source)return false;
+    if(!isAudioSource(source)){obs_source_release(source);return false;}
+    const uint32_t mask=obs_source_get_audio_mixers(source);
+    const uint32_t bit=1u<<(track-1);
+    const uint32_t next=connected?(mask|bit):(mask&~bit);
+    // Connecting an already-present wire must never disconnect it.
+    if(next!=mask)obs_source_set_audio_mixers(source,next);
+    obs_source_release(source);
+    return true;
+}
 bool ObsRouting::setMonitoring(const QString &uuid,int mode){
     if(mode<OBS_MONITORING_TYPE_NONE||mode>OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)return false;
     auto *source=sourceById(uuid);

@@ -2,6 +2,8 @@
 #include <QApplication>
 #include <QToolButton>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QCoreApplication>
 #include <QAbstractItemModel>
 #include <QMouseEvent>
 #include <QPointer>
@@ -10,7 +12,7 @@
 int main(int argc,char **argv){
  QApplication app(argc,argv);app.setStyle("Fusion");
  QVector<augment::RouteSource> saved={{"id-mic","Microphone",1u,0},{"id-desk","Desktop",3u,2}};
- int writes=0,monitors=0;
+ int writes=0,monitors=0,connects=0;
  augment::AudioPatchbay ui(
   [&]{return saved;},
   [&](const QString &id,int track){
@@ -24,9 +26,59 @@ int main(int argc,char **argv){
       source.monitor=mode;++monitors;return true;
     }
     return false;
+  },nullptr,
+  [&](const QString &id,int track,bool enabled){
+    for(auto &source:saved)if(source.id==id&&track>=1&&track<=6){
+      const uint32_t bit=1u<<(track-1);
+      source.tracks=enabled?(source.tracks|bit):(source.tracks&~bit);
+      ++connects;++writes;return true;
+    }
+    return false;
   });
  ui.resize(560,510);ui.show();app.processEvents();
  REQUIRE(ui.routeCount()==2);
+ // The canvas must fit the dock without the prior 365px graph minimum.
+ auto *canvas=ui.findChild<QWidget*>("aftermarket-route-canvas");
+ REQUIRE(canvas&&canvas->minimumWidth()<=250&&canvas->minimumHeight()<=170);
+ auto *showAll=ui.findChild<QCheckBox*>("aftermarket-show-all-wires");
+ REQUIRE(showAll&&!showAll->isChecked());
+ REQUIRE(!ui.showAllWires()&&ui.visibleCableCount()==1);
+ const QImage focused=canvas->grab().toImage();
+ showAll->click();app.processEvents();
+ REQUIRE(ui.showAllWires()&&ui.visibleCableCount()==3);
+ const QImage all=canvas->grab().toImage();
+ int cablePixelsChanged=0;
+ for(int y=35;y<qMin(220,all.height());++y)
+   for(int x=135;x<all.width()-55;++x)
+     if(focused.pixel(x,y)!=all.pixel(x,y))++cablePixelsChanged;
+ REQUIRE(cablePixelsChanged>0); // all-wires changes actual rendered routes
+ showAll->click();app.processEvents();
+ REQUIRE(!ui.showAllWires()&&ui.visibleCableCount()==1);
+ // Drag from the first source to track 4, even with another source selected.
+ REQUIRE(ui.selectSource("id-desk"));
+ const auto gesture=[&](QPoint start,QPoint end){
+   auto send=[&](QEvent::Type type,QPoint pt,Qt::MouseButton button,Qt::MouseButtons held){
+     QMouseEvent event(type,QPointF(pt),QPointF(canvas->mapToGlobal(pt)),button,held,Qt::NoModifier);
+     QCoreApplication::sendEvent(canvas,&event);
+   };
+   send(QEvent::MouseButtonPress,start,Qt::LeftButton,Qt::LeftButton);
+   send(QEvent::MouseMove,end,Qt::NoButton,Qt::LeftButton);
+   send(QEvent::MouseButtonRelease,end,Qt::LeftButton,Qt::NoButton);
+   app.processEvents();
+ };
+ canvas->resize(qMax(canvas->width(),260),qMax(canvas->height(),240));
+ const QPoint source0(45,43);
+ const QPoint destination4(canvas->width()-23,43+3*32);
+ gesture(source0,destination4);
+ REQUIRE(saved[0].tracks==(1u|(1u<<3)));
+ REQUIRE(writes==1);
+ REQUIRE(ui.selectedId()=="id-mic");
+ // Dragging again to an already connected destination must not disconnect it.
+ gesture(source0,destination4);
+ REQUIRE(writes==1&&connects==1&&saved[0].tracks==(1u|(1u<<3)));
+ // A drop outside targets must not mutate any source.
+ gesture(source0,QPoint(canvas->width()/2,canvas->height()-2));
+ REQUIRE(writes==1);
  // Polling an unchanged source list should not rebuild an open combo box.
  int removedRows=0;
  auto *sourceBox=ui.findChild<QComboBox*>("aftermarket-route-source");
@@ -37,12 +89,12 @@ int main(int argc,char **argv){
  REQUIRE(ui.selectSource("id-mic"));
  REQUIRE(ui.selectedId()=="id-mic");
  auto *track4=ui.findChild<QToolButton*>("aftermarket-track-4");
- REQUIRE(track4&&track4->isEnabled()&&!track4->isChecked());
+ REQUIRE(track4&&track4->isEnabled()&&track4->isChecked());
  track4->click();app.processEvents();
- REQUIRE(writes==1&&saved[0].tracks==(1u|(1u<<3))&&track4->isChecked());
+ REQUIRE(writes==2&&saved[0].tracks==1u&&!track4->isChecked());
  auto *track1=ui.findChild<QToolButton*>("aftermarket-track-1");
  REQUIRE(track1&&track1->isChecked());track1->click();app.processEvents();
- REQUIRE(writes==2&&saved[0].tracks==(1u<<3)&&!track1->isChecked());
+ REQUIRE(writes==3&&saved[0].tracks==0u&&!track1->isChecked());
  auto *monitor=ui.findChild<QComboBox*>("aftermarket-monitor");
  REQUIRE(monitor&&monitor->currentIndex()==0);
  monitor->setCurrentIndex(1);app.processEvents();
@@ -57,7 +109,7 @@ int main(int argc,char **argv){
  REQUIRE(monitor->currentIndex()==2);
  ui.selectSource("id-desk");saved[0].id="id-changed";
  track4->click();app.processEvents(); // stale UUID fails safely
- REQUIRE(writes==2);
+ REQUIRE(writes==3);
  saved.clear();ui.refresh();
  REQUIRE(ui.routeCount()==0&&ui.selectedId().isEmpty()&&!track4->isEnabled());
  std::cout<<"audio patchbay routing verified\n";
