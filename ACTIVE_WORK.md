@@ -845,3 +845,18 @@ typefaces or all OBS-owned checked/list states. Verification is OBS 32.2.0
 on the isolated Colorway profile, not every theme, device or DPI.
 Native audio routing, scene collections and preferences are unchanged.
 The user's existing OBS process stayed running.
+
+### Slice 28 verified local install (2026-11-21)
+
+Checkpoint commit `40466b7`; full 16/16 CTests passed, isolated OBS
+Colorway Inspector and Audio Mixer visually inspected. The prior local
+module was saved as
+`~/.local/share/aftermarket/rollback/obs-ui-augment.pre-typography-polish.4a7039100dc4.so`
+before running the existing atomic `scripts/install.sh`.
+Installed module matches the tested build byte-for-byte, sha256
+`11ef6232c9e9a78e15938947948e8ae0cd26fa2a86dbba7f7ff159e5bf53adf9`.
+The user `rules.json` SHA256 was unchanged
+(`b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf`).
+The actual user OBS process stayed running as PID 2851624, with its existing
+in-memory plugin; it needs a voluntary OBS restart to load this update.
+No repo push or scene collection changes.
