@@ -1053,3 +1053,23 @@ source was muted; audible playback to a physical device is NOT verified.
 Screenshot: docs/screenshots/readme/audio-monitor-output.webp. Full isolated
 screenshot trail under build/monitor-output-smoke. User's running OBS scene
 collection and audio devices were not touched. No upstream publication.
+
+### Slice 31 verified local deployment (2026-11-22)
+
+- Source feature commit: 819f676. Full CTest 20/20 passed.
+- Exact tested and installed binary SHA-256:
+  ba12c4f507c8b29247e82f7e43ab2e9e57377d16e674d8854a592c4084cb6691.
+  Isolated OBS 32.2.0 loaded that exact binary; clicked live MON output
+  and observed native monitoring state update in its disposable profile.
+- Installed using repository's atomic scripts/install.sh, not touching the
+  user's ongoing OBS PID 3118186, which stays on its previously loaded
+  module until the next voluntary restart.
+- Previous installed binary preserved unchanged at:
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-monitor-output.e14f75bff1c8.so.
+- Existing user rules.json SHA-256 unchanged:
+  b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf.
+  Existing action-strip.json SHA-256 unchanged:
+  0585e96a5a4f4b702372062a1a78b245a59424350a0a86d4b6c4a803fa192ced.
+- Temporary Xvfb :115 and isolated OBS stopped. No live user OBS routing,
+  scene collection, monitoring devices, recording or process was changed;
+  no push. Physical monitoring-device audibility was not tested.
