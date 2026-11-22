@@ -8,9 +8,12 @@ Owner: `obs-ui-augment/`, project-facing name Aftermarket.
 Mat wants existing OBS docks to have a reversible *front* (their original native content) and
 a *back* (specialized or user-defined workspace), operated from concise dock header icons.
 Header controls may also display meaningful status, switch between tabified docks, and change
-dock sizes. The first specialized back is the Audio Mixer patchbay: a visual way to assign
-native OBS audio sources to tracks 1-6 and choose native monitoring mode. **No new audio
-routing backend, signal graph, or external patching** is wanted.
+dock sizes. The first specialized back is the Audio Mixer routing workspace, with both a compact
+matrix and an optional visual patchbay to assign native OBS audio sources to tracks 1-6
+and choose native monitoring mode. OBS already provides Advanced Audio Properties with
+those settings and additional controls; it is an existing functional reference, **not** a
+window whose widgets we should steal. **No new audio routing backend, signal graph, or
+external patching** is wanted.
 
 Preserve OBS's original ownership, controls, audio engine, tab bars, dock moves and layout.
 This is an opt-in Aftermarket presentation/interaction layer, not an OBS fork.
@@ -24,6 +27,9 @@ This is an opt-in Aftermarket presentation/interaction layer, not an OBS fork.
 - The installed libobs SDK exposes `obs_source_get_audio_mixers`,
   `obs_source_set_audio_mixers`, `obs_source_get_monitoring_type` and
   `obs_source_set_monitoring_type`.
+- Native **Advanced Audio Properties** already lays out per-source track assignments,
+  monitoring, levels and further audio controls. Keep that OBS-owned dialog intact; its
+  UI is a behavior/reference seam rather than movable content to reparent into a dock.
 - Existing `Panels` and `tests/panels-test.cpp` are suitable regression boundaries.
 - Working branch `main` was clean and one local commit ahead of origin on inspection.
   The design has not been runtime-tested.
@@ -84,7 +90,18 @@ dock destruction, widget replacement or unsupported layout transitions, Aftermar
 cleanly detach its own page/header and restore the original native widget ownership,
 visibility and applicable constraints without overriding later external changes.
 
-## Audio Mixer patchbay
+## Audio Mixer: native Advanced Audio Properties data in two views
+
+Offer **Matrix** (source rows, tracks 1–6 columns, monitoring choice; compact and
+scannable) and **Patchbay** (source nodes, six track targets, explicit monitoring control;
+more spatial and suitable for enlarged/floating docks). These are **alternate views of the
+same OBS source state**, not separate routing stores or audio engines. Prefer the matrix
+in narrow docks rather than shrinking a graph until it is unusable. Preserve the native
+Advanced Audio Properties window for detailed adjustments such as sync offset, mono,
+balance and any version-specific settings not yet exposed here. Provide an explicit action
+to open OBS's original dialog, using its existing action where it can be reliably found.
+Do not copy or reparent the original dialog's QWidgets, hijack its event handlers, or
+create a second independent source-of-truth.
 
 - Enumerate OBS audio-capable sources using appropriate public source enumeration/ref
   management; show track connectors 1–6. Actual cables reflect each source's
@@ -116,8 +133,10 @@ Implement in small TDD slices after design review:
 1. Reversible face host and compact header; prove native widget identity, action behavior,
    restore on unload/close, tab group navigation, collapse interaction, and floating.
 2. Size presets and per-session restore, including group and screen edge cases.
-3. Native OBS patchbay with read-only real-state visualization first, then explicit track
-   and monitoring edits with fake-source regression coverage and isolated OBS exercise.
+3. Native OBS Matrix read-only view matched against real Advanced Audio Properties,
+   then Patchbay as an alternative presentation. Add explicit track and monitoring edits
+   with fake-source regression coverage; verify changes in the original native dialog
+   and updates in the opposite direction within isolated OBS.
 4. Panels inspector authoring for built-in and user-defined backs, with atomic,
    independently reversible configuration and an explicit recovery path.
 
