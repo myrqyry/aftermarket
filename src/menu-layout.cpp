@@ -79,9 +79,10 @@ void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow,con
     }
     if(density) {
     originalStyle=menu->styleSheet();
+    const int minimumRow=qMax(16,menu->fontMetrics().height()+2);
     appliedStyle=originalStyle+QStringLiteral(
-        "\nQMenu::item { padding: 2px 12px; margin: 0px; min-height: 16px; }"
-        "\nQMenu::separator { height: 1px; margin: 3px 8px; }");
+        "\nQMenu::item { padding: 2px 12px; margin: 0px; min-height: %1px; }"
+        "\nQMenu::separator { height: 1px; margin: 3px 8px; }").arg(minimumRow);
     menu->setStyleSheet(appliedStyle);
     }
     for(auto *a:actions)if(explicitHidden.contains(a)&&a->isVisible()&&!a->isSeparator()) {

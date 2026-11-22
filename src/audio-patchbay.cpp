@@ -1,4 +1,5 @@
 #include "audio-patchbay.h"
+#include "visual-polish.h"
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -16,9 +17,12 @@
 #include <QKeyEvent>
 #include <QPalette>
 #include <QFontMetrics>
+#include <QStyleOptionFocusRect>
+#include <QStyle>
 #include <algorithm>
 
 namespace augment {
+using RouteTrackButton=FineStateToolButton;
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
     static constexpr int minStep=18;
@@ -116,24 +120,33 @@ protected:
         const auto fg=palette().color(QPalette::Text);
         const auto accent=palette().color(QPalette::Highlight);
         const auto muted=palette().color(QPalette::Mid);
+        const auto caption=paletteBlend(muted,fg,60); // readable on dark and light themes
         const auto base=palette().color(QPalette::Button);
-        const auto light=palette().color(QPalette::HighlightedText);
-        const qreal destX=width()-targetRight-targetWidth;
-
-        QFont small=p.font();
-        small.setPointSizeF(qMax(7.0,small.pointSizeF()-1.0));
-        p.setFont(small);
-        p.setPen(muted);
+        const QFont bodyFont=font();
+        QFont captionFont=bodyFont;
+        captionFont.setWeight(QFont::Normal);
+        if(captionFont.pointSizeF()>0)
+            captionFont.setPointSizeF(qMax(7.0,captionFont.pointSizeF()-0.75));
+        else if(captionFont.pixelSize()>0)
+            captionFont.setPixelSize(qMax(9,captionFont.pixelSize()-1));
+        p.setFont(captionFont);
+        p.setPen(caption);
         p.drawText(QRect(7,3,120,23),Qt::AlignVCenter,"Sources");
         p.drawText(QRect(width()-65,3,58,23),Qt::AlignVCenter|Qt::AlignRight,"Tracks");
 
         for(int t=1;t<=6;++t){
             const auto rect=trackRect(t);
-            p.setPen(QPen(hoveredTarget==t?accent:muted,hoveredTarget==t?2.0:1.0));
-            p.setBrush(base);
-            p.drawRoundedRect(rect,6,6);
+            const auto selectedIt=std::find_if(routes.begin(),routes.end(),
+                [this](const RouteSource &src){return src.id==selected;});
+            const bool connected=selectedIt!=routes.end()&&(selectedIt->tracks&(1u<<(t-1)));
+            p.setPen(QPen((hoveredTarget==t||connected)?accent:muted,
+                          (hoveredTarget==t||connected)?1.0:0.7));
+            p.setBrush(connected?paletteBlend(base,accent,13):base);
+            p.drawRoundedRect(rect,5,5);
+            p.setFont(bodyFont);
             p.setPen(fg);
             p.drawText(rect,Qt::AlignCenter,QString::number(t));
+            p.setFont(captionFont);
         }
         // Draw cables behind nodes. The all-wires view is intentionally
         // optional to avoid overwhelming small docks with unrelated routes.
@@ -148,7 +161,7 @@ protected:
                     if(!(src.tracks&(1u<<t)))continue;
                     QColor wire=current?accent:fg;
                     wire.setAlpha(current?225:165);
-                    p.setPen(QPen(wire,current?2.3:1.55,Qt::SolidLine,Qt::RoundCap));
+                    p.setPen(QPen(wire,current?1.25:0.8,Qt::SolidLine,Qt::RoundCap));
                     p.setBrush(Qt::NoBrush);
                     p.drawPath(cable(firstY+i*rowStep(),firstY+t*rowStep()));
                 }
@@ -156,7 +169,7 @@ protected:
         if(dragging){
             QColor preview=accent;
             preview.setAlpha(225);
-            p.setPen(QPen(preview,2.2,Qt::DashLine,Qt::RoundCap));
+            p.setPen(QPen(preview,1.25,Qt::DashLine,Qt::RoundCap));
             p.setBrush(Qt::NoBrush);
             const int sourceIndex=sourceAt(pressPoint);
             if(sourceIndex>=0){
@@ -173,18 +186,22 @@ protected:
             const auto &src=routes.at(i);
             const bool current=src.id==selected;
             const auto rect=sourceRect(i);
-            p.setPen(QPen(current?accent:muted,current?1.7:1.0));
-            p.setBrush(current?accent.lighter(128):base);
-            p.drawRoundedRect(rect,6,6);
-            p.setPen(current?light:fg);
+            p.setPen(QPen(current?accent:muted,current?0.95:0.65));
+            p.setBrush(current?paletteBlend(base,accent,18):base);
+            p.drawRoundedRect(rect,5,5);
+            QFont sourceFont=bodyFont;
+            sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
+            p.setFont(sourceFont);
+            p.setPen(fg);
             const auto name=p.fontMetrics().elidedText(src.name,Qt::ElideRight,sourceWidth-15);
             p.drawText(rect.adjusted(7,0,-3,0),Qt::AlignVCenter|Qt::AlignLeft,name);
             p.setBrush(current?accent:muted);
             p.setPen(Qt::NoPen);
-            p.drawEllipse(QPointF(portX,firstY+i*rowStep()),3.5,3.5);
+            p.drawEllipse(QPointF(portX,firstY+i*rowStep()),2.6,2.6);
+            p.setFont(captionFont);
         }
         if(routes.isEmpty()){
-            p.setPen(muted);
+            p.setPen(caption);
             p.drawText(QRect(7,35,width()-14,55),Qt::AlignHCenter|Qt::TextWordWrap,
                        "No active OBS audio sources");
         }
@@ -260,7 +277,10 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     auto *header=new QHBoxLayout;
     header->setSpacing(5);
     auto *heading=new QLabel("Audio routes",this);
-    auto font=heading->font();font.setBold(true);heading->setFont(font);
+    heading->setObjectName("aftermarket-route-heading");
+    auto font=heading->font();
+    font.setWeight(QFont::DemiBold);
+    heading->setFont(font);
     header->addWidget(heading);
     header->addStretch();
     allWires=new QCheckBox("Show all wires",this);
@@ -274,7 +294,12 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     header->addWidget(refreshButton);
     root->addLayout(header);
     auto *selector=new QHBoxLayout;
-    selector->addWidget(new QLabel("Source",this));
+    auto *sourceLabel=new QLabel("Source",this);
+    sourceLabel->setObjectName("aftermarket-route-source-label");
+    auto labelFont=sourceLabel->font();
+    labelFont.setWeight(QFont::Normal);
+    sourceLabel->setFont(labelFont);
+    selector->addWidget(sourceLabel);
     sources=new QComboBox(this);
     sources->setObjectName("aftermarket-route-source");
     sources->setAccessibleName("Choose an OBS audio source");
@@ -291,9 +316,12 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     root->addWidget(scroll,1);
     auto *trackRow=new QHBoxLayout;
     trackRow->setSpacing(3);
-    trackRow->addWidget(new QLabel("Tracks",this));
+    auto *trackLabel=new QLabel("Tracks",this);
+    trackLabel->setObjectName("aftermarket-route-tracks-label");
+    trackLabel->setFont(labelFont);
+    trackRow->addWidget(trackLabel);
     for(int i=0;i<6;++i){
-        auto *button=new QToolButton(this);
+        auto *button=new RouteTrackButton(this);
         button->setObjectName(QStringLiteral("aftermarket-track-%1").arg(i+1));
         button->setCheckable(true);
         button->setText(QString::number(i+1));
@@ -307,7 +335,10 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     root->addLayout(trackRow);
     auto *monitorRow=new QHBoxLayout;
     monitorRow->setSpacing(3);
-    monitorRow->addWidget(new QLabel("Monitoring",this));
+    auto *monitorLabel=new QLabel("Monitoring",this);
+    monitorLabel->setObjectName("aftermarket-route-monitor-label");
+    monitorLabel->setFont(labelFont);
+    monitorRow->addWidget(monitorLabel);
     monitoring=new QComboBox(this);
     monitoring->setObjectName("aftermarket-monitor");
     monitoring->addItems({"Off","Monitor Only","Monitor and Output"});

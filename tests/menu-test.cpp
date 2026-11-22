@@ -1,5 +1,6 @@
 #include "augment.h"
 #include "inspector.h"
+#include "menu-layout.h"
 #include <QScreen>
 #include <QSet>
 #include <QComboBox>
@@ -26,6 +27,24 @@ int main(int argc, char **argv) {
     QApplication app(argc, argv);
     app.setStyle("Fusion");
     QTemporaryDir dir;
+    // Density adaptation must track native Qt font metrics, rather than
+    // squeezing large theme fonts into a hardcoded 16px minimum row.
+    {
+        QMenu fontMenu;
+        auto large=fontMenu.font();
+        large.setPixelSize(27);
+        fontMenu.setFont(large);
+        for(int n=0;n<15;++n)fontMenu.addAction(QString("Choice %1").arg(n));
+        const auto nativeStyle=fontMenu.styleSheet();
+        augment::MenuLayout layout(&fontMenu);
+        layout.prepare(true,{}, {},true);
+        const int wantedRow=qMax(16,fontMenu.fontMetrics().height()+2);
+        REQUIRE(fontMenu.styleSheet().contains(
+            QStringLiteral("min-height: %1px").arg(wantedRow)));
+        layout.restore();
+        REQUIRE(fontMenu.styleSheet()==nativeStyle);
+        REQUIRE(fontMenu.font().pixelSize()==27);
+    }
     const auto path = dir.filePath("rules.json");
     auto write = [&](const QByteArray &json) { QFile f(path); return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(json)==json.size(); };
     REQUIRE(write(R"({"enabled":true,"rules":[{"text":"Rename","icon":"pencil","color":"#ff00ff"},{"text":"Copy","icon":"copy","color":"#ff00ff"},{"text":"Remove","icon":"trash","color":"#ff00ff"}]})"));

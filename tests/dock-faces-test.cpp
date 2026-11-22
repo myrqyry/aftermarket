@@ -37,6 +37,8 @@ int main(int argc,char **argv) {
   REQUIRE(flip&&flip->isVisible());
   auto *faceLabel=a->widget()->findChild<QLabel*>("aftermarket-dock-label");
   REQUIRE(faceLabel&&faceLabel->text()=="Front");
+  REQUIRE(faceLabel->font().weight()==QFont::Medium);
+  REQUIRE(faceLabel->font().family()==a->font().family());
   flip->click();app.processEvents();
   REQUIRE(faceLabel->text()=="Routing");
   REQUIRE(faces.backVisible(a)&&back->isVisible());

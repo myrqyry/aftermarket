@@ -17,6 +17,7 @@
 #include "panels.h"
 #include "property-sections.h"
 #include "row-stripes.h"
+#include "visual-polish.h"
 #include "menu-bar-compact.h"
 #include <QMenuBar>
 #include <QGroupBox>
@@ -293,7 +294,10 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     ml->setContentsMargins(12,12,12,12);gl->setContentsMargins(12,12,12,12);
     ml->setSpacing(8);gl->setSpacing(8);
     auto heading=[](const QString &title,const QString &desc,QVBoxLayout *layout,QWidget *parent){
-        auto *label=new QLabel(title,parent);QFont f=label->font();f.setBold(true);f.setPointSizeF(f.pointSizeF()+2);label->setFont(f);layout->addWidget(label);
+        auto *label=new QLabel(title,parent);
+        label->setObjectName(title=="Mixer controls"?"augment-heading-mixer":"augment-heading-gradient");
+        label->setFont(subtleHeadingFont(label->font()));
+        layout->addWidget(label);
         auto *hint=new QLabel(desc,parent);hint->setWordWrap(true);layout->addWidget(hint);
     };
     auto check=[](const QString &label,const QString &id,QVBoxLayout *layout,QWidget *parent){
@@ -449,6 +453,16 @@ struct Inspector::Ui {
 Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
+    // Colorway and other OBS themes may make every control bold. Apply only
+    // font weights inside this plugin-owned dialog: inherit the theme's
+    // actual font family, font size, palette, borders and control styling.
+    setStyleSheet(QStringLiteral(
+        "QLabel, QCheckBox, QComboBox, QLineEdit, QListWidget, "
+        "QPlainTextEdit, QSpinBox, QPushButton, QToolButton { font-weight: normal; }"
+        "QTabBar::tab { font-weight: normal; }"
+        "QTabBar::tab:selected { font-weight: 500; }"
+        "QLabel#augment-heading-mixer, QLabel#augment-heading-gradient, "
+        "QLabel#augment-target-title { font-weight: 600; }"));
     setModal(false);
     resize(820,590);
     setMinimumSize(570,420);
@@ -516,7 +530,8 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->advanced=new QCheckBox("Show technical details",menus);
     ui->details=new QWidget(menus);auto *detailsLayout=new QVBoxLayout(ui->details);detailsLayout->setContentsMargins(0,0,0,0);
     ui->type=new QLabel("Choose a menu action or inspect a native widget",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    QFont bold=ui->type->font();bold.setBold(true);ui->type->setFont(bold);
+    ui->type->setObjectName("augment-target-title");
+    ui->type->setFont(subtleHeadingFont(ui->type->font(),0));
     menuLayout->addWidget(ui->type);
     ui->geometry=new QLabel(this);ui->geometry->setTextFormat(Qt::PlainText);ui->geometry->setWordWrap(true);detailsLayout->addWidget(ui->geometry);
     ui->ancestry=new QPlainTextEdit(this);ui->ancestry->setReadOnly(true);ui->ancestry->setMaximumHeight(64);

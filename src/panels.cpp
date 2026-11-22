@@ -20,6 +20,7 @@
 #include <QToolButton>
 #include <QButtonGroup>
 #include <QFont>
+#include "visual-polish.h"
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStyle>
@@ -141,12 +142,13 @@ bool Panels::setPreviewDocked(QMainWindow *main,bool enabled) {
         auto *row=new QHBoxLayout(toolbar);
         row->setContentsMargins(6,2,6,2);row->setSpacing(4);
         auto *title=new QLabel("Studio",toolbar);
-        QFont titleFont=title->font();titleFont.setBold(true);titleFont.setPixelSize(12);
-        title->setFont(titleFont);row->addWidget(title);
+        title->setObjectName("aftermarket-studio-title");
+        title->setFont(subtleHeadingFont(title->font(),0));
+        row->addWidget(title);
         auto *group=new QButtonGroup(toolbar);group->setExclusive(true);
         for(const auto &item:{std::pair{"auto","Auto"},std::pair{"both","Both"},
                                std::pair{"program","Program"},std::pair{"preview","Preview"}}) {
-            auto *button=new QToolButton(toolbar);
+            auto *button=new FineStateToolButton(toolbar);
             button->setObjectName(QStringLiteral("aftermarket-studio-")+item.first);
             button->setText(item.second);button->setCheckable(true);
             button->setAutoRaise(true);
@@ -430,7 +432,10 @@ void Panels::updatePreviewLayout() {
         }
         if(!tracked)return;
         if(compact){
-            QFont font=original;font.setPixelSize(12);font.setWeight(QFont::DemiBold);
+            QFont font=original;
+            font.setWeight(QFont::Medium);
+            if(font.pixelSize()>0)font.setPixelSize(qMax(9,font.pixelSize()-1));
+            else if(font.pointSizeF()>0)font.setPointSizeF(qMax(7.5,font.pointSizeF()-0.5));
             applied=font;
             if(tracked->font()!=font)tracked->setFont(font);
         } else if(tracked->font()==applied&&tracked->font()!=original){

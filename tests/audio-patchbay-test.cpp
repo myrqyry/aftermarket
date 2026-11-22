@@ -3,6 +3,9 @@
 #include <QToolButton>
 #include <QComboBox>
 #include <QCheckBox>
+#include <QLabel>
+#include <QImage>
+#include <QFont>
 #include <QCoreApplication>
 #include <QAbstractItemModel>
 #include <QMouseEvent>
@@ -37,9 +40,29 @@ int main(int argc,char **argv){
   });
  ui.resize(560,510);ui.show();app.processEvents();
  REQUIRE(ui.routeCount()==2);
+ // Typography: one restrained heading, body-weight labels, theme font intact.
+ auto *heading=ui.findChild<QLabel*>("aftermarket-route-heading");
+ auto *sourceLabel=ui.findChild<QLabel*>("aftermarket-route-source-label");
+ auto *trackLabel=ui.findChild<QLabel*>("aftermarket-route-tracks-label");
+ auto *monitorLabel=ui.findChild<QLabel*>("aftermarket-route-monitor-label");
+ REQUIRE(heading&&heading->font().weight()==QFont::DemiBold);
+ REQUIRE(sourceLabel&&sourceLabel->font().weight()==QFont::Normal);
+ REQUIRE(trackLabel&&trackLabel->font().weight()==QFont::Normal);
+ REQUIRE(monitorLabel&&monitorLabel->font().weight()==QFont::Normal);
+ REQUIRE(heading->font().family()==ui.font().family());
  // The canvas must fit the dock without the prior 365px graph minimum.
  auto *canvas=ui.findChild<QWidget*>("aftermarket-route-canvas");
  REQUIRE(canvas&&canvas->minimumWidth()<=250&&canvas->minimumHeight()<=170);
+ // A selected source should be an understated, theme-derived tint, not
+ // an opaque bright highlight that overwhelms its label.
+ const auto base=canvas->palette().color(QPalette::Button);
+ const auto accent=canvas->palette().color(QPalette::Highlight);
+ const auto distance=[](QColor a,QColor b){
+   const int r=a.red()-b.red(),g=a.green()-b.green(),bl=a.blue()-b.blue();
+   return r*r+g*g+bl*bl;
+ };
+ const auto selectedPixel=canvas->grab().toImage().pixelColor(113,35);
+ REQUIRE(distance(selectedPixel,base)<distance(selectedPixel,accent));
  auto *showAll=ui.findChild<QCheckBox*>("aftermarket-show-all-wires");
  REQUIRE(showAll&&!showAll->isChecked());
  REQUIRE(!ui.showAllWires()&&ui.visibleCableCount()==1);
@@ -90,6 +113,11 @@ int main(int argc,char **argv){
  REQUIRE(ui.selectedId()=="id-mic");
  auto *track4=ui.findChild<QToolButton*>("aftermarket-track-4");
  REQUIRE(track4&&track4->isEnabled()&&track4->isChecked());
+ REQUIRE(track4->font().weight()<=QFont::Medium);
+ const auto trackImage=track4->grab().toImage();
+ const auto trackBg=trackImage.pixelColor(5,trackImage.height()/2);
+ REQUIRE(distance(trackBg,track4->palette().color(QPalette::Button)) <
+         distance(trackBg,track4->palette().color(QPalette::Highlight)));
  track4->click();app.processEvents();
  REQUIRE(writes==2&&saved[0].tracks==1u&&!track4->isChecked());
  auto *track1=ui.findChild<QToolButton*>("aftermarket-track-1");

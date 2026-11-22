@@ -10,6 +10,7 @@
 #include <QStackedWidget>
 #include <QToolButton>
 #include <QStyle>
+#include <QFont>
 #include <QTimer>
 
 namespace augment {
@@ -73,6 +74,9 @@ bool DockFaces::attach(QDockWidget *dock,QWidget *back) {
     controls->setSpacing(2);
     auto *title=new QLabel("Front",bar);
     title->setObjectName("aftermarket-dock-label");
+    QFont titleFont=title->font();
+    titleFont.setWeight(QFont::Medium);
+    title->setFont(titleFont);
     title->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
     controls->addWidget(title,1);
     auto *prev=button(bar,"aftermarket-tab-previous","Previous dock tab",Qt::LeftArrow);

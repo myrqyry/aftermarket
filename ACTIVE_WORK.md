@@ -795,3 +795,53 @@ the tested build. Existing `rules.json` SHA remained
 `b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf`.
 New graph will appear **after the user next restarts OBS**; running process
 continues using its old, already-loaded module. No push.
+
+## Slice 28 — coordinated theme-aware typography and selected-state polish (2026-11-21)
+
+User requested a typography review with thinner set/selected states, then
+corrected an overly narrow Audio Patchbay-only focus. This checkpoint
+deliberately covers **several Aftermarket surfaces** rather than only the
+most recently implemented widget.
+
+Reviewed in the real Colorway theme and patched:
+- Audio patchbay: selected source tint now subtle rather than opaque accent
+  fill; 0.95px selected source outlines, 1.25px focused wires, 0.8px
+  unfocused wires, 1.25px drag guide, finer target ports. Native theme
+  button/text/highlight colors are blended rather than using fixed colors.
+  Captions gain legibility, labels use differentiated native-font weights.
+- Shared header-only `visual-polish.h`: a strictly Aftermarket-owned
+  `FineStateToolButton` with a 1px highlight hairline in the selected
+  state, restrained native-palette tint, normal weight text, and
+  QStyle-provided focus rectangle. Used by patchbay track controls *and*
+  native Studio Mode's Auto/Both/Program/Preview toolbar selections.
+  Leaves source, panel and OBS-owned widgets/behavior untouched.
+- Inspector: Mixer and Gradient headings are semibold, theme-relative
+  size (+0.75pt where available) rather than hardcoded bold +2pt;
+  target heading semibold. A dialog-scoped font-weight stylesheet prevents
+  inherited all-bold themes from flattening the hierarchy; only font
+  weight is specified, never font family, palette, background or border.
+  This does not restyle application-level native menus.
+- Studio Mode: title semibold, derived from theme size instead of 12px.
+  Compact native Preview and Program title sizes derive from each original
+  native QFont; use Medium weight rather than fixed DemiBold 12px.
+- Dock face labels: Medium font weight from original theme font.
+- Compact menu density: minimum row size tracks native QFontMetrics
+  instead of fixed 16px, preserving the active font and native action
+  handlers.
+
+TDD red/green tests added for Inspector typography and scoped styling,
+studio selection style and font-relative labels, dock label weight, font-
+metric-sensitive compact menu height with restoration, and patchbay selected
+state/tint/fonts. All 16 CTests passed (no new build warnings). A fresh
+isolated OBS 32.2.0 Colorway runtime under Xvfb :113 loaded the module and
+visually inspected the full mixer patchbay and Mixer Inspector page.
+Screenshots updated/created:
+`docs/screenshots/readme/mixer-patchbay.webp`,
+`docs/screenshots/readme/inspector-typography.webp`.
+
+Boundary: explicit per-widget theme QSS may still determine exact
+font-face appearance; this pass intentionally does not override Colorway
+typefaces or all OBS-owned checked/list states. Verification is OBS 32.2.0
+on the isolated Colorway profile, not every theme, device or DPI.
+Native audio routing, scene collections and preferences are unchanged.
+The user's existing OBS process stayed running.

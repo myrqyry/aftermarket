@@ -137,6 +137,22 @@ are deliberately excluded until their native behavior can be checked.
 
 ![Alternating row colors on native Scenes and Sources lists](docs/screenshots/readme/alternating-scenes-sources.webp)
 
+### Theme-aware typography and selected states
+
+Aftermarket's own controls use a restrained visual hierarchy without
+changing the current OBS theme's font family or color palette. The Inspector
+uses normal-weight body text and semibold section headings; Studio Mode
+labels scale relative to the active font rather than forcing 12px.
+Aftermarket-owned selected Studio view buttons and patchbay track switches
+use a fine theme-color outline rather than the stronger generic checked
+state. Audio cables, selected source borders and drag previews are also
+thinner, while their source/track routes remain unchanged.
+
+Compact menus honor the active font's actual line height. **Native OBS
+widgets, menus and source list selection remain owned by OBS and its theme.**
+
+![Aftermarket Inspector typography with Colorway](docs/screenshots/readme/inspector-typography.webp)
+
 ### Native Audio Mixer backside
 
 This feature is **off by default** and stored as `"mixerBackside": true` in

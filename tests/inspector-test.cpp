@@ -79,6 +79,20 @@ int main(int argc,char **argv) {
         main.menuBar()->addMenu("&Tools");
         int flips=0;
         augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;},&stripes,&compactBar);
+        const auto typeRules=inspector.styleSheet();
+        REQUIRE(typeRules.contains("font-weight: normal"));
+        REQUIRE(typeRules.contains("QLabel#augment-heading-mixer"));
+        REQUIRE(typeRules.contains("QCheckBox"));
+        REQUIRE(!typeRules.contains("color:")); // theme owns all foreground/background colors
+        auto *mixerHeading=inspector.findChild<QLabel*>("augment-heading-mixer");
+        auto *gradientHeading=inspector.findChild<QLabel*>("augment-heading-gradient");
+        auto *targetTitle=inspector.findChild<QLabel*>("augment-target-title");
+        REQUIRE(mixerHeading&&gradientHeading&&targetTitle);
+        REQUIRE(mixerHeading->font().weight()==QFont::DemiBold);
+        REQUIRE(gradientHeading->font().weight()==QFont::DemiBold);
+        REQUIRE(targetTitle->font().weight()==QFont::DemiBold);
+        REQUIRE(mixerHeading->font().family()==inspector.font().family());
+        REQUIRE(mixerHeading->font().pointSizeF()<=inspector.font().pointSizeF()+1.1);
         auto *hamburgerToggle=inspector.findChild<QCheckBox*>("augment-hamburger-menu-bar");
         REQUIRE(hamburgerToggle&&!hamburgerToggle->isChecked());
         hamburgerToggle->click();

@@ -144,6 +144,7 @@ int main(int argc,char **argv) {
  auto *disabled=new QWidget(editor);disabled->setObjectName("previewDisabledWidget");disabled->hide();
  auto *previewPane=new QWidget(editor);previewPane->setObjectName("previewContainer");
  auto *previewLabel=new QLabel("Preview: Scene",previewPane);previewLabel->setObjectName("previewLabel");
+ const QFont originalPreviewLabelFont=previewLabel->font();
  auto *previewDisplay=new QWidget(previewPane);previewDisplay->setObjectName("preview");
  auto *previewPaneLayout=new QVBoxLayout(previewPane);previewPaneLayout->addWidget(previewLabel);previewPaneLayout->addWidget(previewDisplay);
  editorLayout->addWidget(disabled);editorLayout->addWidget(previewPane);
@@ -177,6 +178,14 @@ int main(int argc,char **argv) {
  auto *previewButtonMode=toolbar->findChild<QToolButton*>("aftermarket-studio-preview");
  REQUIRE(autoButton&&bothButton&&programButton&&previewButtonMode);
  REQUIRE(autoButton->isChecked());
+ auto *studioTitle=toolbar->findChild<QLabel*>("aftermarket-studio-title");
+ REQUIRE(studioTitle&&studioTitle->font().weight()==QFont::DemiBold);
+ REQUIRE(studioTitle->font().family()==responsive.font().family());
+ REQUIRE(studioTitle->font().pixelSize()<=responsive.font().pixelSize()+1);
+ // Selected state is rendered by a thin theme-derived button, not by
+ // Colorway's generic bold checked-state typography.
+ REQUIRE(autoButton->property("aftermarket-thin-state").toBool());
+ REQUIRE(autoButton->font().weight()<=QFont::Medium);
  REQUIRE(editorLayout->direction()==QBoxLayout::BottomToTop);
  REQUIRE(optionsLayout->direction()==QBoxLayout::LeftToRight);
  QPointer<QScrollArea> strip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
@@ -202,7 +211,12 @@ int main(int argc,char **argv) {
  REQUIRE(editorLayout->stretch(editorLayout->indexOf(programPane)) >
          editorLayout->stretch(editorLayout->indexOf(previewPane)));
  const int bothProgramHeight=programPane->height();
- REQUIRE(previewLabel->font().pixelSize()>0&&previewLabel->font().pixelSize()<=13);
+ REQUIRE(previewLabel->font().family()==originalPreviewLabelFont.family());
+ REQUIRE(previewLabel->font().weight()==QFont::Medium);
+ if(originalPreviewLabelFont.pixelSize()>0)
+     REQUIRE(previewLabel->font().pixelSize()==qMax(9,originalPreviewLabelFont.pixelSize()-1));
+ else if(originalPreviewLabelFont.pointSizeF()>0)
+     REQUIRE(qAbs(previewLabel->font().pointSizeF()-qMax(7.5,originalPreviewLabelFont.pointSizeF()-0.5))<0.01);
  previewButtonMode->click();app.processEvents();
  REQUIRE(previewPane->isVisible()&&!programPane->isVisible());
  programButton->click();app.processEvents();
