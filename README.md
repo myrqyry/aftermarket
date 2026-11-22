@@ -60,6 +60,8 @@ from four pages in one native, theme-aware window:
 - **Panels:** collapse/expand eligible native docks, refresh the list or
   expand all. Optionally move the existing OBS preview and its source toolbar
   into a movable, floatable, closable native dock, or restore it to the center.
+  Enable **Collapsible source / filter property groups** to add independent
+  fold arrows to ordinary grouped OBS settings, preserving their live controls.
   The Tools → UI Augment Panels shortcut opens this page.
 
 ![Mixer page in OBS](docs/screenshots/readme/workspace-mixer.png)
@@ -67,6 +69,13 @@ from four pages in one native, theme-aware window:
 ![Gradient page in OBS](docs/screenshots/readme/workspace-gradients.png)
 
 ![Panels page in OBS](docs/screenshots/readme/workspace-panels.png)
+
+Property-group folding is off by default and saved as `collapsiblePropertyGroups` in
+`rules.json`. It affects native `OBSPropertiesView` **ordinary QGroupBox sections**
+only, not ungrouped filter controls or checkable enable/disable groups. Expanded
+content is the original OBS form, and disabling the feature restores its
+original row visibility. The folded state is session-only; groups rebuilt by
+OBS begin expanded. No settings values are changed by folding.
 
 Mixer and gradient edits share an explicit Apply changes button; a pending
 indicator and Reload saved settings distinguish the draft from applied

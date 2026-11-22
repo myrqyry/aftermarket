@@ -4,6 +4,7 @@
 #include <QPointer>
 #include "inspector.h"
 #include "panels.h"
+#include "property-sections.h"
 #include <QMainWindow>
 #include <util/bmem.h>
 #include <QApplication>
@@ -20,8 +21,10 @@ static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
 static QPointer<QAction> toolsAction, panelsAction;
 static std::unique_ptr<augment::Panels> panels;
+static std::unique_ptr<augment::PropertySections> propertySections;
 static void cleanupUi() {
     delete inspector.data();
+    propertySections.reset();
     transforms.reset(); // Restore original OBS accessibility colors before exit-save.
     panels.reset();
     delete panelsAction.data();
@@ -54,10 +57,12 @@ MODULE_EXPORT bool obs_module_load(void) {
     controller->setAudioProvider([](const QWidget *w){return audio?audio->level(w):std::optional<float>{};},
         []{if(audio)audio->clear();});
     controller->setMeterProvider([](const QWidget *w){return audio?audio->sample(w):std::optional<augment::MeterReading>{};});
+    propertySections=std::make_unique<augment::PropertySections>();
+    propertySections->setEnabled(controller->collapsiblePropertyGroups());
     toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
     if (toolsAction) QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if (!inspector) inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get());
+            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get());
         inspector->show();
         inspector->raise();
         inspector->activateWindow();
@@ -68,7 +73,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         []{return controller&&controller->modernTransformFrame();});
     panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
     if(panelsAction) QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
-        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get());
+        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get());
         inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
     });
     obs_frontend_add_event_callback(frontendEvent,nullptr);

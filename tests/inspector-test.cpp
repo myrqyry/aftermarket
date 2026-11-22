@@ -22,6 +22,7 @@
 #include <QMainWindow>
 #include <QDockWidget>
 #include "panels.h"
+#include "property-sections.h"
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
 int main(int argc,char **argv) {
@@ -33,13 +34,28 @@ int main(int argc,char **argv) {
     REQUIRE(write(R"({"enabled":true,"inspect":false,"extra":"keep","rules":[{"text":"Rename","icon":"pencil"},{"text":"Copy","icon":"copy"}]})"));
     augment::Controller c(path);
     REQUIRE(!c.modernTransformFrame());
+    REQUIRE(!c.collapsiblePropertyGroups());
+    REQUIRE(c.setCollapsiblePropertyGroups(true));
+    REQUIRE(c.collapsiblePropertyGroups());
+    REQUIRE(QJsonDocument::fromJson(read()).object().value("collapsiblePropertyGroups").toBool());
+    REQUIRE(c.setCollapsiblePropertyGroups(false));
+    REQUIRE(!c.collapsiblePropertyGroups());
     REQUIRE(c.setModernTransformFrame(true));
     REQUIRE(c.modernTransformFrame());
     REQUIRE(c.setModernTransformFrame(false));
     REQUIRE(!c.modernTransformFrame());
 
     {
-        augment::Inspector inspector(c);
+        QMainWindow main;
+        augment::Panels panels;
+        augment::PropertySections sections;
+        augment::Inspector inspector(c,&main,&panels,&sections);
+        auto *propertyGroups=inspector.findChild<QCheckBox*>("augment-property-sections");
+        REQUIRE(propertyGroups&&!propertyGroups->isChecked());
+        propertyGroups->click();
+        REQUIRE(c.collapsiblePropertyGroups()&&sections.enabled());
+        propertyGroups->click();
+        REQUIRE(!c.collapsiblePropertyGroups()&&!sections.enabled());
         auto *compact=inspector.findChild<QCheckBox*>("augment-compact-menus");
         REQUIRE(compact&&compact->isChecked());
         compact->click();

@@ -10,6 +10,7 @@ class QAction;
 namespace augment {
 class Controller;
 class Panels;
+class PropertySections;
 struct ActionSnapshot {
     QString text, objectName;
     bool checkable=false, custom=false, visible=false, enabled=false, nativeIcon=false;
@@ -34,7 +35,8 @@ WidgetSnapshot inspectAt(const QPoint &globalPosition);
 QJsonObject selectorFor(const WidgetSnapshot &, int row, bool scopeMenu);
 class Inspector final : public QDialog {
 public:
-    explicit Inspector(Controller &controller, QWidget *parent=nullptr, Panels *panels=nullptr);
+    explicit Inspector(Controller &controller, QWidget *parent=nullptr, Panels *panels=nullptr,
+                       PropertySections *sections=nullptr);
     ~Inspector() override;
     void openPanels();
     void capture(const WidgetSnapshot &snapshot);

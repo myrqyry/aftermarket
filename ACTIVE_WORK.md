@@ -447,3 +447,30 @@ these two new tests. Real user profile, scenes and live OBS process not
 changed. No push unless explicitly requested. Current limits: native hit
 radius unchanged, groups skipped, graphics-layer compositor required for
 round art, no Wayland/Windows/macOS validation, custom zoom not covered.
+
+## Slice 21 — optional native property group folding (2026-11-21)
+
+Scope: safe first part of the dock/settings/property brainstorming. Built an
+opt-in `PropertySections` observer that finds *ordinary* `QGroupBox` sections
+inside genuine `OBSPropertiesView → PropertiesContainer` widgets. Adds a small
+arrow at each section header and uses Qt 6.4 `QFormLayout::setRowVisible`
+on existing rows. No native widget is reparented, cloned, or disconnected;
+filter values, original row visibility, and native enable/check state are
+preserved. Disabling the feature restores original row visibility and removes
+arrows; destroying a dialog tears down the observer's entries.
+
+Inspector → Panels has an immediate checkbox. Its `collapsiblePropertyGroups`
+bool persists atomically in the existing rules JSON; default false. Native
+checkable groups (whose checkbox controls property enablement), unrelated
+QGroupBox widgets, and ungrouped property rows are deliberately not modified.
+Group fold positions are not persisted across OBS rebuilds.
+
+TDD: `property-sections-test` covers source ownership matching, fold/restore,
+preserving native values, initially hidden rows, dynamic new group attachment,
+non-OBS exclusion, checkable group exclusion, and teardown. Inspector test covers
+rules persistence and immediate toggle behavior. Full CTest: 11/11 green.
+Isolated OBS 32.2.0 Xvfb with a copied scene/profile and freshly built module
+loaded successfully and opened an existing color-correction filter without a
+crash; that filter has no native group, so the *real OBS group-arrow interaction*
+is not yet verified. No live user OBS process or profile modified. Native
+property-group testing across plugins and themes remains needed.

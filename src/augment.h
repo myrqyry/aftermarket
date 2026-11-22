@@ -40,6 +40,8 @@ public:
     bool setShowSubmenuSelections(bool enabled,QString *error=nullptr);
     bool modernTransformFrame() const;
     bool setModernTransformFrame(bool enabled,QString *error=nullptr);
+    bool collapsiblePropertyGroups() const;
+    bool setCollapsiblePropertyGroups(bool enabled,QString *error=nullptr);
     bool compactMenusEnabled() const;
     bool setCompactMenus(bool enabled, QString *error = nullptr);
     bool motionEnabled() const;

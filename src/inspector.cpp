@@ -15,6 +15,7 @@
 #include "motion.h"
 #include "gradient.h"
 #include "panels.h"
+#include "property-sections.h"
 #include <QMainWindow>
 #include <QTabWidget>
 #include <QAbstractButton>
@@ -440,7 +441,7 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDialog(parent),ui(new Ui(controller)) {
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     setModal(false);
@@ -677,7 +678,29 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels):QDia
     rl->addStretch();rl->addLayout(buttons);split->addWidget(left);split->addWidget(right);split->setSizes({310,420});
     ui->footer=new QWidget(this);root->addWidget(ui->footer);root->addWidget(ui->status);
     ui->settings=buildSettings(controller,ui->tabs,parent,ui->footer,ui->status);
-    if(panels)ui->tabs->addTab(panels->createPage(qobject_cast<QMainWindow*>(parent),ui->tabs),"Panels");
+    if(panels){
+        auto *page=panels->createPage(qobject_cast<QMainWindow*>(parent),ui->tabs);
+        if(sections){
+            auto *toggle=new QCheckBox("Collapsible source / filter property groups",page);
+            toggle->setObjectName("augment-property-sections");
+            toggle->setToolTip("Add a separate collapse arrow to ordinary OBS property groups. Does not alter filter settings or checkable enable/disable groups.");
+            toggle->setChecked(controller.collapsiblePropertyGroups());
+            if(auto *layout=qobject_cast<QVBoxLayout*>(page->layout()))layout->insertWidget(1,toggle);
+            QPointer<PropertySections> safe(sections);
+            connect(toggle,&QCheckBox::toggled,page,[&controller,toggle,safe, this](bool value){
+                QString error;
+                if(controller.setCollapsiblePropertyGroups(value,&error)) {
+                    if(safe)safe->setEnabled(value);
+                    ui->status->setText(value?"Property group collapse arrows enabled.":"Original property group layouts restored.");
+                } else {
+                    const QSignalBlocker blocker(toggle);
+                    toggle->setChecked(controller.collapsiblePropertyGroups());
+                    ui->status->setText(error);
+                }
+            });
+        }
+        ui->tabs->addTab(page,"Panels");
+    }
     ui->footer->hide();
     connect(ui->tabs,&QTabWidget::currentChanged,this,[this](int index){
         ui->footer->setVisible(index==1||index==2);
