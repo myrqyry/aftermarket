@@ -17,6 +17,8 @@
 #include <QKeyEvent>
 #include <QPalette>
 #include <QFontMetrics>
+#include <QStringList>
+#include <QEvent>
 #include <QStyleOptionFocusRect>
 #include <QStyle>
 #include <algorithm>
@@ -41,7 +43,17 @@ class AudioPatchbay::Canvas final : public QWidget {
     bool dragging=false;
     QString dragId;
     int hoveredTarget=-1;
+    QString hoveredSource;
 
+    // Hover is a temporary visual query, never an OBS routing mutation.
+    QString focusedSource() const {
+        return hoveredSource.isEmpty()?selected:hoveredSource;
+    }
+    bool visibleWire(const RouteSource &src,int track) const {
+        if(hoveredTarget>0&&!dragging)
+            return track==hoveredTarget && (src.tracks&(1u<<(track-1)));
+        return (showAll||src.id==focusedSource()) && (src.tracks&(1u<<(track-1)));
+    }
     QRect sourceRect(int i) const {
         return QRect(sourceLeft,firstY+i*rowStep()-nodeHeight()/2,
                      sourceWidth,nodeHeight());
@@ -72,6 +84,7 @@ class AudioPatchbay::Canvas final : public QWidget {
         pressedSource=-1;
         dragId.clear();
         hoveredTarget=-1;
+        hoveredSource.clear();
         unsetCursor();
         update();
     }
@@ -94,8 +107,8 @@ public:
     int visibleCableCount() const {
         int count=0;
         for(const auto &src:routes)
-            if(showAll||src.id==selected)
-                for(int t=0;t<6;++t)if(src.tracks&(1u<<t))++count;
+            for(int track=1;track<=6;++track)
+                if(visibleWire(src,track))++count;
         return count;
     }
     void setRoutes(const QVector<RouteSource> &value,const QString &current){
@@ -104,6 +117,9 @@ public:
             [this](const RouteSource &src){return src.id==dragId;}))resetDrag();
         routes=value;
         selected=current;
+        if(!hoveredSource.isEmpty()&&!std::any_of(routes.begin(),routes.end(),
+            [this](const RouteSource &src){return src.id==hoveredSource;}))
+            hoveredSource.clear();
         setMinimumHeight(58+qMax(routes.size(),6)*minStep);
         updateGeometry();
         update();
@@ -155,15 +171,19 @@ protected:
         for(int pass=0;pass<2;++pass)
             for(int i=0;i<routes.size();++i){
                 const auto &src=routes.at(i);
-                const bool current=src.id==selected;
-                if(current!=(pass==1)||(!showAll&&!current))continue;
-                for(int t=0;t<6;++t){
-                    if(!(src.tracks&(1u<<t)))continue;
+                const bool current=src.id==focusedSource();
+                if(current!=(pass==1))continue;
+                for(int track=1;track<=6;++track){
+                    if(!visibleWire(src,track))continue;
+                    // Muted/disabled source routes remain wired in OBS; their
+                    // dashed strokes indicate status, not disconnected wiring.
+                    const bool healthy=src.enabled&&!src.muted;
                     QColor wire=current?accent:fg;
-                    wire.setAlpha(current?225:165);
-                    p.setPen(QPen(wire,current?1.25:0.8,Qt::SolidLine,Qt::RoundCap));
+                    wire.setAlpha(current?(healthy?225:155):(healthy?145:90));
+                    p.setPen(QPen(wire,current?1.25:0.8,
+                                  healthy?Qt::SolidLine:Qt::DashLine,Qt::RoundCap));
                     p.setBrush(Qt::NoBrush);
-                    p.drawPath(cable(firstY+i*rowStep(),firstY+t*rowStep()));
+                    p.drawPath(cable(firstY+i*rowStep(),firstY+(track-1)*rowStep()));
                 }
             }
         if(dragging){
@@ -186,16 +206,27 @@ protected:
             const auto &src=routes.at(i);
             const bool current=src.id==selected;
             const auto rect=sourceRect(i);
-            p.setPen(QPen(current?accent:muted,current?0.95:0.65));
+            const bool focused=src.id==focusedSource();
+            p.setPen(QPen(focused?accent:muted,focused?0.95:0.65));
             p.setBrush(current?paletteBlend(base,accent,18):base);
             p.drawRoundedRect(rect,5,5);
             QFont sourceFont=bodyFont;
             sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
             p.setFont(sourceFont);
             p.setPen(fg);
-            const auto name=p.fontMetrics().elidedText(src.name,Qt::ElideRight,sourceWidth-15);
-            p.drawText(rect.adjusted(7,0,-3,0),Qt::AlignVCenter|Qt::AlignLeft,name);
-            p.setBrush(current?accent:muted);
+            const QString badge=!src.enabled?QStringLiteral("Off"):
+                                src.muted?QStringLiteral("M"):QString();
+            const int badgeWidth=badge.isEmpty()?0:(p.fontMetrics().horizontalAdvance(badge)+10);
+            const auto name=p.fontMetrics().elidedText(src.name,Qt::ElideRight,
+                                                       sourceWidth-15-badgeWidth);
+            p.drawText(rect.adjusted(7,0,-3-badgeWidth,0),
+                       Qt::AlignVCenter|Qt::AlignLeft,name);
+            if(!badge.isEmpty()){
+                p.setPen(paletteBlend(muted,fg,55));
+                p.drawText(rect.adjusted(sourceWidth-badgeWidth,0,-3,0),
+                           Qt::AlignVCenter|Qt::AlignRight,badge);
+            }
+            p.setBrush(focused?accent:muted);
             p.setPen(Qt::NoPen);
             p.drawEllipse(QPointF(portX,firstY+i*rowStep()),2.6,2.6);
             p.setFont(captionFont);
@@ -235,10 +266,40 @@ protected:
                 update();
             }
         }else{
-            const int target=trackAt(event->position().toPoint());
-            if(target!=hoveredTarget){hoveredTarget=target;update();}
+            const QPoint point=event->position().toPoint();
+            const int target=trackAt(point);
+            const int sourceIndex=sourceAt(point);
+            const QString sourceId=sourceIndex>=0?routes.at(sourceIndex).id:QString();
+            if(target!=hoveredTarget||sourceId!=hoveredSource){
+                hoveredTarget=target;
+                hoveredSource=sourceId;
+                update();
+            }
+            if(sourceIndex>=0){
+                const auto &src=routes.at(sourceIndex);
+                QStringList state;
+                if(src.muted)state<<"Muted";
+                if(!src.enabled)state<<"Disabled";
+                if(!src.audioActive)state<<"OBS audio inactive";
+                setToolTip(src.name+(state.isEmpty()?QString():(" · "+state.join(" · "))));
+            }else if(target>0){
+                int incoming=0;
+                for(const auto &src:routes)if(src.tracks&(1u<<(target-1)))++incoming;
+                setToolTip(QStringLiteral("Track %1 · %2 connected %3").arg(target)
+                           .arg(incoming).arg(incoming==1?"source":"sources"));
+            }else{
+                setToolTip("Drag a source to a track to connect; hover to inspect current routes.");
+            }
         }
         event->accept();
+    }
+    void leaveEvent(QEvent *event) override {
+        if(!dragging && (hoveredTarget>0 || !hoveredSource.isEmpty())){
+            hoveredTarget=-1;
+            hoveredSource.clear();
+            update();
+        }
+        QWidget::leaveEvent(event);
     }
     void mouseReleaseEvent(QMouseEvent *event) override {
         if(event->button()!=Qt::LeftButton){
@@ -345,6 +406,12 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     monitoring->setAccessibleName("Native OBS monitoring mode");
     monitorRow->addWidget(monitoring,1);
     root->addLayout(monitorRow);
+    diagnostics=new QLabel(this);
+    diagnostics->setObjectName("aftermarket-route-diagnostics");
+    diagnostics->setAccessibleName("OBS source routing and health");
+    diagnostics->setToolTip("Read-only OBS state; Audio active does not mean audible signal.");
+    diagnostics->setWordWrap(true);
+    root->addWidget(diagnostics);
     status=new QLabel("Drag a source onto a track to connect.",this);
     status->setObjectName("aftermarket-route-status");
     status->setWordWrap(true);
@@ -392,6 +459,25 @@ void AudioPatchbay::syncControls(){
     }
     monitoring->setEnabled(chosen>=0);
     monitoring->setCurrentIndex(chosen<0?-1:routes.at(chosen).monitor);
+    if(chosen<0){
+        diagnostics->setText("No audio source selected");
+    }else{
+        const auto &source=routes.at(chosen);
+        QStringList tracksInUse;
+        for(int t=1;t<=6;++t)
+            if(source.tracks&(1u<<(t-1)))tracksInUse<<QString::number(t);
+        const QString trackState=tracksInUse.isEmpty()?
+            QStringLiteral("No output tracks"):
+            QStringLiteral("%1 %2").arg(tracksInUse.size()==1?"Track":"Tracks",
+                                        tracksInUse.join(", "));
+        const QString monitorState=source.monitor==1?"Monitor only":
+                                   source.monitor==2?"Monitor and output":"Monitor off";
+        QStringList state{trackState,monitorState};
+        if(source.muted)state<<"Muted";
+        if(!source.enabled)state<<"Disabled";
+        state<<(source.audioActive?"Audio active":"Audio inactive");
+        diagnostics->setText(state.join(" · "));
+    }
     canvas->setRoutes(routes,selected);
 }
 bool AudioPatchbay::selectSource(const QString &id){

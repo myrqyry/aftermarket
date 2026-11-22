@@ -14,8 +14,13 @@ struct RouteSource {
     QString id,name;
     uint32_t tracks=0;
     int monitor=0;
+    // Read-only libobs source health; not audio level or inferred signal flow.
+    bool muted=false;
+    bool enabled=true;
+    bool audioActive=true;
     bool operator==(const RouteSource &o) const {
-        return id==o.id&&name==o.name&&tracks==o.tracks&&monitor==o.monitor;
+        return id==o.id&&name==o.name&&tracks==o.tracks&&monitor==o.monitor
+            &&muted==o.muted&&enabled==o.enabled&&audioActive==o.audioActive;
     }
 };
 class AudioPatchbay final : public QWidget {
@@ -44,7 +49,7 @@ private:
     QVector<RouteSource> routes;
     QString selected;
     Canvas *canvas=nullptr;
-    QLabel *status=nullptr;
+    QLabel *status=nullptr,*diagnostics=nullptr;
     QComboBox *sources=nullptr,*monitoring=nullptr;
     QCheckBox *allWires=nullptr;
     QToolButton *tracks[6]={};

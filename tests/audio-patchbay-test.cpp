@@ -14,7 +14,7 @@
 #define REQUIRE(x) do {if(!(x)){std::cerr<<"FAILED "<<__LINE__<<": "<<#x<<"\\n";return 1;}}while(false)
 int main(int argc,char **argv){
  QApplication app(argc,argv);app.setStyle("Fusion");
- QVector<augment::RouteSource> saved={{"id-mic","Microphone",1u,0},{"id-desk","Desktop",3u,2}};
+ QVector<augment::RouteSource> saved={{"id-mic","Microphone",1u,0,false,true,true},{"id-desk","Desktop",3u,2,true,false,false}};
  int writes=0,monitors=0,connects=0;
  augment::AudioPatchbay ui(
   [&]{return saved;},
@@ -49,6 +49,22 @@ int main(int argc,char **argv){
  REQUIRE(sourceLabel&&sourceLabel->font().weight()==QFont::Normal);
  REQUIRE(trackLabel&&trackLabel->font().weight()==QFont::Normal);
  REQUIRE(monitorLabel&&monitorLabel->font().weight()==QFont::Normal);
+ // Read-only diagnostics are sourced from each route record and must not
+ // change mixer masks, monitoring modes or the native source mute setting.
+ auto *diagnostics=ui.findChild<QLabel*>("aftermarket-route-diagnostics");
+ REQUIRE(diagnostics);
+ REQUIRE(diagnostics->text().contains("Track 1"));
+ REQUIRE(diagnostics->text().contains("Monitor off"));
+ REQUIRE(!diagnostics->text().contains("Muted"));
+ REQUIRE(ui.selectSource("id-desk"));
+ REQUIRE(diagnostics->text().contains("Tracks 1, 2"));
+ REQUIRE(diagnostics->text().contains("Monitor and output"));
+ REQUIRE(diagnostics->text().contains("Muted"));
+ REQUIRE(diagnostics->text().contains("Disabled"));
+ REQUIRE(diagnostics->text().contains("Audio inactive"));
+ REQUIRE(writes==0&&monitors==0&&connects==0);
+ REQUIRE(ui.selectSource("id-mic"));
+
  REQUIRE(heading->font().family()==ui.font().family());
  // The canvas must fit the dock without the prior 365px graph minimum.
  auto *canvas=ui.findChild<QWidget*>("aftermarket-route-canvas");
@@ -90,6 +106,40 @@ int main(int argc,char **argv){
    app.processEvents();
  };
  canvas->resize(qMax(canvas->width(),260),qMax(canvas->height(),240));
+ // Hovering a source or track previews that signal path WITHOUT changing
+ // selection, routing, or the persistent Show all wires setting.
+ const auto hover=[&](QPoint point){
+   QMouseEvent event(QEvent::MouseMove,QPointF(point),
+                     QPointF(canvas->mapToGlobal(point)),
+                     Qt::NoButton,Qt::NoButton,Qt::NoModifier);
+   QCoreApplication::sendEvent(canvas,&event);
+   app.processEvents();
+ };
+ REQUIRE(ui.selectSource("id-mic"));
+ hover(QPoint(45,43+32)); // Desktop source: two existing wires
+ REQUIRE(ui.selectedId()=="id-mic"&&!ui.showAllWires());
+ REQUIRE(ui.visibleCableCount()==2);
+ REQUIRE(canvas->toolTip().contains("Muted"));
+ const auto hoveredDesk=canvas->grab().toImage();
+ int hoverChanged=0;
+ for(int y=35;y<qMin(220,hoveredDesk.height());++y)
+   for(int x=135;x<hoveredDesk.width()-55;++x)
+     if(focused.pixel(x,y)!=hoveredDesk.pixel(x,y))++hoverChanged;
+ REQUIRE(hoverChanged>0);
+ hover(QPoint(canvas->width()-23,43+32)); // Track 2: one incoming wire
+ REQUIRE(ui.visibleCableCount()==1);
+ REQUIRE(canvas->toolTip().contains("Track 2"));
+ const auto hoveredTrack=canvas->grab().toImage();
+ REQUIRE(hoveredTrack!=hoveredDesk);
+ hover(QPoint(canvas->width()/2,canvas->height()-2));
+ REQUIRE(ui.visibleCableCount()==1);
+ hover(QPoint(45,43+32));
+ REQUIRE(ui.visibleCableCount()==2);
+ QEvent leave(QEvent::Leave);
+ QCoreApplication::sendEvent(canvas,&leave);
+ app.processEvents();
+ REQUIRE(ui.visibleCableCount()==1&&!ui.showAllWires());
+ REQUIRE(writes==0&&monitors==0&&connects==0);
  const QPoint source0(45,43);
  const QPoint destination4(canvas->width()-23,43+3*32);
  gesture(source0,destination4);
@@ -127,6 +177,19 @@ int main(int argc,char **argv){
  REQUIRE(monitor&&monitor->currentIndex()==0);
  monitor->setCurrentIndex(1);app.processEvents();
  REQUIRE(monitors==1&&saved[0].monitor==1);
+ saved[0].muted=true;
+ saved[0].enabled=false;
+ saved[0].audioActive=false;
+ ui.refresh();
+ REQUIRE(diagnostics->text().contains("Muted"));
+ REQUIRE(diagnostics->text().contains("Disabled"));
+ REQUIRE(diagnostics->text().contains("Audio inactive"));
+ REQUIRE(writes==3&&monitors==1);
+ saved[0].muted=false;
+ saved[0].enabled=true;
+ saved[0].audioActive=true;
+ ui.refresh();
+ REQUIRE(!diagnostics->text().contains("Muted"));
  saved[0].name="Renamed microphone";ui.refresh();
  REQUIRE(ui.selectedId()=="id-mic"&&ui.routeCount()==2);
  // Backend must remain authoritative when changed externally.
@@ -140,6 +203,7 @@ int main(int argc,char **argv){
  REQUIRE(writes==3);
  saved.clear();ui.refresh();
  REQUIRE(ui.routeCount()==0&&ui.selectedId().isEmpty()&&!track4->isEnabled());
+ REQUIRE(diagnostics->text().contains("No audio source selected"));
  std::cout<<"audio patchbay routing verified\n";
  return 0;
 }

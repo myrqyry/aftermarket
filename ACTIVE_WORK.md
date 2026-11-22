@@ -860,3 +860,41 @@ The user `rules.json` SHA256 was unchanged
 The actual user OBS process stayed running as PID 2851624, with its existing
 in-memory plugin; it needs a voluntary OBS restart to load this update.
 No repo push or scene collection changes.
+
+## Slice 29 — OBS routing diagnostics and hover signal trace (2026-11-22)
+
+Outcome: add read-only source-health visibility and temporary signal-path
+inspection to the existing compact Audio Mixer backside. The native route
+model now includes OBS source muted, enabled and audio-active flags, read
+using `obs_source_muted`, `obs_source_enabled`, and
+`obs_source_audio_active` inside the existing libobs enumeration. These
+flags are not signal-level meters. Source cards show small M/Off markers,
+muted/disabled existing cables render in the native palette as subtler
+dashes without removing their tracks, and a selected-source diagnostics
+line reports tracks 1–6, monitoring, mute/disabled and OBS audio-active
+state. Hover a source to focus its routes, or hover a destination track
+to reveal its actual incoming wires even with Show all wires off.
+Hover clears on leave; focus, selection, stored Show all setting, and
+live scene audio remain unchanged until explicit existing track/monitor
+actions occur.
+
+Verification: RED source contract failed to compile without new flags,
+then RED UI regression failed on missing diagnostics label. GREEN
+component regression covers source and track hover including real rendered
+pixel differences, tooltip state, clearing on leave, real-time state
+refresh, and zero backend writes on inspection. New native libobs test
+creates a real dummy OBS audio source in its own process; verifies
+muted/disabled/audio-active state, monitor-only, persisted track mask,
+idempotent link creation, rename stability by UUID, and stale-target
+rejection. Full Qt/native CTest: **17/17 passed**. Isolated OBS 32.2.0
+launch in a temporary XDG profile loaded and initialized the rebuilt
+module successfully while the user's real OBS process continued
+uninterrupted. Did not exercise a real populated Audio Mixer backside
+during that clean-profile smoke test; broad theme/Qt version and live
+signal-level behavior not claimed. No atkAudio plugin DSP or private
+user scenes/configuration were changed.
+
+Scope boundary: this is OBS's ordinary six output tracks and native source
+flags, not atkAudio PluginHost2's internal VST/MIDI graph or a second
+audio engine. Review and licensing note: atkAudio v0.36.3 source is
+AGPL-3.0; conceptual behavior was assessed without copying code.

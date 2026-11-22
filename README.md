@@ -68,6 +68,23 @@ from four pages in one native, theme-aware window:
   Scenes and Sources switches with native-theme or custom row colors. The
   Tools → UI Augment Panels shortcut opens this page.
 
+### Patchbay routing diagnostics
+
+The **Audio Mixer backside** uses native OBS tracks 1–6, not a second audio
+mixing engine. Each source now exposes its OBS track assignments and monitoring
+mode alongside read-only **Muted**, **Disabled**, and **Audio inactive** state.
+The small `M`/`Off` source markers and dashed inactive/muted cables make
+routing easier to inspect without hiding still-connected wires. The panel
+does not try to infer sound level: **Audio active** is OBS's own source flag,
+not proof that audio is audible.
+
+Hover a source to trace its cables, or hover a track to see the sources
+feeding that track. These temporary paths work even with **Show all wires**
+off. Mouse movement, refresh and inspection never change routing; existing
+source-to-track drag gestures, native track buttons, and monitoring selectors
+are the only edit paths. Aftermarket doesn't inspect or modify atkAudio
+PluginHost2 graphs, device routing or VST chains.
+
 ### Emergency recovery mode
 
 **Ctrl+Alt+Shift+F12**, while OBS is focused, immediately activates
