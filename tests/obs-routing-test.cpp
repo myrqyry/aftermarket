@@ -39,6 +39,7 @@ int main(int argc,char **argv) {
     auto record=matches(list);
     REQUIRE(record.id==uuid);
     REQUIRE(record.name=="Test patchbay microphone");
+    REQUIRE(record.sourceType==sourceInfo.id);
     REQUIRE(record.tracks==(1u | (1u << 3)));
     REQUIRE(record.monitor==OBS_MONITORING_TYPE_MONITOR_ONLY);
     REQUIRE(record.muted);

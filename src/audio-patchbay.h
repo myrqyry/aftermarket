@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <functional>
 class QLabel;
-class QComboBox;
+class QMenu;
 class QCheckBox;
 class QTimer;
 namespace augment {
@@ -22,16 +22,20 @@ struct RouteSource {
     bool muted=false;
     bool enabled=true;
     bool audioActive=true;
+    QString sourceType; // OBS registered source ID, never inferred from its display name
     bool signalKnown=false;
     bool signalActive=false;
     bool operator==(const RouteSource &o) const {
         return id==o.id&&name==o.name&&tracks==o.tracks&&monitor==o.monitor
             &&muted==o.muted&&enabled==o.enabled&&audioActive==o.audioActive
+            &&sourceType==o.sourceType
             &&signalKnown==o.signalKnown&&signalActive==o.signalActive;
     }
 };
 class AudioPatchbay final : public QWidget {
 public:
+    enum class SourceIcon { Browser, Media, Microphone, Speaker, Waveform };
+    static SourceIcon iconForType(const QString &type);
     using Query=std::function<QVector<RouteSource>()>;
     using ToggleTrack=std::function<bool(const QString &,int)>;
     using ChangeMonitoring=std::function<bool(const QString &,int)>;
@@ -63,11 +67,11 @@ private:
     QVector<RouteSource> routes;
     QString selected;
     Canvas *canvas=nullptr;
-    QLabel *selectedLabel=nullptr;
-    QComboBox *monitoring=nullptr;
+    QMenu *monitorMenu=nullptr;
     QCheckBox *allWires=nullptr;
     QTimer *timer=nullptr,*signalTimer=nullptr;
     void syncControls();
+    void syncMonitorMenu();
     void notify(const QString &message,bool failed=false);
 };
 }

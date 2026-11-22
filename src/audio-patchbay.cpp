@@ -2,7 +2,8 @@
 #include "visual-polish.h"
 #include <QApplication>
 #include <QCheckBox>
-#include <QComboBox>
+#include <QMenu>
+#include <QActionGroup>
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -15,6 +16,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include <QKeyEvent>
 #include <QPalette>
 #include <QFontMetrics>
@@ -25,16 +27,27 @@
 #include <algorithm>
 
 namespace augment {
+AudioPatchbay::SourceIcon AudioPatchbay::iconForType(const QString &type){
+    const QString id=type.toLower();
+    if(id.contains("browser"))return SourceIcon::Browser;
+    if(id.contains("ffmpeg")||id.contains("vlc")||id.contains("media"))
+        return SourceIcon::Media;
+    if(id.contains("input_capture")||id.contains("microphone")||id.contains("mic_capture"))
+        return SourceIcon::Microphone;
+    if(id.contains("output_capture")||id.contains("desktop_audio")||id.contains("speaker"))
+        return SourceIcon::Speaker;
+    return SourceIcon::Waveform;
+}
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
     static constexpr int monitorTarget=7;
     static constexpr int minStep=18;
     static constexpr int maxStep=32;
     static constexpr int sourceLeft=5;
-    static constexpr int sourceWidth=117;
+    static constexpr int sourceWidth=124;
     static constexpr int portX=sourceLeft+sourceWidth+4;
-    static constexpr int targetRight=7;
-    static constexpr int targetWidth=38;
+    static constexpr int targetRight=13; // leave room for each output signal dot
+    static constexpr int targetWidth=28; // true circular hit target
     int rowStep() const {
         return qBound(minStep,(height()-58)/qMax(6,int(routes.size())),maxStep);
     }
@@ -67,7 +80,7 @@ class AudioPatchbay::Canvas final : public QWidget {
         // Keep the monitor jack pinned in the graph header even when OBS's
         // stock Audio Mixer dock is too short to show all six track rows.
         if(t==monitorTarget)
-            return QRect(width()-targetRight-targetWidth,3,targetWidth,23);
+            return QRect(width()-targetRight-targetWidth,2,targetWidth,targetWidth);
         return QRect(width()-targetRight-targetWidth,
                      firstY+(t-1)*rowStep()-nodeHeight()/2,targetWidth,nodeHeight());
     }
@@ -77,8 +90,12 @@ class AudioPatchbay::Canvas final : public QWidget {
         return -1;
     }
     int trackAt(QPoint pt) const {
-        for(int t=1;t<=monitorTarget;++t)
-            if(trackRect(t).contains(pt))return t;
+        for(int t=1;t<=monitorTarget;++t){
+            const auto r=trackRect(t);
+            const QPointF delta=QPointF(pt)-QPointF(r.center());
+            const qreal radius=r.width()/2.0;
+            if(delta.x()*delta.x()+delta.y()*delta.y()<=radius*radius)return t;
+        }
         return -1;
     }
     QPainterPath cable(int fromY,int toY) const {
@@ -114,6 +131,7 @@ public:
     }
     std::function<void(const QString &)> onSource;
     std::function<void(int)> onTrack;
+    std::function<void(int,const QPoint &)> onContextTarget;
     std::function<void(const QString &,int)> onConnect;
 
     explicit Canvas(QWidget *parent=nullptr):QWidget(parent){
@@ -173,34 +191,34 @@ protected:
         p.setFont(captionFont);
         p.setPen(caption);
         p.drawText(QRect(7,3,120,23),Qt::AlignVCenter,"Sources");
-        p.drawText(QRect(width()-113,3,64,23),Qt::AlignVCenter|Qt::AlignRight,"Outputs");
 
         for(int t=1;t<=monitorTarget;++t){
             const auto rect=trackRect(t);
             const auto selectedIt=std::find_if(routes.begin(),routes.end(),
                 [this](const RouteSource &src){return src.id==selected;});
             const bool connected=selectedIt!=routes.end()&&hasConnection(*selectedIt,t);
-            p.setPen(QPen((hoveredTarget==t||connected)?accent:muted,
-                          (hoveredTarget==t||connected)?1.0:0.7));
+            // Idle destinations still need a visible circular outline in
+            // low-contrast OBS themes, without introducing fixed colors.
+            p.setPen(QPen((hoveredTarget==t||connected)?accent:paletteBlend(muted,fg,43),
+                          (hoveredTarget==t||connected)?1.15:0.95));
             p.setBrush(connected?paletteBlend(base,accent,13):base);
-            p.drawRoundedRect(rect,5,5);
+            p.drawEllipse(rect);
             p.setFont(bodyFont);
             p.setPen(fg);
             if(t==monitorTarget) {
                 const QPointF centre=rect.center();
-                p.setPen(QPen(fg,1.5,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+                p.setPen(QPen(fg,1.45,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
                 p.setBrush(Qt::NoBrush);
-                // Draw headset vectors; avoid font glyph fallbacks and theme-specific icons.
-                p.drawArc(QRectF(centre.x()-7,centre.y()-7,14,14),20*16,140*16);
-                p.drawRoundedRect(QRectF(centre.x()-8.2,centre.y(),3.7,7),1.2,1.2);
-                p.drawRoundedRect(QRectF(centre.x()+4.5,centre.y(),3.7,7),1.2,1.2);
+                p.drawArc(QRectF(centre.x()-6.6,centre.y()-7.2,13.2,14.4),20*16,140*16);
+                p.drawRoundedRect(QRectF(centre.x()-7.6,centre.y(),3.2,6.2),1.1,1.1);
+                p.drawRoundedRect(QRectF(centre.x()+4.4,centre.y(),3.2,6.2),1.1,1.1);
             }else {
-                p.drawText(rect.adjusted(0,0,-5,0),Qt::AlignCenter,QString::number(t));
+                p.drawText(rect,Qt::AlignCenter,QString::number(t));
             }
-            // Presence of current measured signal, independent of route outline.
+            // Separate activity dot to the RIGHT, outside the clickable circle.
             p.setPen(Qt::NoPen);
             p.setBrush(outputLive(t)?accent:muted);
-            p.drawEllipse(QPointF(rect.right()-5.2,rect.center().y()),2.1,2.1);
+            p.drawEllipse(QPointF(rect.right()+6,rect.center().y()),2.1,2.1);
             p.setFont(captionFont);
         }
         // Draw cables behind nodes. The all-wires view is intentionally
@@ -253,13 +271,59 @@ protected:
             sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
             p.setFont(sourceFont);
             p.setPen(fg);
-            const QString name=p.fontMetrics().elidedText(src.name,Qt::ElideRight,sourceWidth-27);
-            p.drawText(rect.adjusted(15,0,-5,0),Qt::AlignVCenter|Qt::AlignLeft,name);
-            // Status dot: bright only when a recent measured audio peak
-            // is present. Muted/disabled/unknown sources remain subdued.
+            const QString name=p.fontMetrics().elidedText(src.name,Qt::ElideRight,sourceWidth-44);
+            p.drawText(rect.adjusted(22,0,-17,0),Qt::AlignVCenter|Qt::AlignLeft,name);
+            // Palette-derived source-type pictogram at the left of the label.
+            const QRectF icon(rect.left()+6,rect.center().y()-5,10,10);
+            p.setPen(QPen(caption,1.15,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+            p.setBrush(Qt::NoBrush);
+            switch(AudioPatchbay::iconForType(src.sourceType)){
+              case SourceIcon::Browser:
+                p.drawEllipse(icon.adjusted(0.7,0.7,-0.7,-0.7));
+                p.drawLine(QPointF(icon.left()+1,icon.center().y()),
+                           QPointF(icon.right()-1,icon.center().y()));
+                p.drawEllipse(QRectF(icon.center().x()-2.2,icon.top()+0.7,4.4,8.6));
+                break;
+              case SourceIcon::Media:{
+                QPainterPath play;
+                play.moveTo(icon.left()+2.8,icon.top()+1.7);
+                play.lineTo(icon.right()-1,icon.center().y());
+                play.lineTo(icon.left()+2.8,icon.bottom()-1.7);
+                play.closeSubpath();
+                p.drawPath(play);
+                break;
+              }
+              case SourceIcon::Microphone:
+                p.drawRoundedRect(QRectF(icon.center().x()-1.9,icon.top()+0.2,3.8,6),1.9,1.9);
+                p.drawArc(QRectF(icon.left()+1,icon.top()+1.7,8,7),185*16,170*16);
+                p.drawLine(QPointF(icon.center().x(),icon.bottom()-2),
+                           QPointF(icon.center().x(),icon.bottom()));
+                break;
+              case SourceIcon::Speaker:{
+                QPainterPath cone;
+                cone.moveTo(icon.left()+1,icon.top()+3.4);
+                cone.lineTo(icon.left()+3.7,icon.top()+3.4);
+                cone.lineTo(icon.left()+6.3,icon.top()+1);
+                cone.lineTo(icon.left()+6.3,icon.bottom()-1);
+                cone.lineTo(icon.left()+3.7,icon.bottom()-3.4);
+                cone.lineTo(icon.left()+1,icon.bottom()-3.4);
+                cone.closeSubpath();p.drawPath(cone);
+                p.drawArc(QRectF(icon.left()+4,icon.top()+0.3,6,9.5),-65*16,130*16);
+                break;
+              }
+              case SourceIcon::Waveform:
+                p.drawLine(QPointF(icon.left()+2,icon.center().y()-2),
+                           QPointF(icon.left()+2,icon.center().y()+2));
+                p.drawLine(QPointF(icon.center().x(),icon.top()+1),
+                           QPointF(icon.center().x(),icon.bottom()-1));
+                p.drawLine(QPointF(icon.right()-2,icon.center().y()-3),
+                           QPointF(icon.right()-2,icon.center().y()+3));
+                break;
+            }
+            // Signal dot is on the RIGHT; keep it distinct from the cable port.
             p.setPen(Qt::NoPen);
             p.setBrush(sourceLive(src)?accent:muted);
-            p.drawEllipse(QPointF(rect.left()+8,rect.center().y()),2.5,2.5);
+            p.drawEllipse(QPointF(rect.right()-9,rect.center().y()),2.5,2.5);
             p.setBrush(focused?accent:muted);
             p.drawEllipse(QPointF(portX,firstY+i*rowStep()),2.6,2.6);
             p.setFont(captionFont);
@@ -269,6 +333,14 @@ protected:
             p.drawText(QRect(7,35,width()-14,55),Qt::AlignHCenter|Qt::TextWordWrap,
                        "No active OBS audio sources");
         }
+    }
+    void contextMenuEvent(QContextMenuEvent *event) override {
+        if(trackAt(event->pos())==monitorTarget&&onContextTarget){
+            onContextTarget(monitorTarget,event->globalPos());
+            event->accept(); // don't propagate to OBS's Audio Mixer context menu
+            return;
+        }
+        QWidget::contextMenuEvent(event);
     }
     void mousePressEvent(QMouseEvent *event) override {
         if(event->button()!=Qt::LeftButton){
@@ -322,7 +394,7 @@ protected:
                 for(const auto &src:routes)if(hasConnection(src,target))++incoming;
                 const QString signal=outputLive(target)?"signal detected":"no measured signal";
                 if(target==monitorTarget)
-                    setToolTip(QStringLiteral("Headphones · native OBS Monitor · %1 connected %2 · %3 · not Track 7")
+                    setToolTip(QStringLiteral("Headphones · native OBS Monitor · right-click for Monitor Only and other modes · %1 connected %2 · %3 · not Track 7")
                         .arg(incoming).arg(incoming==1?"source":"sources",signal));
                 else
                     setToolTip(QStringLiteral("Track %1 · %2 connected %3 · %4")
@@ -406,24 +478,26 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     canvas->onConnect=[this](const QString &id,int track){connectRoute(id,track);};
     scroll->setWidget(canvas);
     root->addWidget(scroll,1);
-    auto *monitorRow=new QHBoxLayout;
-    monitorRow->setSpacing(3);
-    selectedLabel=new QLabel("Source",this);
-    selectedLabel->setObjectName("aftermarket-selected-source");
-    selectedLabel->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Preferred);
-    monitorRow->addWidget(selectedLabel,1);
-    monitoring=new QComboBox(this);
-    monitoring->setObjectName("aftermarket-monitor");
-    monitoring->addItems({"Off","Monitor Only","Monitor and Output"});
-    monitoring->setAccessibleName("Native OBS monitoring mode");
-    monitoring->setToolTip("Monitor Only sends audio to the OBS Monitoring Device without normal program output. Monitor and Output sends to both. Choose the monitoring device in OBS Settings > Audio > Advanced.");
-    monitorRow->addWidget(monitoring,2);
-    root->addLayout(monitorRow);
+    monitorMenu=new QMenu(this);
+    monitorMenu->setObjectName("aftermarket-monitor-mode-menu");
+    monitorMenu->setTitle("Native OBS monitoring");
+    auto *group=new QActionGroup(monitorMenu);
+    group->setExclusive(true);
+    for(int mode=0;mode<=2;++mode){
+        const QString label=mode==0?"Off":mode==1?"Monitor Only":"Monitor and Output";
+        auto *action=monitorMenu->addAction(label);
+        action->setCheckable(true);
+        action->setData(mode);
+        group->addAction(action);
+        connect(action,&QAction::triggered,this,[this,mode]{setMonitoring(mode);});
+    }
+    canvas->onContextTarget=[this](int target,const QPoint &global){
+        if(target!=7||selected.isEmpty())return;
+        syncMonitorMenu();
+        monitorMenu->popup(global);
+    };
     connect(refreshButton,&QToolButton::clicked,this,[this]{refresh();});
     connect(allWires,&QCheckBox::toggled,this,[this](bool enabled){canvas->setShowAll(enabled);});
-    connect(monitoring,&QComboBox::currentIndexChanged,this,[this](int mode){
-        if(mode>=0)setMonitoring(mode);
-    });
     timer=new QTimer(this);
     timer->setInterval(950);
     connect(timer,&QTimer::timeout,this,[this]{if(isVisible())refresh();});
@@ -444,7 +518,7 @@ void AudioPatchbay::refresh(){
     auto latest=query?query():routes;
     // Audio meter state is refreshed independently; preserve its values
     // across the slower authoritative OBS routing poll. Otherwise every
-    // polling tick would unnecessarily reset a user-open monitoring combo.
+    // polling tick would otherwise reset measured source activity.
     for(auto &incoming:latest)
         for(const auto &old:routes)if(old.id==incoming.id){
             incoming.signalKnown=old.signalKnown;
@@ -460,15 +534,15 @@ void AudioPatchbay::refresh(){
     refreshLevels();
     syncControls();
 }
+void AudioPatchbay::syncMonitorMenu(){
+    int mode=-1;
+    for(const auto &src:routes)if(src.id==selected){mode=src.monitor;break;}
+    monitorMenu->setEnabled(mode>=0);
+    for(auto *action:monitorMenu->actions())
+        action->setChecked(action->data().toInt()==mode);
+}
 void AudioPatchbay::syncControls(){
-    const QSignalBlocker monitorBlock(monitoring);
-    int chosen=-1;
-    for(int i=0;i<routes.size();++i)if(routes[i].id==selected){chosen=i;break;}
-    selectedLabel->setText("Monitor");
-    selectedLabel->setToolTip(chosen<0?"Click a source in the graph":
-        "OBS monitoring mode for "+routes.at(chosen).name);
-    monitoring->setEnabled(chosen>=0);
-    monitoring->setCurrentIndex(chosen<0?-1:routes.at(chosen).monitor);
+    syncMonitorMenu();
     canvas->setRoutes(routes,selected);
 }
 void AudioPatchbay::refreshLevels(){
@@ -554,7 +628,7 @@ bool AudioPatchbay::connectMonitor(const QString &id){
         return true;
     }
     // Monitor and Output preserves normal output tracks. Monitor Only
-    // remains a separate explicit option in the selected-source Monitoring control.
+    // remains accessible via right-click on the headphones destination.
     const bool ok=monitor(id,2);
     refresh();
     if(ok)selectSource(id);

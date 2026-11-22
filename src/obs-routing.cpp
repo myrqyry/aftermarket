@@ -26,7 +26,9 @@ QVector<RouteSource> ObsRouting::list(){
             static_cast<int>(obs_source_get_monitoring_type(source)),
             obs_source_muted(source),
             obs_source_enabled(source),
-            obs_source_audio_active(source)});
+            obs_source_audio_active(source),
+            obs_source_get_unversioned_id(source)
+                ?QString::fromUtf8(obs_source_get_unversioned_id(source)):QString{}});
         return true;
     },&result);
     std::sort(result.begin(),result.end(),[](const RouteSource &a,const RouteSource &b){

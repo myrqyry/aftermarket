@@ -1,10 +1,13 @@
 #include "audio-patchbay.h"
 #include <QApplication>
+#include <QMenu>
 #include <QComboBox>
+#include <QAction>
 #include <QCheckBox>
 #include <QToolButton>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include <QPainter>
 #include <QImage>
 #include <QCoreApplication>
@@ -23,6 +26,9 @@ int main(int argc,char **argv){
     {"browser","Browser",0x1,0,false,true,true},
     {"music","Media Source",0x4,1,false,true,true}
  };
+ sources[0].sourceType="live_latent_tts";
+ sources[1].sourceType="browser_source";
+ sources[2].sourceType="ffmpeg_source";
  int trackWrites=0,monitorWrites=0;
  QHash<QString,augment::SignalReading> levels;
  augment::AudioPatchbay bay(
@@ -44,10 +50,18 @@ int main(int argc,char **argv){
  );
  bay.resize(350,340);bay.show();app.processEvents();
  auto *canvas=bay.findChild<QWidget*>("aftermarket-route-canvas");
- auto *mode=bay.findChild<QComboBox*>("aftermarket-monitor");
- auto *focused=bay.findChild<QLabel*>("aftermarket-selected-source");
+ auto *menu=bay.findChild<QMenu*>("aftermarket-monitor-mode-menu");
  auto *all=bay.findChild<QCheckBox*>("aftermarket-show-all-wires");
- REQUIRE(canvas&&mode&&focused&&all);
+ REQUIRE(canvas&&menu&&all);
+ REQUIRE(menu->actions().size()==3);
+ REQUIRE(!bay.findChild<QComboBox*>("aftermarket-monitor"));
+ REQUIRE(!bay.findChild<QLabel*>("aftermarket-selected-source"));
+ REQUIRE(augment::AudioPatchbay::iconForType("browser_source")==augment::AudioPatchbay::SourceIcon::Browser);
+ REQUIRE(augment::AudioPatchbay::iconForType("ffmpeg_source")==augment::AudioPatchbay::SourceIcon::Media);
+ REQUIRE(augment::AudioPatchbay::iconForType("pulse_input_capture")==augment::AudioPatchbay::SourceIcon::Microphone);
+ REQUIRE(augment::AudioPatchbay::iconForType("pulse_output_capture")==augment::AudioPatchbay::SourceIcon::Speaker);
+ REQUIRE(augment::AudioPatchbay::iconForType("live_latent_tts")==augment::AudioPatchbay::SourceIcon::Waveform);
+ REQUIRE(augment::AudioPatchbay::iconForType("unknown_plugin")==augment::AudioPatchbay::SourceIcon::Waveform);
  REQUIRE(!bay.findChild<QWidget*>("aftermarket-route-source"));
  REQUIRE(!bay.findChild<QWidget*>("aftermarket-route-tracks-label"));
  REQUIRE(!bay.findChild<QWidget*>("aftermarket-route-diagnostics"));
@@ -57,7 +71,7 @@ int main(int argc,char **argv){
  REQUIRE(canvas->minimumHeight()<=170);
  REQUIRE(bay.routeCount()==3);
  REQUIRE(bay.selectedId()=="voice");
- REQUIRE(focused->text()=="Monitor"&&focused->toolTip().contains("Live Latent"));
+ REQUIRE(menu->actions()[2]->isChecked());
  REQUIRE(bay.visibleCableCount()==7); // Six tracks + headphone monitor
  REQUIRE(!bay.showAllWires());
  all->click();app.processEvents();
@@ -68,15 +82,22 @@ int main(int argc,char **argv){
  sendMouse(canvas,QEvent::MouseButtonPress,sourceBrowser,Qt::LeftButton,Qt::LeftButton);
  sendMouse(canvas,QEvent::MouseButtonRelease,sourceBrowser,Qt::LeftButton,Qt::NoButton);
  app.processEvents();
- REQUIRE(bay.selectedId()=="browser"&&focused->toolTip().contains("Browser"));
+ REQUIRE(bay.selectedId()=="browser"&&menu->actions()[0]->isChecked());
  REQUIRE(bay.visibleCableCount()==1);
- REQUIRE(mode->currentIndex()==0);
- // The source list is the selector, and monitored mode is a selected-source property.
+ REQUIRE(menu->actions()[0]->isChecked());
+ // Keep Monitor Only accessible with a right-click menu on the headphones,
+ // without recreating a redundant dropdown below the graph.
  REQUIRE(bay.selectSource("voice"));
- REQUIRE(mode->currentIndex()==2);
- mode->setCurrentIndex(1);
+ REQUIRE(menu->actions()[2]->isChecked());
+ menu->actions()[1]->trigger();
  REQUIRE(monitorWrites==1&&sources[0].monitor==1);
- const auto head=QPoint(canvas->width()-23,14);
+ const auto head=QPoint(canvas->width()-26,16);
+ // OBS sends QContextMenuEvent separately from mouse presses; it must
+ // be accepted here or the native Audio Mixer context menu steals it.
+ QContextMenuEvent context(QContextMenuEvent::Mouse,head,canvas->mapToGlobal(head));
+ QCoreApplication::sendEvent(canvas,&context);
+ REQUIRE(context.isAccepted()&&menu->isVisible());menu->hide();
+ REQUIRE(menu->actions()[1]->isChecked());
  const auto image=canvas->grab().toImage();
  // Headphones are a visual drawing in the graph, not the text "MON".
  REQUIRE(!image.isNull());
@@ -99,10 +120,31 @@ int main(int argc,char **argv){
  drag(QPoint(42,43),head);
  REQUIRE(sources[0].monitor==2&&monitorWrites==3);
  // Native numbered track clicks keep working; no duplicate toggles needed.
- const QPoint track6(canvas->width()-23,43+5*32);
+ const QPoint track6(canvas->width()-26,43+5*32);
+ const QPoint track6Corner(canvas->width()-39,43+5*32-13);
+ sendMouse(canvas,QEvent::MouseButtonPress,track6Corner,Qt::LeftButton,Qt::LeftButton);
+ sendMouse(canvas,QEvent::MouseButtonRelease,track6Corner,Qt::LeftButton,Qt::NoButton);
+ REQUIRE(trackWrites==0); // ellipse hit testing rejects transparent corners
  sendMouse(canvas,QEvent::MouseButtonPress,track6,Qt::LeftButton,Qt::LeftButton);
  sendMouse(canvas,QEvent::MouseButtonRelease,track6,Qt::LeftButton,Qt::NoButton);
  REQUIRE((sources[0].tracks&(1u<<5))==0&&trackWrites==1);
+ // Circle background doesn't fill the rectangular corner of its 28px hit box.
+ const auto shape=canvas->grab().toImage();
+ const int left=canvas->width()-41;
+ const int top=43+4*32-14; // selected Track 5 has an accent outline
+ REQUIRE(shape.pixelColor(left+2,top+2)==shape.pixelColor(left-5,top+2));
+ REQUIRE(shape.pixelColor(left+14,top)!=shape.pixelColor(left-5,top));
+ // Different registered OBS source types must actually change the glyph.
+ REQUIRE(bay.selectSource("browser"));
+ const auto browserIcon=canvas->grab().toImage();
+ sources[1].sourceType="ffmpeg_source";bay.refresh();app.processEvents();
+ const auto mediaIcon=canvas->grab().toImage();
+ int iconPixels=0;
+ for(int y=70;y<81;++y)for(int x=10;x<23;++x)
+     if(browserIcon.pixel(x,y)!=mediaIcon.pixel(x,y))++iconPixels;
+ REQUIRE(iconPixels>3);
+ sources[1].sourceType="browser_source";bay.refresh();
+ REQUIRE(bay.selectSource("voice"));
  // Signal dots come from actual level readings, not 'source enabled'.
  auto before=canvas->grab().toImage();
  levels.insert("voice",{true,true});
@@ -111,6 +153,18 @@ int main(int argc,char **argv){
  bay.refreshLevels();app.processEvents();
  auto after=canvas->grab().toImage();
  REQUIRE(before!=after);
+ int sourceStatusPixels=0,outputStatusPixels=0,leftIconPixels=0;
+ for(int y=38;y<=48;++y){
+     for(int x=115;x<=124;++x)
+         if(before.pixel(x,y)!=after.pixel(x,y))++sourceStatusPixels;
+     for(int x=canvas->width()-12;x<=canvas->width()-4;++x)
+         if(before.pixel(x,y)!=after.pixel(x,y))++outputStatusPixels;
+     for(int x=10;x<=20;++x)
+         if(before.pixel(x,y)!=after.pixel(x,y))++leftIconPixels;
+ }
+ REQUIRE(sourceStatusPixels>0);
+ REQUIRE(outputStatusPixels>0);
+ REQUIRE(leftIconPixels==0); // activity moved right; icon remains stable
  REQUIRE(bay.sourceSignal("voice"));
  REQUIRE(!bay.sourceSignal("browser"));
  REQUIRE(bay.outputSignal(1));
@@ -133,7 +187,7 @@ int main(int argc,char **argv){
  REQUIRE(trackWrites==1);
  sources.clear();bay.refresh();
  REQUIRE(bay.routeCount()==0&&bay.selectedId().isEmpty());
- REQUIRE(mode->currentIndex()==-1&&!mode->isEnabled());
+ REQUIRE(!menu->isEnabled());
  std::cout<<"compact AudioHub graph, headphones route, live dots and native editing verified\n";
  return 0;
 }

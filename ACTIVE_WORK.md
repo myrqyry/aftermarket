@@ -1181,3 +1181,68 @@ physical audio output proof and no upstream push.
   debounced frontend save request and UI redraw tested; isolated profile's
   collection file did not reflect the test adjustment. Do not silently
   promote this to a verified live persistence claim.
+
+## Slice 34 — AudioHub circular destinations and source icons (2026-11-22)
+
+Follow-up from user's annotated screenshot of the narrow native Audio Mixer
+backside. Requested four visual/interaction corrections to the previously
+implemented AudioHub: move measured activity dots to the right edge of source
+cards, add source icons, remove the Outputs text label and bottom Monitor
+dropdown, and make all six track and headphones destinations circular.
+
+Implementation:
+- Existing libobs ObsRouting::list now carries each source's actual registered
+  unversioned OBS source ID into RouteSource::sourceType; the ID is included
+  in RouteSource equality so native source-type changes repaint. Qt-palette
+  pictograms classify registered IDs for browser, media/FFmpeg/VLC, mic/input
+  capture, output/desktop capture, and an audio waveform fallback for plugin
+  sources including TTS. No source names are parsed, and no fixed icon colors.
+- Source activity dots move to the RIGHT of the source card (left glyph,
+  centered/elided label, right measured-signal dot); the original cable
+  connection pin remains outside the right edge and distinct. Each output
+  activity dot also sits outside its circle on the RIGHT.
+- Outputs 1-6 and the headphones monitor are drawn as real 28px diameter
+  circles; hit-testing checks radial distance instead of a bounding square.
+  Idle rings blend QPalette::Mid with QPalette::Text for visibility across
+  dark/light themes rather than hardcoded Colorway colors. Hover/focus,
+  selected-route drawing, click-to-toggle, source drag-to-connect and Show
+  all wires remain unchanged.
+- Removed the in-canvas Outputs heading and the entire bottom Monitoring
+  row/dropdown. The original OBS three monitoring modes remain reachable
+  by RIGHT-clicking the headphones circle: Off, Monitor Only, Monitor and
+  Output, with the current OBS mode checked. Normal LEFT-click still toggles
+  Off / Monitor and Output. Mode state is synchronized on each source
+  selection/OBS refresh.
+- Important real-OBS regression: an initial right-click implementation on
+  QMouseEvent showed OBS's unrelated native Audio Mixer context menu because
+  Qt separately emits QContextMenuEvent. Reproduced as RED test with an
+  unaccepted QContextMenuEvent, then GREEN by overriding the canvas
+  contextMenuEvent and accepting it only for the headphones circle. Other
+  right clicks remain native.
+
+Verification:
+- Updated Qt AudioPatchbay test covers absence of old dropdown/labels,
+  source-ID icon classification, live glyph pixel change, right-side signal
+  pixel changes, truly round node pixels and corner click rejection,
+  all native drag/click/hover routes and meters, monitor mode action
+  checked state, explicit Qt QContextMenuEvent acceptance, stale-source
+  rejection. Updated libobs routing test checks sourceType returned from
+  native unversioned source ID.
+- Full CMake build and CTest 21/21 PASS, no build warnings. Source diff check clean.
+- Isolated OBS 32.2.0 on disposable Colorway profile and Xvfb :117
+  (build/audiohub-circle-smoke), user OBS untouched. Real screenshot shows
+  source icons at left, measured dots at right, clearly ringed circular
+  destination nodes, no Outputs heading/dropdown. Clicked Tone test source,
+  highlighted its original native Track 1 route. Right-click on the native
+  headphones circle opened the correct 3-mode context menu (not OBS generic
+  mixer menu); clicked Monitor Only and verified it was checked on reopen.
+  Ctrl+Alt+Shift+F12 emergency restored the real native mixer with
+  original strips and left the disposable OBS process running.
+- README descriptions updated and screenshots:
+  docs/screenshots/readme/mixer-patchbay.webp,
+  docs/screenshots/readme/audiohub-monitor-menu.webp.
+
+Boundary: No new monitoring device or track, no changes to OBS audio source
+values, no live user OBS UI/scene/routing edits, no publication. Physical
+audio delivery is not inferred from UI signal dots. Pan/sync persistence
+gap from Slice 32 is unrelated and remains open.
