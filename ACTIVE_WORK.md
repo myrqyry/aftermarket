@@ -1246,3 +1246,19 @@ Boundary: No new monitoring device or track, no changes to OBS audio source
 values, no live user OBS UI/scene/routing edits, no publication. Physical
 audio delivery is not inferred from UI signal dots. Pan/sync persistence
 gap from Slice 32 is unrelated and remains open.
+
+### Slice 34 — verified local installation (2026-11-22)
+
+- Implementation commit: 0b63e67; full CTest 21/21, no build warnings.
+- Atomic scripts/install.sh updated the installed plugin with binary SHA256
+  0b6af0a9b9c49b5c154822d7cf9c3f413f5788de85d8edf463d8457ba2e35f26,
+  byte-for-byte matching the tested build.
+- Previous plugin backed up unchanged at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-audiohub-circle-icons.00be17a62ce0.so
+  (previous SHA256 00be17a62ce0243a94b0de005ad54dcfc801c0a1745895d61ab1ea6e5f1975dd).
+- User's actual OBS PID 3524994 stayed running throughout and is still using
+  its already-loaded old module until a voluntary OBS restart. All three
+  settings files (rules.json, action-strip.json and front-audio-controls.json)
+  had unchanged SHA256 values before and after installation. No user's
+  scene, audio, status, mixer output, recording or monitor routing was changed.
+- Isolated OBS and Xvfb :117 stopped. Repository remains local only; no push.
