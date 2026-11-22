@@ -8,11 +8,11 @@ Owner: `obs-ui-augment/`, project-facing name Aftermarket.
 Mat wants existing OBS docks to have a reversible *front* (their original native content) and
 a *back* (specialized or user-defined workspace), operated from concise dock header icons.
 Header controls may also display meaningful status, switch between tabified docks, and change
-dock sizes. The first specialized back is the Audio Mixer routing workspace, with both a compact
-matrix and an optional visual patchbay to assign native OBS audio sources to tracks 1-6
-and choose native monitoring mode. OBS already provides Advanced Audio Properties with
-those settings and additional controls; it is an existing functional reference, **not** a
-window whose widgets we should steal. **No new audio routing backend, signal graph, or
+dock sizes. The first specialized back is a **single visual Audio Mixer patchbay** for
+native OBS source-to-track (1-6) and monitoring assignments. OBS already provides the
+Advanced Audio Properties matrix, so Aftermarket should **not duplicate it**; keep that
+native dialog accessible for detailed settings. Reuse OBS data and controls, not its
+window's QWidget instances. **No new audio routing backend, signal graph, or
 external patching** is wanted.
 
 Preserve OBS's original ownership, controls, audio engine, tab bars, dock moves and layout.
@@ -79,29 +79,27 @@ expand before flip when needed. Tabs keep Qt's native behavior and ownership.
 Built-in back pages are identified by provider IDs, can attach only where supported, and
 read/write source truth through public OBS/libobs APIs. Start with `audio-patchbay`.
 
-User-defined pages should be **composable**, configured through the Panels inspector:
-choose a dock, add a back, and arrange registered safe elements (native actions exposed by
-adapters, indicators, labels, visual controls). The initial design must not promise that an
-arbitrary OBS widget can be moved out of its native layout or that arbitrary user C++ is
-loaded. Future extension points may permit specialized third-party providers.
+Keep back providers narrowly registered so a later user-defined backside can supply
+safe controls or a supported view without rewriting the dock host. Do not start by building
+a generic visual page editor, arbitrary widget reparenting, or a user C++ plugin loader.
+Add a real composition UI only once specific user-defined content demands it. Future
+providers must obey the same native-state and reversible-lifecycle rules.
 
 Provider activation/deactivation cannot destroy native dock content. On unload, OBS close,
 dock destruction, widget replacement or unsupported layout transitions, Aftermarket must
 cleanly detach its own page/header and restore the original native widget ownership,
 visibility and applicable constraints without overriding later external changes.
 
-## Audio Mixer: native Advanced Audio Properties data in two views
+## Audio Mixer: visual patchbay over native OBS state
 
-Offer **Matrix** (source rows, tracks 1–6 columns, monitoring choice; compact and
-scannable) and **Patchbay** (source nodes, six track targets, explicit monitoring control;
-more spatial and suitable for enlarged/floating docks). These are **alternate views of the
-same OBS source state**, not separate routing stores or audio engines. Prefer the matrix
-in narrow docks rather than shrinking a graph until it is unusable. Preserve the native
-Advanced Audio Properties window for detailed adjustments such as sync offset, mono,
-balance and any version-specific settings not yet exposed here. Provide an explicit action
-to open OBS's original dialog, using its existing action where it can be reliably found.
-Do not copy or reparent the original dialog's QWidgets, hijack its event handlers, or
-create a second independent source-of-truth.
+Build **one graphical patchbay**, not a redundant matrix: source nodes connect to the six
+track destinations, with a native three-state monitoring selector. The patchbay adapts its
+canvas/scrolling to narrow docks rather than silently switching into a second UI. Keep
+Advanced Audio Properties available for its existing matrix and details such as sync
+offset, mono and balance. Expose a shortcut to OBS's original dialog when its existing
+action is reliably found; do not copy/reparent that dialog's QWidgets or duplicate its
+state. If public OBS APIs or lifecycle constraints cannot support an interaction safely,
+leave it in the native dialog rather than fabricate a workaround.
 
 - Enumerate OBS audio-capable sources using appropriate public source enumeration/ref
   management; show track connectors 1–6. Actual cables reflect each source's
@@ -133,12 +131,13 @@ Implement in small TDD slices after design review:
 1. Reversible face host and compact header; prove native widget identity, action behavior,
    restore on unload/close, tab group navigation, collapse interaction, and floating.
 2. Size presets and per-session restore, including group and screen edge cases.
-3. Native OBS Matrix read-only view matched against real Advanced Audio Properties,
-   then Patchbay as an alternative presentation. Add explicit track and monitoring edits
-   with fake-source regression coverage; verify changes in the original native dialog
-   and updates in the opposite direction within isolated OBS.
-4. Panels inspector authoring for built-in and user-defined backs, with atomic,
-   independently reversible configuration and an explicit recovery path.
+3. Native OBS Patchbay read-only view matched against real Advanced Audio Properties;
+   then add deliberate track and monitoring edits using public APIs. Test preserved
+   unrelated bits and source identity with regressions, and verify both directions
+   of native-dialog/patchbay synchronization in isolated OBS.
+4. Add the smallest provider registration seam for specialized and user-defined backs.
+   Build a user-facing editor only when the first custom use case requires one; retain
+   atomic reversible configuration and an explicit recovery path.
 
 Validate with Qt offscreen regressions **and** an isolated real OBS profile including tabs,
 floating docks, audio sources, Advanced Audio Properties synchronization, OBS restart
