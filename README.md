@@ -133,10 +133,53 @@ classic menu bar immediately, without restarting OBS. Qt provides an
 the shortcut was checked in the Qt regression harness, not in every desktop
 window manager. Late plugin-added top-level menus are placed in the hamburger,
 and enabling/disabling never duplicates or replaces OBS's actions or submenus.
-The menu bar's remaining space is intentionally left available for later
-status/quick-control slots—those controls are **not** part of this slice.
+The remaining menu-bar space can hold the optional Action Strip described below.
 
 ![Native OBS menus inside Aftermarket's compact hamburger bar](docs/screenshots/readme/hamburger-menu-bar.webp)
+
+### Configurable Action Strip: live status, native hotkeys and docks
+
+**Tools → Aftermarket: Action Strip…** opens a small editor. The same controls
+are available under **UI Augment Inspector → Action strip**. Choose
+**Show action strip in OBS menu bar** to place your configured items at the
+right of the *existing* native menu bar, including when the hamburger is off.
+It is **off by default** and does not replace OBS's Controls dock, native
+menus, hotkeys, scene collection or status bar.
+
+Available items:
+
+- **Status:** REC/stream activity, recording or stream elapsed time, FPS,
+  CPU, dropped *stream* frames, missed *render* frames, live recording and
+  streaming bitrates. Metrics share one periodic refresh; the stream/record
+  clocks follow OBS's frontend start/pause/resume/stop events. If the plugin
+  attaches to a session that already started, elapsed time displays
+  **--:--** instead of inventing a start time.
+- **OBS hotkeys:** Search a grouped list of actual frontend, plugin, source,
+  output, encoder and service hotkeys. The persisted identity includes the
+  registering owner (source UUID where available), not just the displayed
+  name. Missing/ambiguous hotkeys become inactive; they are never reassigned
+  to an unrelated source.
+- **Native dock buttons:** Show/hide any dock with an identifiable OBS dock ID.
+  Buttons reflect real dock visibility without replacing the dock.
+- **Flexible spacers and separators** for arranging groups.
+
+Drag controls to reorder them directly on the strip, or use the editor's
+move buttons. Right-click an existing control to rename, move or remove it.
+The bar uses the active OBS Qt palette and existing typefaces, with the same
+subtle checkable-button style as other Aftermarket controls. When there is
+not enough horizontal room, excess items move to a working **⋯** overflow
+menu instead of becoming tiny or cut off.
+
+Its configuration lives in the independently and atomically saved
+`plugin_config/obs-ui-augment/action-strip.json`. The emergency shortcut
+**Ctrl+Alt+Shift+F12** hides the strip and restores OBS's original menu
+corner widget; **Resume UI customizations** recreates it with the same saved
+items and enabled preference. Aftermarket also makes bounded attempts to
+attach the *existing* optional Audio Mixer backside when OBS creates its
+dock late, and stops retrying on emergency recovery. It does not create a
+new multi-dock manager or copy Timeline's macro data.
+
+![Native OBS Action Strip in Colorway](docs/screenshots/readme/action-strip.webp)
 
 ### Alternating Scenes and Sources backgrounds
 

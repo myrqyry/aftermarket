@@ -19,6 +19,7 @@
 #include "row-stripes.h"
 #include "visual-polish.h"
 #include "menu-bar-compact.h"
+#include "action-strip.h"
 #include <QMenuBar>
 #include <QGroupBox>
 #include <QGridLayout>
@@ -450,7 +451,7 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar):QDialog(parent),ui(new Ui(controller)) {
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar,ActionStrip *actionStrip):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     // Colorway and other OBS themes may make every control bold. Apply only
@@ -858,6 +859,57 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
                 layout->insertWidget(1,section);
         }
         ui->tabs->addTab(page,"Panels");
+    }
+    if(actionStrip){
+        auto *page=new QWidget(ui->tabs);
+        auto *layout=new QVBoxLayout(page);
+        layout->setContentsMargins(10,10,10,10);
+        auto *heading=new QLabel("Action strip",page);
+        heading->setFont(subtleHeadingFont(heading->font()));
+        layout->addWidget(heading);
+        auto *description=new QLabel(
+            "Place live OBS status and existing hotkeys/dock toggles beside the menu bar. "
+            "Drag buttons to rearrange them; right-click a button to rename or remove it. "
+            "Uses the active theme and preserves OBS actions.",page);
+        description->setWordWrap(true);
+        layout->addWidget(description);
+        auto *main=qobject_cast<QMainWindow*>(parent);
+        auto *bar=main?main->menuBar():nullptr;
+        auto *visible=new QCheckBox("Show action strip",page);
+        visible->setObjectName("augment-action-strip-enable");
+        visible->setChecked(actionStrip->enabled());
+        layout->addWidget(visible);
+        auto *edit=new QPushButton("Edit buttons and status readouts…",page);
+        edit->setObjectName("augment-action-strip-edit");
+        layout->addWidget(edit);
+        auto *contents=new QLabel(page);
+        contents->setObjectName("augment-action-strip-summary");
+        contents->setWordWrap(true);
+        layout->addWidget(contents);
+        layout->addStretch();
+        QPointer<ActionStrip> safeStrip(actionStrip);
+        QPointer<QMenuBar> safeBar(bar);
+        auto refresh=[safeStrip,contents,visible]{
+            if(!safeStrip)return;
+            QStringList labels;
+            for(const auto &item:safeStrip->items())
+                labels.append(item.label.isEmpty()?item.target:item.label);
+            contents->setText(labels.isEmpty()?"No buttons configured yet. Select Edit to add them.":
+                "Current items: "+labels.join(" · "));
+            const QSignalBlocker block(visible);
+            visible->setChecked(safeStrip->enabled());
+        };
+        refresh();
+        connect(visible,&QCheckBox::toggled,this,[safeStrip,safeBar,visible,refresh](bool on){
+            if(!safeStrip||!safeBar||!safeStrip->setEnabled(safeBar,on)){
+                if(safeStrip){const QSignalBlocker block(visible);visible->setChecked(safeStrip->enabled());}
+            }
+            refresh();
+        });
+        connect(edit,&QPushButton::clicked,this,[safeStrip,safeBar,this,refresh]{
+            if(safeStrip){safeStrip->showEditor(this,safeBar);refresh();}
+        });
+        ui->tabs->addTab(page,"Action strip");
     }
     ui->footer->hide();
     connect(ui->tabs,&QTabWidget::currentChanged,this,[this](int index){

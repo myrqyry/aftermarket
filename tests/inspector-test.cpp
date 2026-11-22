@@ -25,6 +25,7 @@
 #include "property-sections.h"
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
+#include "action-strip.h"
 #include <QMenuBar>
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
@@ -75,10 +76,11 @@ int main(int argc,char **argv) {
         augment::PropertySections sections;
         augment::RowStripes stripes;
         augment::MenuBarCompact compactBar;
+        augment::ActionStrip strip(temp.filePath("strip.json"));
         main.menuBar()->addMenu("&File");
         main.menuBar()->addMenu("&Tools");
         int flips=0;
-        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;},&stripes,&compactBar);
+        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;},&stripes,&compactBar,&strip);
         const auto typeRules=inspector.styleSheet();
         REQUIRE(typeRules.contains("font-weight: normal"));
         REQUIRE(typeRules.contains("QLabel#augment-heading-mixer"));
@@ -324,9 +326,15 @@ int main(int argc,char **argv) {
         auto *dock=new QDockWidget("Scenes",&main);dock->setWidget(new QWidget(dock));main.addDockWidget(Qt::LeftDockWidgetArea,dock);
         main.resize(800,600);main.show();app.processEvents();
         augment::Panels panels;
-        augment::Inspector inspector(c,&main,&panels);
+        augment::ActionStrip strip(temp.filePath("second-strip.json"));
+        augment::Inspector inspector(c,&main,&panels,nullptr,{},nullptr,nullptr,&strip);
         auto *tabs=inspector.findChild<QTabWidget*>("augment-workspace");
-        REQUIRE(tabs&&tabs->count()==4);
+        REQUIRE(tabs&&tabs->count()==5);
+        auto *stripToggle=inspector.findChild<QCheckBox*>("augment-action-strip-enable");
+        auto *stripEditor=inspector.findChild<QPushButton*>("augment-action-strip-edit");
+        REQUIRE(stripToggle&&stripEditor&&!stripToggle->isChecked());
+        stripToggle->click();REQUIRE(strip.enabled()&&main.menuBar()->cornerWidget());
+        stripToggle->click();REQUIRE(!strip.enabled()&&!main.menuBar()->cornerWidget());
         inspector.capture(snap);
         auto *list=inspector.findChild<QListWidget*>("augment-actions");
         auto *icons=inspector.findChild<QComboBox*>("augment-icon");

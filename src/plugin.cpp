@@ -7,6 +7,9 @@
 #include "property-sections.h"
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
+#include "action-strip.h"
+#include "native-action-bridge.h"
+#include "dock-attach-retry.h"
 #include "emergency-recovery.h"
 #include "dock-faces.h"
 #include "audio-patchbay.h"
@@ -28,11 +31,15 @@ static augment::Controller *controller = nullptr;
 static std::unique_ptr<augment::ObsAudio> audio;
 static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
-static QPointer<QAction> toolsAction, panelsAction, emergencyAction, resumeAction;
+static QPointer<QAction> toolsAction, panelsAction, stripAction, emergencyAction, resumeAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::MenuBarCompact> compactBar;
+static std::unique_ptr<augment::ActionStrip> actionStrip;
+static std::unique_ptr<augment::NativeActionBridge> nativeActions;
+static std::unique_ptr<augment::DockAttachRetry> mixerRetry;
+static QString stripConfigPath;
 static std::unique_ptr<augment::DockFaces> dockFaces;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
@@ -72,6 +79,8 @@ static void stopCustomUi(){
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
     if(panels)panels->restoreAll();
+    mixerRetry.reset();
+    actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
     dockFaces.reset(); // unwrap original mixer widget before panel teardown
     compactBar.reset(); // return original OBS QAction identities
     rowStripes.reset();
@@ -81,6 +90,7 @@ static void stopCustomUi(){
     uiActive=false;
     if(toolsAction)toolsAction->setEnabled(false);
     if(panelsAction)panelsAction->setEnabled(false);
+    if(stripAction)stripAction->setEnabled(false);
     if(emergencyAction)emergencyAction->setEnabled(false);
     if(resumeAction)resumeAction->setVisible(true);
 }
@@ -92,7 +102,12 @@ static bool startCustomUi(){
     rowStripes=std::make_unique<augment::RowStripes>();
     rowStripes->configure(controller->listRowSettings());
     compactBar=std::make_unique<augment::MenuBarCompact>();
+    actionStrip=std::make_unique<augment::ActionStrip>(stripConfigPath,
+        []{return frontendReady&&nativeActions?nativeActions->snapshot():augment::StatusSnapshot{};},
+        []{return frontendReady&&nativeActions?nativeActions->enumerateHotkeys():QList<augment::HotkeyChoice>{};},
+        [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);});
     dockFaces=std::make_unique<augment::DockFaces>();
+    mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
     panels=std::make_unique<augment::Panels>();
     transforms=std::make_unique<augment::ObsTransformStyle>(
         static_cast<QWidget*>(obs_frontend_get_main_window()),
@@ -100,11 +115,16 @@ static bool startCustomUi(){
     controller->setRuntimeSafeMode(false);
     if(controller->hamburgerMenuBarEnabled()&&!setHamburgerMenuBar(true))
         blog(LOG_WARNING,"[ui-augment] hamburger menu bar unavailable in this layout");
-    if(frontendReady&&controller->mixerBacksideEnabled()&&!setAudioMixerBackside(true))
-        blog(LOG_WARNING,"[ui-augment] mixer backside unavailable in this layout");
+    if(actionStrip->desiredEnabled()){
+        auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+        if(main&&!actionStrip->setEnabled(main->menuBar(),true))
+            blog(LOG_WARNING,"[ui-augment] action strip unavailable in this layout");
+    }
+    if(frontendReady&&controller->mixerBacksideEnabled())mixerRetry->start();
     uiActive=true;
     if(toolsAction)toolsAction->setEnabled(true);
     if(panelsAction)panelsAction->setEnabled(true);
+    if(stripAction)stripAction->setEnabled(true);
     if(emergencyAction)emergencyAction->setEnabled(true);
     if(resumeAction)resumeAction->setVisible(false);
     return true;
@@ -115,18 +135,21 @@ static void cleanupUi(){
     delete resumeAction.data();
     delete emergencyAction.data();
     delete panelsAction.data();
+    delete stripAction.data();
     delete toolsAction.data();
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
+    if(nativeActions&&event!=OBS_FRONTEND_EVENT_EXIT)nativeActions->onFrontendEvent(event);
     if(event==OBS_FRONTEND_EVENT_FINISHED_LOADING){
         frontendReady=true;
-        if(uiActive&&controller&&controller->mixerBacksideEnabled())
-            if(!setAudioMixerBackside(true))blog(LOG_WARNING,"[ui-augment] mixer backside unavailable in this layout");
+        if(uiActive&&controller&&controller->mixerBacksideEnabled()&&mixerRetry)
+            mixerRetry->start();
     }
     if (event==OBS_FRONTEND_EVENT_EXIT) {
         cleanupUi();
         if(controller){controller->setMeterProvider({});controller->setAudioProvider({});}
         audio.reset();
+        nativeActions.reset();
     }
 }
 MODULE_EXPORT const char *obs_module_name(void) { return "OBS UI Augment"; }
@@ -140,6 +163,8 @@ MODULE_EXPORT bool obs_module_load(void) {
     bfree(raw);
     const QString folder=QFileInfo(file).absolutePath();
     QDir().mkpath(folder);
+    stripConfigPath=QDir(folder).filePath("action-strip.json");
+    nativeActions=std::make_unique<augment::NativeActionBridge>();
     auto *main=static_cast<QWidget*>(obs_frontend_get_main_window());
     emergency=std::make_unique<augment::EmergencyRecovery>(
         QDir(folder).filePath("safe-mode.flag"),main,
@@ -164,15 +189,23 @@ MODULE_EXPORT bool obs_module_load(void) {
     toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
     if(toolsAction)QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if(!inspector)inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get());
+            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
         inspector->show();inspector->raise();inspector->activateWindow();
     });
     panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
     if(panelsAction)QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
         if(!panels)return;
         if(!inspector)inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get());
+            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
         inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
+    });
+    stripAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket: Action Strip…"));
+    if(stripAction)QObject::connect(stripAction.data(),&QAction::triggered,controller,[]{
+        if(!actionStrip)return;
+        auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+        if(main)QTimer::singleShot(0,[main]{
+            if(actionStrip)actionStrip->showEditor(main,main->menuBar());
+        });
     });
     emergencyAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Emergency restore (Ctrl+Alt+Shift+F12)"));
@@ -193,6 +226,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         // Already suspended before any UI adapters were constructed.
         if(toolsAction)toolsAction->setEnabled(false);
         if(panelsAction)panelsAction->setEnabled(false);
+        if(stripAction)stripAction->setEnabled(false);
         if(emergencyAction)emergencyAction->setEnabled(false);
         if(resumeAction)resumeAction->setVisible(true);
         blog(LOG_WARNING,"[ui-augment] safe-mode.flag detected; Aftermarket UI disabled");
@@ -206,4 +240,5 @@ MODULE_EXPORT void obs_module_unload(void) {
     cleanupUi();
     delete controller; controller = nullptr;
     audio.reset();
+    nativeActions.reset();
 }

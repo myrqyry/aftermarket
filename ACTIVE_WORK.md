@@ -914,3 +914,74 @@ AGPL-3.0; conceptual behavior was assessed without copying code.
 - Current running OBS continues using its already-loaded module. The new
   behavior becomes active on a voluntary next restart; no scene or audio
   changes were made during this installation.
+
+## Slice 30 — native Action Strip, status, owner-aware hotkeys, bounded dock retry (2026-11-22)
+
+User accepted ideas from StreamUP's actual code review and reminded us of
+Timeline's existing Macro Strip. Inspected CURRENT ~/loam/timeline
+macro-strip-dock.cpp, macro-button-model.cpp and hotkey-catalog.cpp and
+the relevant StreamUP source. Reimplemented the design patterns in Aftermarket
+without importing code, persisting into Timeline files, or creating a
+cross-plugin runtime dependency.
+
+Features:
+- Opt-in ActionStrip at native QMenuBar top-right corner, working with
+  hamburger or classic menus. Versioned, atomic, validated
+  plugin_config/obs-ui-augment/action-strip.json; defaults to empty/off;
+  refuses bad entries rather than dropping old valid items. Keeps the
+  original OBS-owned corner widget identity, and restores that widget
+  on teardown.
+- Live status items: recording/streaming flags, elapsed recording/streaming
+  clocks, CPU, FPS, stream output dropped frames, distinct render-missed
+  frames, stream and recording bitrates. One 1Hz shared refresh; 5-second
+  cached native hotkey discovery. Elapsed time uses monotonic clocks and
+  native frontend start/pause/unpause/stop events; unknown time for
+  pre-existing outputs remains --:-- rather than invented duration.
+- Searchable owner-aware native hotkey picker (frontend, source by UUID,
+  output, encoder, service). Persisted hotkey:v1 identity includes
+  registering owner. Exact unique matching prevents ambiguous or missing
+  hotkeys from operating on other sources. OBS routed press/release executes
+  the original registered callback.
+- Actual native dock visibility toggles (not fake panels), checkable theme
+  outline, inline mouse drag-to-reorder, right-click rename/move/remove,
+  separator, stretch spacer and editor dialog. Flexible overflow menu
+  activates on constrained bars. Theme-derived Qt palette and font;
+  natural minimum item widths; dynamic corner repositioning prevents
+  clipping when a longer hotkey is added.
+- Bounded cancelable late-dock retry (8 attempts, 2s interval) specifically
+  for the already-existing native Audio Mixer backside. No secondary
+  dock manager or native workspace migration.
+- New Inspector Action strip tab and native Tools -> Aftermarket: Action
+  Strip editor. Emergency key hides customizations, retains desired
+  enabled preference and saved items; explicit Resume reattaches the
+  strip while restoring original native menus and dock identities.
+
+TDD: three new tests action-strip, native-action, dock-attach-retry,
+updated inspector test. Covers QMenuBar original corner recovery, safe
+teardown/recreate, model persistence/reorder, Qt actual drop events,
+narrow-to-wide overflow action routing, source registerer uniqueness,
+record/stream clock with pause, exact native dock toggle, retries/cancel.
+Full CTest: 20/20 PASS, existing unrelated knob-test AutoMoc warning.
+
+Real isolated OBS 32.2.0/Colorway using disposable Xvfb :114 profile:
+displayed native hamburger and live status on same top bar. Toggle Mixer
+hid/revealed original OBS dock. Opened editor via original Tools submenu.
+Hotkey chooser created owner-aware Disable Preview binding; activating
+it produced OBS's real 'Preview is currently disabled' screen.
+12-item crowded bar at 860px width displayed a functioning overflow
+menu with extra native OBS status values; no crushed last button.
+Emergency Ctrl+Alt+Shift+F12 restored classic native menus and mixer
+while writing marker and preserving action-strip enabled JSON; a
+separate isolated OBS restart stayed in safe mode. Resume restored
+hamburger and action strip with the saved items. Previously found Qt
+hidden menu-bar corner on resume reproduced in a failing test and
+fixed in both Qt and the live OBS copy. Screenshot saved as
+docs/screenshots/readme/action-strip.webp, other test screenshots
+remain under build/action-strip-smoke/.
+
+No replacement Scenes list, new mixing engine, arbitrary dock relocation,
+or StreamUP/Timeline state modification. Output clocks cannot reconstruct
+unknown elapsed time before the plugin observed the start event.
+Source/plugin uniqueness is enforced, so indistinguishable hotkeys remain
+disabled. Broader cross-platform/theme/DPI validation remains open.
+No user OBS scene collection was changed and no upstream push.
