@@ -15,6 +15,7 @@
 #include "audio-patchbay.h"
 #include "obs-routing.h"
 #include "front-audio-controls.h"
+#include "dock-header-button.h"
 #include "native-audio-settings.h"
 #include "obs-signal-levels.h"
 #include <QToolButton>
@@ -91,13 +92,10 @@ static bool setAudioMixerBackside(bool enabled) {
         []{if(frontendReady)obs_frontend_save();}
     );
     frontAudio->attach(dockFaces->front(dock));
-    auto *knobs=new QToolButton();
+    auto *knobs=new augment::DockHeaderButton(augment::DockHeaderGlyph::Knobs);
     knobs->setObjectName("aftermarket-front-knobs");
-    knobs->setText("Knobs");
     knobs->setToolTip("Show pan and sync-offset controls as knobs. Precise offset remains editable in milliseconds.");
     knobs->setAccessibleName("Use knobs for Audio Mixer pan and sync offset");
-    knobs->setCheckable(true);
-    knobs->setAutoRaise(true);
     knobs->setChecked(frontAudio->knobs());
     if(dockFaces->addFrontAccessory(dock,knobs)){
         QObject::connect(knobs,&QToolButton::toggled,frontAudio.get(),

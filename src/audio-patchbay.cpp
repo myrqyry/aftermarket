@@ -38,6 +38,34 @@ AudioPatchbay::SourceIcon AudioPatchbay::iconForType(const QString &type){
         return SourceIcon::Speaker;
     return SourceIcon::Waveform;
 }
+AudioPatchbay::ActivityState AudioPatchbay::activityForSource(const RouteSource &src){
+    if(!src.enabled||src.muted)return ActivityState::Muted;
+    if(!src.audioActive||!src.signalKnown)return ActivityState::Unknown;
+    return src.signalActive?ActivityState::Active:ActivityState::Silent;
+}
+namespace {
+void paintActivityDot(QPainter &p,const QPointF &point,
+                      AudioPatchbay::ActivityState state,
+                      const QColor &accent,const QColor &muted,const QColor &fg){
+    using State=AudioPatchbay::ActivityState;
+    const QColor subtle=paletteBlend(muted,fg,43);
+    const QColor outline=state==State::Active?accent:subtle;
+    p.save();
+    p.setPen(QPen(outline,state==State::Active?1.2:0.95));
+    p.setBrush(state==State::Active?accent:Qt::NoBrush);
+    p.drawEllipse(point,3.15,3.15);
+    if(state==State::Silent){
+        p.setPen(Qt::NoPen);
+        p.setBrush(subtle);
+        p.drawEllipse(point,1.0,1.0);
+    }else if(state==State::Muted){
+        p.setPen(QPen(subtle,1.15,Qt::SolidLine,Qt::RoundCap));
+        p.drawLine(QPointF(point.x()-2.1,point.y()+2.1),
+                   QPointF(point.x()+2.1,point.y()-2.1));
+    }
+    p.restore();
+}
+}
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
     static constexpr int monitorTarget=7;
@@ -119,16 +147,28 @@ public:
     QString selected;
     bool showAll=false;
     static bool sourceLive(const RouteSource &src){
-        return src.enabled&&!src.muted&&src.audioActive&&src.signalKnown&&src.signalActive;
+        return AudioPatchbay::activityForSource(src)==ActivityState::Active;
     }
-    bool outputLive(int target) const {
-        if(target<1||target>monitorTarget)return false;
-        return std::any_of(routes.begin(),routes.end(),[target](const RouteSource &src){
-            if(!sourceLive(src))return false;
-            if(target==monitorTarget)return src.monitor!=0;
-            return src.monitor!=1&&(src.tracks&(1u<<(target-1)))!=0;
-        });
+    ActivityState outputActivity(int target) const {
+        if(target<1||target>monitorTarget)return ActivityState::Unknown;
+        bool unknown=false,silent=false,muted=false;
+        for(const auto &src:routes){
+            const bool connected=target==monitorTarget?src.monitor!=0:
+                src.monitor!=1&&(src.tracks&(1u<<(target-1)))!=0;
+            if(!connected)continue;
+            const auto state=AudioPatchbay::activityForSource(src);
+            if(state==ActivityState::Active)return state;
+            if(state==ActivityState::Silent)silent=true;
+            if(state==ActivityState::Muted)muted=true;
+            if(state==ActivityState::Unknown)unknown=true;
+        }
+        // An unmeasured route could be producing sound: don't claim the
+        // entire destination is silent or muted until every route is known.
+        return unknown?ActivityState::Unknown:
+               silent?ActivityState::Silent:
+               muted?ActivityState::Muted:ActivityState::Unknown;
     }
+    bool outputLive(int target)const{return outputActivity(target)==ActivityState::Active;}
     std::function<void(const QString &)> onSource;
     std::function<void(int)> onTrack;
     std::function<void(int,const QPoint &)> onContextTarget;
@@ -147,6 +187,10 @@ public:
         return false;
     }
     bool outputSignal(int target)const{return outputLive(target);}
+    ActivityState sourceActivity(const QString &id) const{
+        for(const auto &src:routes)if(src.id==id)return AudioPatchbay::activityForSource(src);
+        return ActivityState::Unknown;
+    }
     int visibleCableCount() const {
         int count=0;
         for(const auto &src:routes)
@@ -216,9 +260,8 @@ protected:
                 p.drawText(rect,Qt::AlignCenter,QString::number(t));
             }
             // Separate activity dot to the RIGHT, outside the clickable circle.
-            p.setPen(Qt::NoPen);
-            p.setBrush(outputLive(t)?accent:muted);
-            p.drawEllipse(QPointF(rect.right()+6,rect.center().y()),2.1,2.1);
+            paintActivityDot(p,QPointF(rect.right()+7,rect.center().y()),
+                             outputActivity(t),accent,muted,fg);
             p.setFont(captionFont);
         }
         // Draw cables behind nodes. The all-wires view is intentionally
@@ -321,11 +364,11 @@ protected:
                 break;
             }
             // Signal dot is on the RIGHT; keep it distinct from the cable port.
-            p.setPen(Qt::NoPen);
-            p.setBrush(sourceLive(src)?accent:muted);
-            p.drawEllipse(QPointF(rect.right()-9,rect.center().y()),2.5,2.5);
+            paintActivityDot(p,QPointF(rect.right()-9,rect.center().y()),
+                             AudioPatchbay::activityForSource(src),accent,muted,fg);
             p.setBrush(focused?accent:muted);
-            p.drawEllipse(QPointF(portX,firstY+i*rowStep()),2.6,2.6);
+            p.setPen(Qt::NoPen);
+            p.drawEllipse(QPointF(portX,firstY+i*rowStep()),2.3,2.3);
             p.setFont(captionFont);
         }
         if(routes.isEmpty()){
@@ -386,13 +429,23 @@ protected:
                 if(src.muted)state<<"Muted";
                 if(!src.enabled)state<<"Disabled";
                 if(!src.audioActive)state<<"OBS audio inactive";
-                if(src.signalKnown)state<<(sourceLive(src)?"Signal detected":"No recent signal");
-                else state<<"Signal not measured";
+                switch(AudioPatchbay::activityForSource(src)){
+                    case ActivityState::Active:state<<"Signal detected";break;
+                    case ActivityState::Silent:state<<"Measured silence";break;
+                    case ActivityState::Muted:break;
+                    case ActivityState::Unknown:state<<"Signal not measured";break;
+                }
                 setToolTip(src.name+(state.isEmpty()?QString():(" · "+state.join(" · "))));
             }else if(target>0){
                 int incoming=0;
                 for(const auto &src:routes)if(hasConnection(src,target))++incoming;
-                const QString signal=outputLive(target)?"signal detected":"no measured signal";
+                QString signal;
+                switch(outputActivity(target)){
+                    case ActivityState::Active:signal="signal detected";break;
+                    case ActivityState::Silent:signal="measured silence";break;
+                    case ActivityState::Muted:signal="routed sources muted or disabled";break;
+                    case ActivityState::Unknown:signal="no fresh signal";break;
+                }
                 if(target==monitorTarget)
                     setToolTip(QStringLiteral("Headphones · native OBS Monitor · right-click for Monitor Only and other modes · %1 connected %2 · %3 · not Track 7")
                         .arg(incoming).arg(incoming==1?"source":"sources",signal));
@@ -561,6 +614,12 @@ void AudioPatchbay::refreshLevels(){
 }
 bool AudioPatchbay::sourceSignal(const QString &id)const{return canvas->sourceSignal(id);}
 bool AudioPatchbay::outputSignal(int track)const{return canvas->outputSignal(track);}
+AudioPatchbay::ActivityState AudioPatchbay::sourceActivity(const QString &id)const{
+    return canvas->sourceActivity(id);
+}
+AudioPatchbay::ActivityState AudioPatchbay::outputActivity(int target)const{
+    return canvas->outputActivity(target);
+}
 void AudioPatchbay::notify(const QString &message,bool failed){
     canvas->setStatusTip(message);
     canvas->setAccessibleDescription(message);

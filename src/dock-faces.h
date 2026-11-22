@@ -17,6 +17,8 @@ public:
     bool backVisible(QDockWidget *dock) const;
     bool showBack(QDockWidget *dock,bool visible=true);
 private:
+    bool eventFilter(QObject *watched,QEvent *event) override;
+    void positionTitleButtons(QDockWidget *dock);
     struct State;
     std::unique_ptr<State> state;
 };

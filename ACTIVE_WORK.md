@@ -1262,3 +1262,75 @@ gap from Slice 32 is unrelated and remains open.
   had unchanged SHA256 values before and after installation. No user's
   scene, audio, status, mixer output, recording or monitor routing was changed.
 - Isolated OBS and Xvfb :117 stopped. Repository remains local only; no push.
+
+## Slice 35 — controls IN the native dock title bar, and truthful signal dots (2026-11-22)
+
+User requested work on dock header buttons and status dots, then corrected
+an important ambiguity: buttons belong in the **actual QDockWidget title bar**
+alongside OBS's existing undock action, *not* an Aftermarket-owned second
+"Front / Routing" header row. Preserve this requirement for future passes.
+
+- DockFaces now hosts **direct child DockHeaderButton** controls in the real
+  Audio Mixer dock title region: presentation Knobs toggle, reversible
+  front/back face switch, and optional previous/next tab buttons. The
+  extra internal content-area header was removed. OBS's true dock title,
+  QDockWidget::titleBarWidget identity, native paint/drag region, native
+  float/close hit areas, original fader widget, QDockWidget features,
+  toggleViewAction and tab management remain owned by OBS.
+- Custom 20x18 glyph controls have palette-derived normal/hover/checked
+  states, accessible names and tooltips. Qt's SE_DockWidgetTitleBarText
+  informs horizontal placement and real native content top defines
+  vertical placement; buttons yield to long titles and narrow docks.
+  The face switch has highest priority, then front-only Knobs, then
+  tab arrows as an optional pair if space permits. On floating or
+  vertical-title docks, no extra overlay is shown; platform decoration
+  takes precedence. Dock resize, title changes, palette/style changes,
+  docking and tab changes schedule repositioning.
+- The first attempt put a translucent QWidget **over** the title bar,
+  which rendered a black rectangular gap in the real Colorway/Xvfb
+  screenshot, despite passing the Qt unit test. Removed the wrapper
+  entirely: buttons are direct dock children with no background surface.
+  Confirmed a screenshot with the real "Audio Mixer" title visible,
+  the two Aftermarket buttons, and the original native undock icon
+  side-by-side. Real pointer clicks on the FACE icon opened AudioHub
+  and returned to the native mixer. Pointer clicks on the Knobs icon
+  toggled the isolated front-audio-controls.json preference true/false.
+  No custom "Mixer" or "Routing" row exists inside dock content.
+- Source/output activity dots now distinguish live measured signal
+  (filled highlight), measured silence (ring with center point),
+  muted/disabled (slashed ring) and unknown/stale/inactive meter
+  (unfilled ring). Each uses active Qt palette colors; source and
+  output dots are separated from connection ports. Output aggregation
+  respects source monitor-only routing and prioritizes Active, then
+  Unknown (if any unmeasured routed source), then known Silent,
+  then Muted. This avoids falsely labeling a destination silent or
+  entirely muted when it contains an unknown source.
+
+TDD:
+- RED dock-faces-test on missing direct-title-area controls; GREEN after
+  moving from owned internal header to actual QDockWidget title.
+  Tests assert direct dock parent, in-title geometry, no second
+  internal row, QDockWidget original title widget/features/toggleView
+  identity, front/back check state, color response, tab navigation,
+  long-title safety, floating-dock hiding/redocking and exact detach.
+- RED AudioPatchbay tests on missing ActivityState, unknown/inactive
+  falsely displayed as silence, and mixed unknown+muted output
+  incorrectly displayed as muted; GREEN with state semantics.
+  Additional test verifies drawing follows changed highlight palette.
+- Full CMake build and CTest **21/21 PASS** with no compiler warnings,
+  git diff --check clean.
+- Real isolated OBS 32.2.0 with Colorway theme on disposable Xvfb :118:
+  tested true dock titlebar placement beside original undock action,
+  pointer face flip to/back from AudioHub, pointer knob toggle
+  updating disposable configuration and original native controls,
+  source/output activity states with test tone, and no black rectangle.
+  Screenshots refreshed:
+  docs/screenshots/readme/mixer-patchbay.webp and
+  docs/screenshots/readme/audiohub-front-knobs.webp.
+  Test instance was later stopped while the user's own OBS session
+  was independently restarted; do not claim an end-to-end emergency
+  key result from that interrupted attempt. Qt emergency-recovery
+  test still passed, and DockFaces detach restores native identity.
+- No user OBS scene/routing/settings changed, no production process
+  restarted by our test commands, no upstream push. The separate
+  native pan/sync on-disk save verification gap remains unresolved.

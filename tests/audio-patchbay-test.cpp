@@ -165,7 +165,32 @@ int main(int argc,char **argv){
  REQUIRE(sourceStatusPixels>0);
  REQUIRE(outputStatusPixels>0);
  REQUIRE(leftIconPixels==0); // activity moved right; icon remains stable
+ // Activity dots must repaint from the live theme palette, not an RGB constant.
+ const auto originalPalette=canvas->palette();
+ const auto originalDots=canvas->grab().toImage();
+ auto alternatePalette=originalPalette;
+ alternatePalette.setColor(QPalette::Highlight,QColor(214,110,38));
+ canvas->setPalette(alternatePalette);app.processEvents();
+ const auto recoloredDots=canvas->grab().toImage();
+ int themedPixels=0;
+ for(int y=38;y<=48;++y)for(int x=115;x<=124;++x)
+     if(originalDots.pixel(x,y)!=recoloredDots.pixel(x,y))++themedPixels;
+ REQUIRE(themedPixels>0);
+ canvas->setPalette(originalPalette);app.processEvents();
  REQUIRE(bay.sourceSignal("voice"));
+ REQUIRE(bay.sourceActivity("voice")==augment::AudioPatchbay::ActivityState::Active);
+ // OBS audio-inactive and stale/unknown meters are NOT measured silence.
+ auto inactiveSource=sources[0];
+ inactiveSource.audioActive=false;
+ REQUIRE(augment::AudioPatchbay::activityForSource(inactiveSource)==
+         augment::AudioPatchbay::ActivityState::Unknown);
+ inactiveSource.audioActive=true;
+ inactiveSource.signalKnown=false;
+ REQUIRE(augment::AudioPatchbay::activityForSource(inactiveSource)==
+         augment::AudioPatchbay::ActivityState::Unknown);
+ REQUIRE(bay.sourceActivity("browser")==augment::AudioPatchbay::ActivityState::Silent);
+ REQUIRE(bay.outputActivity(1)==augment::AudioPatchbay::ActivityState::Active);
+ REQUIRE(bay.outputActivity(6)==augment::AudioPatchbay::ActivityState::Unknown);
  REQUIRE(!bay.sourceSignal("browser"));
  REQUIRE(bay.outputSignal(1));
  REQUIRE(!bay.outputSignal(6));
@@ -176,9 +201,14 @@ int main(int argc,char **argv){
  REQUIRE(!bay.outputSignal(1)); // browser is silent, voice is muted
  REQUIRE(bay.outputSignal(7)); // Music is independently monitored and producing signal
  REQUIRE(!bay.sourceSignal("voice"));
+ REQUIRE(bay.sourceActivity("voice")==augment::AudioPatchbay::ActivityState::Muted);
+ REQUIRE(bay.outputActivity(1)==augment::AudioPatchbay::ActivityState::Silent);
  // A source flagged active by OBS is not automatically an audible signal.
  levels.clear();bay.refreshLevels();
  REQUIRE(!bay.sourceSignal("music"));
+ REQUIRE(bay.outputActivity(1)==augment::AudioPatchbay::ActivityState::Unknown);
+ // Muted + unmeasured is unknown, never a false all-muted claim.
+ REQUIRE(bay.sourceActivity("music")==augment::AudioPatchbay::ActivityState::Unknown);
  // Hot-reload and source UUID changes don't redirect routing.
  sources.removeFirst();bay.refresh();
  REQUIRE(bay.selectedId()=="browser");

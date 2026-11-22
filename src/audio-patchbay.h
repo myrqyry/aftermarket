@@ -35,6 +35,8 @@ struct RouteSource {
 class AudioPatchbay final : public QWidget {
 public:
     enum class SourceIcon { Browser, Media, Microphone, Speaker, Waveform };
+    enum class ActivityState { Unknown, Silent, Muted, Active };
+    static ActivityState activityForSource(const RouteSource &source);
     static SourceIcon iconForType(const QString &type);
     using Query=std::function<QVector<RouteSource>()>;
     using ToggleTrack=std::function<bool(const QString &,int)>;
@@ -57,6 +59,8 @@ public:
     int visibleCableCount() const;
     bool sourceSignal(const QString &id) const;
     bool outputSignal(int track) const; // 1–6 native track; 7 OBS Monitor
+    ActivityState sourceActivity(const QString &id) const;
+    ActivityState outputActivity(int target) const;
 private:
     class Canvas;
     Query query;
