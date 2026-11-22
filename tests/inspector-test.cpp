@@ -24,6 +24,8 @@
 #include "panels.h"
 #include "property-sections.h"
 #include "row-stripes.h"
+#include "menu-bar-compact.h"
+#include <QMenuBar>
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
 int main(int argc,char **argv) {
@@ -36,6 +38,12 @@ int main(int argc,char **argv) {
     augment::Controller c(path);
     REQUIRE(!c.modernTransformFrame());
     REQUIRE(!c.collapsiblePropertyGroups());
+    REQUIRE(!c.hamburgerMenuBarEnabled());
+    REQUIRE(c.setHamburgerMenuBarEnabled(true));
+    REQUIRE(c.hamburgerMenuBarEnabled());
+    REQUIRE(QJsonDocument::fromJson(read()).object().value("hamburgerMenuBar").toBool());
+    REQUIRE(c.setHamburgerMenuBarEnabled(false));
+    REQUIRE(!c.hamburgerMenuBarEnabled());
     REQUIRE(c.listRowSettings().isEmpty());
     const QJsonObject stripeSettings{{"scenes",true},{"sources",true},{"base","#223344"},{"alternate","#425466"}};
     REQUIRE(c.setListRowSettings(stripeSettings));
@@ -66,8 +74,19 @@ int main(int argc,char **argv) {
         augment::Panels panels;
         augment::PropertySections sections;
         augment::RowStripes stripes;
+        augment::MenuBarCompact compactBar;
+        main.menuBar()->addMenu("&File");
+        main.menuBar()->addMenu("&Tools");
         int flips=0;
-        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;},&stripes);
+        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;},&stripes,&compactBar);
+        auto *hamburgerToggle=inspector.findChild<QCheckBox*>("augment-hamburger-menu-bar");
+        REQUIRE(hamburgerToggle&&!hamburgerToggle->isChecked());
+        hamburgerToggle->click();
+        REQUIRE(c.hamburgerMenuBarEnabled()&&compactBar.enabled());
+        REQUIRE(main.menuBar()->actions().size()==1);
+        hamburgerToggle->click();
+        REQUIRE(!c.hamburgerMenuBarEnabled()&&!compactBar.enabled());
+        REQUIRE(main.menuBar()->actions().size()==2);
         auto *sceneStripes=inspector.findChild<QCheckBox*>("augment-striped-scenes");
         auto *sourceStripes=inspector.findChild<QCheckBox*>("augment-striped-sources");
         REQUIRE(sceneStripes&&sourceStripes&&!sceneStripes->isChecked()&&!sourceStripes->isChecked());

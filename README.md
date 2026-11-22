@@ -68,6 +68,28 @@ from four pages in one native, theme-aware window:
   Scenes and Sources switches with native-theme or custom row colors. The
   Tools → UI Augment Panels shortcut opens this page.
 
+### Compact hamburger menu bar
+
+**Tools → UI Augment Inspector → Menus & widgets → ☰ Menu bar** replaces OBS's
+top-level File/Edit/View/Docks/Profile/Scene Collection/Tools/Help labels
+with one hamburger entry, using **the same native Qt menus and actions**.
+Click it to access every original submenu, including items registered by other
+OBS plugins. The longer category names have room for their submenu arrows.
+The existing **Compact menus** checkbox is separate: it controls long popup
+layouts, not the top menu bar.
+
+The hamburger mode is **off by default** and saved under
+`"hamburgerMenuBar": true` in `rules.json`. Switch it off to restore the
+classic menu bar immediately, without restarting OBS. Qt provides an
+**Alt+M** shortcut, with the regular native menu/navigation behavior retained;
+the shortcut was checked in the Qt regression harness, not in every desktop
+window manager. Late plugin-added top-level menus are placed in the hamburger,
+and enabling/disabling never duplicates or replaces OBS's actions or submenus.
+The menu bar's remaining space is intentionally left available for later
+status/quick-control slots—those controls are **not** part of this slice.
+
+![Native OBS menus inside Aftermarket's compact hamburger bar](docs/screenshots/readme/hamburger-menu-bar.webp)
+
 ### Alternating Scenes and Sources backgrounds
 
 In **Tools → UI Augment Inspector → Panels → Alternating list backgrounds**,

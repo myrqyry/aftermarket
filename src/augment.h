@@ -48,6 +48,8 @@ public:
     bool setListRowSettings(const QJsonObject &settings,QString *error=nullptr);
     bool compactMenusEnabled() const;
     bool setCompactMenus(bool enabled, QString *error = nullptr);
+    bool hamburgerMenuBarEnabled() const;
+    bool setHamburgerMenuBarEnabled(bool enabled,QString *error=nullptr);
     bool motionEnabled() const;
     bool setMotionEnabled(bool enabled, QString *error = nullptr);
     bool saveRule(const QJsonObject &rule, QString *error = nullptr);

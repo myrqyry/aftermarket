@@ -6,11 +6,13 @@
 #include "panels.h"
 #include "property-sections.h"
 #include "row-stripes.h"
+#include "menu-bar-compact.h"
 #include "dock-faces.h"
 #include "audio-patchbay.h"
 #include "obs-routing.h"
 #include <QDockWidget>
 #include <QMainWindow>
+#include <QMenuBar>
 #include <util/bmem.h>
 #include <QApplication>
 #include <QThread>
@@ -28,7 +30,15 @@ static QPointer<QAction> toolsAction, panelsAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::RowStripes> rowStripes;
+static std::unique_ptr<augment::MenuBarCompact> compactBar;
 static std::unique_ptr<augment::DockFaces> dockFaces;
+static bool setHamburgerMenuBar(bool enabled) {
+    if(!compactBar)return false;
+    auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+    if(!main)return !enabled;
+    if(compactBar->enabled()==enabled)return true;
+    return compactBar->setEnabled(main->menuBar(),enabled);
+}
 static bool setAudioMixerBackside(bool enabled) {
     if(!dockFaces)return false;
     auto *main=static_cast<QMainWindow*>(obs_frontend_get_main_window());
@@ -52,6 +62,7 @@ static void cleanupUi() {
     delete inspector.data();
     if(panels)panels->restoreAll();
     dockFaces.reset();
+    compactBar.reset();
     rowStripes.reset();
     propertySections.reset();
     transforms.reset(); // Restore original OBS accessibility colors before exit-save.
@@ -92,11 +103,12 @@ MODULE_EXPORT bool obs_module_load(void) {
     propertySections->setEnabled(controller->collapsiblePropertyGroups());
     rowStripes=std::make_unique<augment::RowStripes>();
     rowStripes->configure(controller->listRowSettings());
+    compactBar=std::make_unique<augment::MenuBarCompact>();
     dockFaces=std::make_unique<augment::DockFaces>();
     toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
     if (toolsAction) QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if (!inspector) inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get());
+            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get());
         inspector->show();
         inspector->raise();
         inspector->activateWindow();
@@ -107,9 +119,13 @@ MODULE_EXPORT bool obs_module_load(void) {
         []{return controller&&controller->modernTransformFrame();});
     panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
     if(panelsAction) QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
-        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get());
+        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get());
         inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
     });
+    // Attach only after OBS's native menus and our Tools entries exist.
+    // Other plugins can add more menus later; the adapter observes those.
+    if(controller->hamburgerMenuBarEnabled()&&!setHamburgerMenuBar(true))
+        blog(LOG_WARNING,"[ui-augment] hamburger menu bar unavailable in this layout");
     obs_frontend_add_event_callback(frontendEvent,nullptr);
     blog(LOG_INFO, "[ui-augment] menu instrumentation active; rules: %s", qPrintable(file));
     return true;

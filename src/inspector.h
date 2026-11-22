@@ -13,6 +13,7 @@ class Controller;
 class Panels;
 class PropertySections;
 class RowStripes;
+class MenuBarCompact;
 struct ActionSnapshot {
     QString text, objectName;
     bool checkable=false, custom=false, visible=false, enabled=false, nativeIcon=false;
@@ -39,7 +40,8 @@ class Inspector final : public QDialog {
 public:
     explicit Inspector(Controller &controller, QWidget *parent=nullptr, Panels *panels=nullptr,
                        PropertySections *sections=nullptr,
-                       std::function<bool(bool)> mixerToggle={}, RowStripes *rowStripes=nullptr);
+                       std::function<bool(bool)> mixerToggle={}, RowStripes *rowStripes=nullptr,
+                       MenuBarCompact *compactBar=nullptr);
     ~Inspector() override;
     void openPanels();
     void capture(const WidgetSnapshot &snapshot);

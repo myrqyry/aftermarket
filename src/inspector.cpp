@@ -17,6 +17,8 @@
 #include "panels.h"
 #include "property-sections.h"
 #include "row-stripes.h"
+#include "menu-bar-compact.h"
+#include <QMenuBar>
 #include <QGroupBox>
 #include <QGridLayout>
 #include <QMainWindow>
@@ -444,7 +446,7 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes):QDialog(parent),ui(new Ui(controller)) {
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     setModal(false);
@@ -463,7 +465,40 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->motion->setChecked(controller.motionEnabled());
     ui->compactMenus=new QCheckBox("Compact menus",this);ui->compactMenus->setObjectName("augment-compact-menus");
     ui->compactMenus->setToolTip("Tighten long menus into visible columns. Only explicitly selected actions enter More actions. Reopen a menu to apply.");
-    ui->compactMenus->setChecked(controller.compactMenusEnabled());toolbar->addWidget(ui->compactMenus);toolbar->addWidget(ui->motion);
+    ui->compactMenus->setChecked(controller.compactMenusEnabled());toolbar->addWidget(ui->compactMenus);
+    if(compactBar){
+        auto *main=qobject_cast<QMainWindow*>(parent);
+        auto *bar=main?main->menuBar():nullptr;
+        if(bar){
+            auto *toggle=new QCheckBox(QString::fromUtf8("☰ Menu bar"),this);
+            toggle->setObjectName("augment-hamburger-menu-bar");
+            toggle->setToolTip("Replace the native top-level OBS menu labels with one hamburger menu. Alt+M opens the original menus. Reversible.");
+            toggle->setAccessibleName("Compact hamburger menu bar");
+            toggle->setChecked(controller.hamburgerMenuBarEnabled());
+            toolbar->addWidget(toggle);
+            QPointer<MenuBarCompact> safe(compactBar);
+            QPointer<QMenuBar> safeBar(bar);
+            connect(toggle,&QCheckBox::toggled,this,
+                [this,&controller,toggle,safe,safeBar](bool enabled){
+                    if(!safe||!safeBar||!safe->setEnabled(safeBar,enabled)){
+                        const QSignalBlocker blocker(toggle);
+                        toggle->setChecked(controller.hamburgerMenuBarEnabled());
+                        ui->status->setText("Cannot change the OBS menu bar in this layout.");
+                        return;
+                    }
+                    QString error;
+                    if(controller.setHamburgerMenuBarEnabled(enabled,&error))
+                        ui->status->setText(enabled?"Hamburger menu bar enabled. Alt+M opens OBS menus.":"Original OBS menu bar restored.");
+                    else{
+                        safe->setEnabled(safeBar,!enabled);
+                        const QSignalBlocker blocker(toggle);
+                        toggle->setChecked(controller.hamburgerMenuBarEnabled());
+                        ui->status->setText(error);
+                    }
+                });
+        }
+    }
+    toolbar->addWidget(ui->motion);
     connect(ui->compactMenus,&QCheckBox::toggled,this,[this](bool enabled){
         QString error;
         if(ui->controller.setCompactMenus(enabled,&error))

@@ -592,3 +592,59 @@ OBS profile. User's live OBS, themes and source settings untouched.
 
 Limits: other widgets and third-party list implementations are excluded,
 and no claim is made about all Qt/OBS platforms or custom themes. No push.
+
+## Slice 25 — native OBS menu bar as one hamburger (2026-11-21)
+
+Accepted direction: replace OBS's top-level File, Edit, View, Docks, Profile,
+Scene Collection, Tools and Help labels with one `☰` control, not a second
+toolbar squeezed alongside them. The freed area may later host shared action
+strips/status icons, but none are invented in this slice.
+
+Implemented `MenuBarCompact`, a small, opt-in runtime Qt adapter for
+non-native `QMenuBar`. It moves **existing QAction identities** from the
+bar to a submenu of a new hamburger `QMenu`; original QMenu objects,
+action callbacks, shortcuts, disabled/checkable states and plugin-owned
+Tools entries stay intact. An action-event observer captures top-level menus
+added later by other plugins. The class restores the original action order
+on disable/unload and destroys its plugin-owned popup and shortcut on
+teardown. Width reserves room for long names and submenu arrows.
+The native corner widget (if any) remains untouched. MacOS-native menu bars
+are excluded rather than hacked.
+
+Inspector → Menus & widgets adds a separate `☰ Menu bar` toggle. It writes
+`hamburgerMenuBar` (default false) atomically to rules.json. Startup
+reapplies the setting after native Tools actions exist; disabling restores
+the classic bar immediately. Alt+M is registered as a Qt window shortcut.
+`Compact menus` remains a distinct preference for popup density.
+
+TDD: full CTest suite 15/15 passed. New `menu-bar-compact-test` first failed without its adapter; now
+checks exact pointer identity of original menus/commands, top-level
+consolidation, preservation of existing menu-bar corner widget, dynamic
+plugin menu additions, native action callbacks and accelerators, repeated
+toggles, native restore order, deleted plugin menus, synthetic Qt Alt+M
+press/release opening the menu, shortcut removal on disable, full
+plugin-owned popup removal on teardown, and empty/unrelated menus.
+Inspector test covers immediate toggle, original menu restoration and
+persistent config bool.
+
+Isolated real OBS 32.2.0/Colorway under Xvfb with copied disposable profile
+and rebuilt module loaded with opt-in persisted: menu bar showed a single
+hamburger. Clicking displayed all eight original OBS submenus. Hovering
+Tools opened the original menu with OBS and third-party plugin actions,
+including UI Augment Inspector and Panels. Selecting Inspector from that
+submenu launched the original settings window. Toggling `☰ Menu bar` off
+restored the original File/Edit/View/... labels immediately; the copied
+rules.json persisted false. Restart after rebuild with true showed the
+hamburger again, and the updated menu width kept Scene Collection clear
+of its submenu arrow. Screenshot:
+`docs/screenshots/readme/hamburger-menu-bar.webp`.
+
+Limitations: synthetic Xvfb Alt+M key injection did not visibly open the
+popup even though Qt key-event regression passed; actual keyboard shortcut
+needs validation with a window manager. When new top-level plugin menu
+entries are created while compact mode is active, they are appended in
+observed order; incompatible plugin code that requires inserting before
+an action removed from the menubar may need an adapter extension.
+No additional user-customizable status controls or menu-bar styling
+framework added. User's running OBS process, configuration and installed
+plugin remain unchanged. No push.
