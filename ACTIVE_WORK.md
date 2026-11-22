@@ -774,3 +774,24 @@ Updated screenshot `docs/screenshots/readme/mixer-patchbay.webp` from
 the actual isolated OBS application. No external audio bus/engine added.
 User OBS process remained running independently; no scene/recording changes
 were made to the user's profile.
+
+### Slice 27 deployment checkpoint (2026-11-21)
+
+Full CTest suite: **16/16 passed**. Commit `386dca4`.
+After real XTest drag in disposable OBS, normal OBS File → Exit saved
+Silent test audio mixers mask **43**, confirming source-to-track 2 changed
+the libobs state rather than only painting a connection. Visual inspection
+showed all six destinations within the short mixer dock; the Show all
+toggle revealed the second source's track 1 wire. Replaced screenshot in README.
+
+The user's OBS `obs --verbose` remained running (PID 2851624); no session
+was restarted, no scene collection or recording modified. Preserved prior
+installed plugin at
+`~/.local/share/aftermarket/rollback/obs-ui-augment.pre-compact-graph.b21716ac7a8f.so`.
+Used atomic `./scripts/install.sh` to install verified module
+SHA256 `4a7039100dc45f26919516915c31ac2cfcfbf22138453260ec98763bbea26408`
+into the normal per-user OBS plugin path; installed module `cmp` matched
+the tested build. Existing `rules.json` SHA remained
+`b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf`.
+New graph will appear **after the user next restarts OBS**; running process
+continues using its old, already-loaded module. No push.
