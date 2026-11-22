@@ -213,54 +213,26 @@ widgets, menus and source list selection remain owned by OBS and its theme.**
 
 ![Aftermarket Inspector typography with Colorway](docs/screenshots/readme/inspector-typography.webp)
 
-### Native Audio Mixer backside
+### Native Audio Mixer and AudioHub
 
-This feature is **off by default** and stored as `"mixerBackside": true` in
-`rules.json` when enabled. The original Audio Mixer remains unchanged behind
-the flip button; floating and tabified docks retain OBS's own controls. The
-backside draws actual source-to-track connections and exposes six track
-toggles, a separate **MON** destination, and the three native OBS monitoring
-modes. The MON jack stays in the graph header so it remains accessible
-even in short Audio Mixer docks; the six numbered tracks retain their
-original positions. Selecting a source uses its OBS UUID (not its display
-name). The interface refreshes from OBS while visible, so changes in
-Advanced Audio Properties appear here, and vice versa.
+Enable the optional **Audio Mixer backside** in **Tools → UI Augment Inspector → Panels**. Aftermarket preserves OBS's real Audio Mixer and adds a reversible front/back control; it does not replace OBS's faders or create a second audio engine. Switch faces using the dock's flip button. Emergency recovery **Ctrl+Alt+Shift+F12** restores the original mixer and removes all Aftermarket controls without changing audio routing or the active scene.
 
-**Drag a source node onto a numbered track** to connect it in native OBS.
-The cable is previewed while dragging. Dropping on an already connected
-track leaves the route intact; use the numbered track button below the graph
-(or click the track node with the source selected) to toggle it off. By default
-the graph shows only the selected source's wires. Check **Show all wires**
-for every source's routes, with the selected source emphasized. This display
-checkbox is session-only; it does not change audio state. Colors are derived
-from the current OBS/Qt theme.
+**AudioHub (back face)** is a compact source-to-output patchbay:
 
-**Drag a source to MON** to connect it to OBS's existing monitoring output.
-A repeated drag does not disconnect or override **Monitor Only**. Clicking
-the **MON** graph jack (or its checkable button beside Tracks 1–6) toggles
-monitoring for the selected source: **Off** or **Monitor and Output**.
-The separate Monitoring dropdown retains **Off / Monitor Only / Monitor
-and Output** and remains synchronized with the cable and MON indicator.
-Connecting MON does **not** modify any of the six track assignments.
-The graph shows assigned track wires even for Monitor Only; that mode
-suppresses normal program output, so a wire does not guarantee audibility.
+- **Click a source node to select it**, then click a numbered destination to toggle its route or drag the source to connect. Clicking an already-connected track toggles it off; repeating a drag never disconnects it. **Show all wires** reveals every source's routing. Hovering a source or output temporarily highlights related paths without modifying state.
+- Outputs **1–6** represent OBS's actual audio tracks. The **headphones icon** is the separate native OBS monitoring destination, not Track 7. Clicking it toggles Off / Monitor and Output for the selected source; the compact **Monitor** dropdown also provides Monitor Only. Dragging to the headphones preserves existing Monitor Only and never rewrites track assignments. The selected source is identified internally by OBS UUID, not its potentially duplicated or renamed display name.
+- Small dots indicate **recent metered audio activity**, not merely enabled sources. A source dot lights only when a recent native OBS level is measured and the source is active and unmuted. An output dot aggregates the measured activity of the sources routed there; the track indicators respect Monitor Only. If a meter is unavailable or stale, the dot stays subdued. A lit output dot **does not prove a physical playback device is audible**.
+- The right-side **Outputs** heading aligns with the destination column. The old duplicate source selector, lower output-button row, and verbose diagnostics/status text are gone. Colors, fonts, outlines and activity accents use the active OBS/Qt palette.
 
-MON is **not Track 7 or a separate audio bus**. It uses the Monitoring
-Device selected under **OBS Settings → Audio → Advanced**. OBS's audio
-monitoring can echo/loop if that device is also captured as a source.
-Aftermarket doesn't choose the hardware monitor device or create new audio
-outputs; it only surfaces and controls the native monitoring route.
+![Compact AudioHub routing with native headphones and live activity dots](docs/screenshots/readme/mixer-patchbay.webp)
 
-![Native OBS Monitor output in Aftermarket's routing graph](docs/screenshots/readme/audio-monitor-output.webp)
+**Original mixer front face** now also exposes per-source **Pan** and **Sync offset** inside the existing OBS volume strips. Pan is a normalized stereo balance (0 = left, 50 = center, 100 = right); mono sources have pan disabled. The sync offset is displayed and edited in **milliseconds**, mapped to OBS's native nanosecond offset API. Use the **Knobs** toggle in the dock header for compact rotary controls; the precise numeric sync-offset field remains accessible in knob mode. The coarse sync knob spans ±2000 ms, while the numeric control supports the wider OBS offset range. No native fader, mute button, source identity, or monitoring state is replaced.
 
-Tracks **1–6** are native OBS assignments, not newly invented buses or six
-independent hardware outputs. Stream/record output-track selection and detailed
-audio options stay in OBS's own Settings and Advanced Audio Properties. Source
-routing changes save through OBS's usual scene collection, not a separate
-patchbay configuration. With many sources the graph can still scroll; custom
-backside editors, size presets and arbitrary audio patching are not yet built.
+![Audio Mixer front with theme-aware pan and sync knobs](docs/screenshots/readme/audiohub-front-knobs.webp)
 
-![Compact native OBS routing graph with all source wires visible](docs/screenshots/readme/mixer-patchbay.webp)
+Pan and sync are read from and written to the same source properties shown in **Advanced Audio Properties**. Adjustments request a debounced OBS project save; the separate atomic `plugin_config/obs-ui-augment/front-audio-controls.json` holds only the slider/knob presentation preference. External source changes are read back while the dock is visible, and all additional widgets detach cleanly.
+
+**Monitoring note:** the physical Monitor Device is selected under **OBS Settings → Audio → Advanced**. Routing a source to an already-captured monitor device can cause echo/feedback. Monitor Only suppresses normal program output even if track assignments remain enabled. The plugin neither chooses a hardware output nor performs arbitrary DSP/bus routing. With many sources, the diagram can still scroll.
 
 ![Mixer page in OBS](docs/screenshots/readme/workspace-mixer.png)
 

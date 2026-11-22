@@ -1073,3 +1073,85 @@ collection and audio devices were not touched. No upstream publication.
 - Temporary Xvfb :115 and isolated OBS stopped. No live user OBS routing,
   scene collection, monitoring devices, recording or process was changed;
   no push. Physical monitoring-device audibility was not tested.
+
+## Slice 32 — AudioHub graph simplification and native Audio Mixer front controls (2026-11-22)
+
+User screenshot showed a misaligned Tracks header, duplicated source selector
+and output button row, MON text, verbose diagnostics, and a desire for real
+activity dots plus per-source pan/sync offset with optional knobs. This
+checkpoint covers the graph AND mixer front, not only the last changed widget.
+
+- Backside AudioPatchbay retains UUID-authoritative native OBS route and
+  monitoring callbacks and hover/drag interactions. Removed the redundant
+  source dropdown, lower 1–6/MON button row and text diagnostics/status
+  messages. Graph source nodes themselves select; the native 3-mode
+  monitoring dropdown remains a selected-source control, now labelled
+  Monitor, and the right heading is Outputs. Headphone output is drawn as
+  a Qt vector, not a fragile font glyph. No hardcoded widget colors.
+  Measured source and output status dots now use a scoped libobs volmeter
+  per UUID (ObsSignalLevels), storing atomic peak magnitude and sample
+  timestamps and ignoring stale/unknown signals; output dots aggregate
+  active unmuted, enabled, routed sources and respect Monitor Only.
+  The graph never represents source-enabled state as proof of sound.
+- Original OBS Audio Mixer front preserves VolumeControl, native fader,
+  mute and monitoring controls. Added per-source Pan (OBS balance [0,1])
+  and precise Sync offset (millisecond field mapped to native OBS
+  nanoseconds) into each native vertical VolumeControl layout. Optional
+  Knobs presentation replaces horizontal pan slider with themed QDial
+  and adds a coarse ±2000ms sync dial while retaining exact sync input.
+  Compact two-row layout was revised after the **real isolated OBS**
+  mixer showed 81–88px-wide VolumeControl columns; first attempt had
+  a 0px slider height, fixed by explicit 20px slider and 23px spinbox
+  hit targets with reversible 48/57px row heights.
+  NativeAudioSettings only matches valid audio UUIDs, rejects invalid
+  edits and disables pan for mono. FrontAudioControls matches the native
+  VolumeName labels to UUID-backed sources, rejects ambiguous names,
+  readbacks external OBS edits, writes through native libobs setters,
+  and removes every plugin-owned addition on detach.
+- Knob presentation stored separately via QSaveFile in
+  plugin_config/obs-ui-augment/front-audio-controls.json, not in OBS
+  scene/routing data. Successful native changes schedule a **coalesced
+  320ms obs_frontend_save()** request; native readbacks never save.
+  The backing OBS project persistence path is source-of-truth and is
+  not replaced. NOTE: In isolated Xvfb OBS, UI wheel changes were
+  displayed (0ms->10ms->30ms), and setter save-request callback behavior
+  is test-covered, but the inspected scene JSON did **not** change.
+  This is an explicit unresolved **end-to-end on-disk persistence
+  verification gap**, not evidence of verified persistence in the user's
+  normal OBS session. The local test profile appears to use a different
+  source file than the direct edited JSON (log still referenced the
+  original tone.wav after JSON was changed). Do not claim real saved
+  pan/offset values until normal-profile validation proves it.
+- DockFaces now supports a removable front-only header accessory Knobs
+  toggle, shown only while the front face is active. FrontAudioControls
+  resets before DockFaces restores the exact native mixer widgets in
+  emergency or unload. The existing alternate AudioHub face remains
+  fully reversible.
+
+TDD: a complete replacement AudioPatchbay regression was RED until old
+controls were removed and SignalProvider/graph UI implemented; focused
+Qt test covers no duplicate widgets, active and inactive signal
+provider readings, native headphone routing, hover/selection, missing UUIDs.
+New FrontAudioControls Qt test was RED until controls, external sync,
+both presentation modes, model writeback, exact native preservation,
+narrow-90px layout and coalesced save-request hook were implemented.
+Native libobs obs-routing regression verifies balance and nanosecond
+sync-offset setters and readback, invalid UUIDs, source rename.
+Updated DockFaces regression verifies reversible header accessory and
+front/back visibility.
+
+Real isolated OBS 32.2.0, Colorway theme, copied disposable XDG profile on
+Xvfb :116. Captured graph routing screenshot with actual Tone test
+metered activity: a source and routed output dot lit after unmuting
+the tone, while Silent test stayed dim. Front screenshots demonstrate
+usable pan and sync sliders and Knobs mode in 81–88px native mixer
+columns. Tested emergency Ctrl+Alt+Shift+F12 from the front: the entire
+custom UI and source adjustments disappeared and the original mixer
+returned while OBS remained running. Byte-for-byte SHA256 of copied
+rules.json, action-strip.json and front-audio-controls.json were
+identical before and after emergency; safe-mode.flag was written.
+Screenshots: docs/screenshots/readme/mixer-patchbay.webp and
+docs/screenshots/readme/audiohub-front-knobs.webp.
+
+No user OBS scene, settings, recordings or audio routes touched, no
+physical audio output proof and no upstream push.

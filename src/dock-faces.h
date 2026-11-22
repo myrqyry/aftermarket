@@ -11,6 +11,7 @@ public:
     ~DockFaces() override;
     bool attach(QDockWidget *dock,QWidget *back);
     bool detach(QDockWidget *dock);
+    bool addFrontAccessory(QDockWidget *dock,QWidget *accessory);
     QWidget *front(QDockWidget *dock) const;
     QWidget *back(QDockWidget *dock) const;
     bool backVisible(QDockWidget *dock) const;

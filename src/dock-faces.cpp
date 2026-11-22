@@ -41,6 +41,7 @@ struct DockFaces::State {
         QPointer<QWidget> host;
         QPointer<QStackedWidget> stack;
         QPointer<QToolButton> flip,prev,next;
+        QPointer<QWidget> accessory;
         QPointer<QLabel> faceLabel;
         bool wasHidden=false;
     };
@@ -132,6 +133,18 @@ bool DockFaces::attach(QDockWidget *dock,QWidget *back) {
     });
     return true;
 }
+bool DockFaces::addFrontAccessory(QDockWidget *dock,QWidget *accessory){
+    auto it=state->entries.find(dock);
+    if(it==state->entries.end()||!accessory||it->accessory||!it->host)return false;
+    auto *bar=it->host->findChild<QWidget*>("aftermarket-dock-controls");
+    auto *layout=bar?qobject_cast<QHBoxLayout*>(bar->layout()):nullptr;
+    if(!layout)return false;
+    accessory->setParent(bar);
+    layout->insertWidget(1,accessory);
+    it->accessory=accessory;
+    accessory->setVisible(!backVisible(dock));
+    return true;
+}
 bool DockFaces::detach(QDockWidget *dock) {
     auto it=state->entries.find(dock);
     if(it==state->entries.end())return false;
@@ -164,6 +177,7 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     if(it==state->entries.end()||!it->stack||!it->native||!it->alternate)return false;
     it->stack->setCurrentWidget(visible?it->alternate.data():it->native.data());
     if(it->faceLabel)it->faceLabel->setText(visible?(it->alternate->windowTitle().isEmpty()?"Back":it->alternate->windowTitle()):"Front");
+    if(it->accessory)it->accessory->setVisible(!visible);
     if(it->flip){
         it->flip->setToolTip(visible?"Show original dock":"Show backside");
         it->flip->setAccessibleName(it->flip->toolTip());

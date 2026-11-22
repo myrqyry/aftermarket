@@ -1,4 +1,5 @@
 #include "obs-routing.h"
+#include "native-audio-settings.h"
 #include <obs.h>
 #include <QCoreApplication>
 #include <iostream>
@@ -55,6 +56,25 @@ int main(int argc,char **argv) {
     REQUIRE(record.muted&&!record.enabled);
     REQUIRE(!augment::ObsRouting::setTrack("stale-uuid",1,true));
     REQUIRE(!augment::ObsRouting::setMonitoring("stale-uuid",0));
+    // These are the real Advanced Audio Properties values, not a separate
+    // model saved by Aftermarket. Native values survive a source rename.
+    REQUIRE(augment::NativeAudioSettings::setPan(uuid,.8));
+    REQUIRE(qAbs(obs_source_get_balance_value(source)-.8f)<.0001f);
+    REQUIRE(augment::NativeAudioSettings::setOffsetMs(uuid,-175));
+    REQUIRE(obs_source_get_sync_offset(source)==-175000000LL);
+    auto props=augment::NativeAudioSettings::list();
+    bool matched=false;
+    for(const auto &item:props)if(item.id==uuid){
+        REQUIRE(item.name=="Renamed patchbay microphone");
+        REQUIRE(qAbs(item.balance-.8)<.001);
+        REQUIRE(item.offsetMs==-175);
+        matched=true;
+    }
+    REQUIRE(matched);
+    REQUIRE(!augment::NativeAudioSettings::setPan("not-a-source",.5));
+    REQUIRE(!augment::NativeAudioSettings::setPan(uuid,-.1));
+    REQUIRE(!augment::NativeAudioSettings::setOffsetMs("not-a-source",0));
+
     obs_source_remove(source);
     obs_source_release(source);
     obs_shutdown();

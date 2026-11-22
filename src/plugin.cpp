@@ -14,6 +14,10 @@
 #include "dock-faces.h"
 #include "audio-patchbay.h"
 #include "obs-routing.h"
+#include "front-audio-controls.h"
+#include "native-audio-settings.h"
+#include "obs-signal-levels.h"
+#include <QToolButton>
 #include <QDockWidget>
 #include <QMainWindow>
 #include <QMenuBar>
@@ -41,6 +45,7 @@ static std::unique_ptr<augment::NativeActionBridge> nativeActions;
 static std::unique_ptr<augment::DockAttachRetry> mixerRetry;
 static QString stripConfigPath;
 static std::unique_ptr<augment::DockFaces> dockFaces;
+static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
 static bool setHamburgerMenuBar(bool enabled) {
@@ -57,10 +62,12 @@ static bool setAudioMixerBackside(bool enabled) {
     auto *dock=main->findChild<QDockWidget*>("mixerDock");
     if(!dock)return !enabled;
     if(!enabled) {
+        frontAudio.reset(); // remove only our controls before restoring OBS front
         if(dockFaces->front(dock))dockFaces->detach(dock);
         return true;
     }
     if(dockFaces->front(dock))return true;
+    auto levels=std::make_shared<augment::ObsSignalLevels>();
     auto *patchbay=new augment::AudioPatchbay(
         []{return augment::ObsRouting::list();},
         [](const QString &id,int track){return augment::ObsRouting::toggleTrack(id,track);},
@@ -68,9 +75,34 @@ static bool setAudioMixerBackside(bool enabled) {
         nullptr,
         [](const QString &id,int track,bool connected){
             return augment::ObsRouting::setTrack(id,track,connected);
+        },
+        [levels](const QVector<augment::RouteSource> &routes){
+            return levels->sample(routes);
         }
     );
     if(!dockFaces->attach(dock,patchbay)){delete patchbay;return false;}
+    const QString settingsFile=QDir(QFileInfo(stripConfigPath).absolutePath())
+        .filePath("front-audio-controls.json");
+    frontAudio=std::make_unique<augment::FrontAudioControls>(
+        settingsFile,
+        []{return augment::NativeAudioSettings::list();},
+        [](const QString &id,double pan){return augment::NativeAudioSettings::setPan(id,pan);},
+        [](const QString &id,int ms){return augment::NativeAudioSettings::setOffsetMs(id,ms);},
+        []{if(frontendReady)obs_frontend_save();}
+    );
+    frontAudio->attach(dockFaces->front(dock));
+    auto *knobs=new QToolButton();
+    knobs->setObjectName("aftermarket-front-knobs");
+    knobs->setText("Knobs");
+    knobs->setToolTip("Show pan and sync-offset controls as knobs. Precise offset remains editable in milliseconds.");
+    knobs->setAccessibleName("Use knobs for Audio Mixer pan and sync offset");
+    knobs->setCheckable(true);
+    knobs->setAutoRaise(true);
+    knobs->setChecked(frontAudio->knobs());
+    if(dockFaces->addFrontAccessory(dock,knobs)){
+        QObject::connect(knobs,&QToolButton::toggled,frontAudio.get(),
+                         [](bool enabled){if(frontAudio)frontAudio->setKnobs(enabled);});
+    }else delete knobs;
     return true;
 }
 static void stopCustomUi(){
@@ -81,6 +113,7 @@ static void stopCustomUi(){
     if(panels)panels->restoreAll();
     mixerRetry.reset();
     actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
+    frontAudio.reset(); // remove pan/offset controls before original mixer is restored
     dockFaces.reset(); // unwrap original mixer widget before panel teardown
     compactBar.reset(); // return original OBS QAction identities
     rowStripes.reset();
