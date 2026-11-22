@@ -985,3 +985,21 @@ unknown elapsed time before the plugin observed the start event.
 Source/plugin uniqueness is enforced, so indistinguishable hotkeys remain
 disabled. Broader cross-platform/theme/DPI validation remains open.
 No user OBS scene collection was changed and no upstream push.
+
+### Slice 30 verified local deployment (2026-11-22)
+
+- Feature commit: ef2dc5e. Full CTest 20/20 passed, and real isolated
+  OBS 32.2.0/Colorway checks covered strip display, overflow in an 860px
+  window, native Mixer hide/show, owner-aware Disable Preview hotkey,
+  Tools/Inspector editor and emergency/restart/resume behavior.
+- With no user OBS running, installed the tested binary via the repository's
+  atomic scripts/install.sh; destination bytes match build/obs-ui-augment.so.
+  Installed SHA-256: e14f75bff1c8944576136881301341a27b2d22606dbc1cb6a167e94aa1150ba7.
+- Preserved the previous installed plugin, SHA-256 prefix 65666a050f4a, at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-action-strip.65666a050f4a.so.
+- Confirmed the user's rules.json SHA-256 remained exactly
+  b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf.
+  Their action-strip.json was absent both before and after installation:
+  the feature is opt-in, with an empty item list when first opened.
+  No user OBS scene/recording/route changes, no user OBS process changes,
+  no external push. It will load on the next ordinary OBS launch.
