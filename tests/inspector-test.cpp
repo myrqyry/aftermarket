@@ -35,6 +35,12 @@ int main(int argc,char **argv) {
     augment::Controller c(path);
     REQUIRE(!c.modernTransformFrame());
     REQUIRE(!c.collapsiblePropertyGroups());
+    REQUIRE(!c.mixerBacksideEnabled());
+    REQUIRE(c.setMixerBacksideEnabled(true));
+    REQUIRE(c.mixerBacksideEnabled());
+    REQUIRE(QJsonDocument::fromJson(read()).object().value("mixerBackside").toBool());
+    REQUIRE(c.setMixerBacksideEnabled(false));
+    REQUIRE(!c.mixerBacksideEnabled());
     REQUIRE(c.setCollapsiblePropertyGroups(true));
     REQUIRE(c.collapsiblePropertyGroups());
     REQUIRE(QJsonDocument::fromJson(read()).object().value("collapsiblePropertyGroups").toBool());
@@ -49,7 +55,14 @@ int main(int argc,char **argv) {
         QMainWindow main;
         augment::Panels panels;
         augment::PropertySections sections;
-        augment::Inspector inspector(c,&main,&panels,&sections);
+        int flips=0;
+        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;});
+        auto *mixerBack=inspector.findChild<QCheckBox*>("augment-mixer-backside");
+        REQUIRE(mixerBack&&!mixerBack->isChecked());
+        mixerBack->click();
+        REQUIRE(c.mixerBacksideEnabled()&&flips==1);
+        mixerBack->click();
+        REQUIRE(!c.mixerBacksideEnabled()&&flips==2);
         auto *propertyGroups=inspector.findChild<QCheckBox*>("augment-property-sections");
         REQUIRE(propertyGroups&&!propertyGroups->isChecked());
         propertyGroups->click();

@@ -9,7 +9,8 @@ identity, while Aftermarket extends presentation and interaction at runtime.
 
 Current capabilities include context-menu icons, hiding default commands,
 custom executable actions, a native inspector, animated gradients, audio-reactive mixer effects, rotary gain controls with
-integrated peak meters, collapsible docks, and a reversible dockable preview.
+integrated peak meters, collapsible docks, a native Audio Mixer patchbay backside,
+and a reversible dockable preview.
 
 Formerly OBS UI Augment. The installed module, configuration directory and
 Tools menu entries retain their existing names for compatibility.
@@ -62,7 +63,27 @@ from four pages in one native, theme-aware window:
   into a movable, floatable, closable native dock, or restore it to the center.
   Enable **Collapsible source / filter property groups** to add independent
   fold arrows to ordinary grouped OBS settings, preserving their live controls.
-  The Tools → UI Augment Panels shortcut opens this page.
+  Toggle **Audio Mixer backside (native routing)** to add a flip button to
+  OBS's real Audio Mixer dock. The Tools → UI Augment Panels shortcut opens this page.
+
+### Native Audio Mixer backside
+
+This feature is **off by default** and stored as `"mixerBackside": true` in
+`rules.json` when enabled. The original Audio Mixer remains unchanged behind
+the flip button; floating and tabified docks retain OBS's own controls. The
+backside draws actual source-to-track connections and exposes six track
+toggles and the three OBS monitoring modes. Selecting a source uses its OBS
+UUID (not its display name). The interface refreshes from OBS while visible,
+so changes in Advanced Audio Properties appear here, and vice versa.
+
+Tracks **1–6** are native OBS assignments, not newly invented buses or six
+independent hardware outputs. Stream/record output-track selection and detailed
+audio options stay in OBS's own Settings and Advanced Audio Properties. Source
+routing changes save through OBS's usual scene collection, not a separate
+patchbay configuration. The graphic is scrollable in narrow docks; custom
+backside editors, size presets and arbitrary audio patching are not yet built.
+
+![Real OBS/Colorway Audio Mixer backside showing native audio tracks 1, 4 and 6](docs/screenshots/readme/mixer-patchbay.webp)
 
 ![Mixer page in OBS](docs/screenshots/readme/workspace-mixer.png)
 

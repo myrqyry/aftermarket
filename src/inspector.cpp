@@ -441,7 +441,7 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections):QDialog(parent),ui(new Ui(controller)) {
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     setModal(false);
@@ -680,6 +680,30 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->settings=buildSettings(controller,ui->tabs,parent,ui->footer,ui->status);
     if(panels){
         auto *page=panels->createPage(qobject_cast<QMainWindow*>(parent),ui->tabs);
+        if(mixerToggle){
+            auto *toggle=new QCheckBox("Audio Mixer backside (native routing)",page);
+            toggle->setObjectName("augment-mixer-backside");
+            toggle->setToolTip("Flip the original OBS mixer to a graphical router for native tracks 1–6 and monitoring. No external audio backend.");
+            toggle->setChecked(controller.mixerBacksideEnabled());
+            if(auto *layout=qobject_cast<QVBoxLayout*>(page->layout()))layout->insertWidget(1,toggle);
+            connect(toggle,&QCheckBox::toggled,page,[this,&controller,toggle,mixerToggle](bool value){
+                if(!mixerToggle(value)){
+                    const QSignalBlocker blocker(toggle);
+                    toggle->setChecked(controller.mixerBacksideEnabled());
+                    ui->status->setText("The native OBS Audio Mixer dock is unavailable in this layout.");
+                    return;
+                }
+                QString error;
+                if(controller.setMixerBacksideEnabled(value,&error))
+                    ui->status->setText(value?"Audio Mixer backside enabled. Use the flip icon in the mixer dock.":"Original native Audio Mixer restored.");
+                else{
+                    mixerToggle(!value);
+                    const QSignalBlocker blocker(toggle);
+                    toggle->setChecked(controller.mixerBacksideEnabled());
+                    ui->status->setText(error);
+                }
+            });
+        }
         if(sections){
             auto *toggle=new QCheckBox("Collapsible source / filter property groups",page);
             toggle->setObjectName("augment-property-sections");

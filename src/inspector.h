@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <QVector>
 #include <memory>
+#include <functional>
 class QWidget;
 class QAction;
 namespace augment {
@@ -36,7 +37,8 @@ QJsonObject selectorFor(const WidgetSnapshot &, int row, bool scopeMenu);
 class Inspector final : public QDialog {
 public:
     explicit Inspector(Controller &controller, QWidget *parent=nullptr, Panels *panels=nullptr,
-                       PropertySections *sections=nullptr);
+                       PropertySections *sections=nullptr,
+                       std::function<bool(bool)> mixerToggle={});
     ~Inspector() override;
     void openPanels();
     void capture(const WidgetSnapshot &snapshot);

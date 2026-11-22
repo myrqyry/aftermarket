@@ -474,3 +474,50 @@ loaded successfully and opened an existing color-correction filter without a
 crash; that filter has no native group, so the *real OBS group-arrow interaction*
 is not yet verified. No live user OBS process or profile modified. Native
 property-group testing across plugins and themes remains needed.
+
+## Slice 22 — reversible Audio Mixer backside + native routing (2026-11-21)
+
+Outcome: the first dock-backside implementation is usable without replacing
+OBS's native Audio Mixer. `DockFaces` temporarily hosts the **same native
+QDockWidget content** on its front and a plugin-owned `AudioPatchbay` on the
+back; a compact in-content flip button remains present in tabbed docks.
+Optional native-tab prev/next buttons raise OBS-owned sibling docks.
+Enabling/disabling is immediate via Inspector → Panels and persists as root
+`mixerBackside` (default false). No arbitrary user-defined editor, dock
+size presets, extra DSP, virtual audio routing, or OBS Settings-page injection.
+
+The patchbay draws source-to-track cables, and has both clickable endpoints
+and accessible track buttons. It also provides the native three-state
+monitoring selector. The bridge enumerates live libobs audio sources with
+stable UUIDs; edits reacquire an owned source reference by UUID and release it
+after reading/updating the existing mix mask or monitor mode. Source rename or
+deletion cannot retarget an edit by display label. It refreshes from OBS while
+visible; reads/flip actions alone don't modify scene audio.
+
+TDD: new `dock-faces-test` covers original widget identity/faders, flip,
+tab sibling selection, detach, repeated attach, close and destruction. New
+`audio-patchbay-test` verifies backend-authoritative updates, unaffected
+tracks, source rename and removal, monitoring and empty state. A queued dock
+location event originally segfaulted after detachment; regression reproduced
+it, and guarded QPointers plus a receiver-owned timer fixed it. Inspector
+tests verify opt-in persistence and toggle. Full CTest 13/13 passed.
+
+Real OBS 32.2.0 in isolated Xvfb + copied scene/config with Colorway loaded
+the plugin, displayed the normal mixer with added header, flipped to the
+patchbay, and showed two actual audio sources. A click to enable Silent test
+track 4 reflected in the **original Advanced Audio Properties** window,
+and enabling track 6 in that native window reflected in the patchbay.
+Changing monitoring to Monitor Only on the patchbay succeeded.
+On normal File → Exit, copied scene collection persisted Silent test mixers
+mask 41 (tracks 1+4+6) and monitoring_type 1, while Tone test stayed mask 1,
+monitoring_type 0. Original faders rendered and remained interactive after
+flipping back. Restarting isolated OBS reloaded mask 41 / monitoring 1 and
+showed the updated face header; normal exit succeeded again. All changes
+to copied disposable OBS state; the user's running instance and actual
+profile were untouched. Image:
+`docs/screenshots/readme/mixer-patchbay.webp`.
+
+Remaining: varied OBS versions/platforms, live runtime source churn,
+more complex tab groups, native UI update during dock relayout, monitoring
+on multiple audio devices, user-defined back providers, size presets, and
+long-running performance/teardown stress. No remote push.

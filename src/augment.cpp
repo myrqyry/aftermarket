@@ -218,7 +218,7 @@ struct Rules {
     QString path;
     Logger logger;
     QByteArray lastRead;
-    bool enabled = true, inspect = false, motion = false, compactMenus = true, showSubmenuSelections = false, modernTransforms=false, collapsibleGroups=false;
+    bool enabled = true, inspect = false, motion = false, compactMenus = true, showSubmenuSelections = false, modernTransforms=false, collapsibleGroups=false, mixerBackside=false;
     std::vector<Rule> entries, overflowEntries, hiddenEntries;
     struct Custom {
         QString id,label,program,icon,menuObjectName;
@@ -254,7 +254,8 @@ struct Rules {
             (root.contains("motion") && !root.value("motion").isBool()) || (root.contains("compactMenus") && !root.value("compactMenus").isBool()) ||
             (root.contains("showSubmenuSelections")&&!root.value("showSubmenuSelections").isBool()) ||
             (root.contains("modernTransformFrame")&&!root.value("modernTransformFrame").isBool()) ||
-            (root.contains("collapsiblePropertyGroups")&&!root.value("collapsiblePropertyGroups").isBool())) return false;
+            (root.contains("collapsiblePropertyGroups")&&!root.value("collapsiblePropertyGroups").isBool()) ||
+            (root.contains("mixerBackside")&&!root.value("mixerBackside").isBool())) return false;
         GradientSpec nextGradient;
         if(!GradientSpec::parse(root.value("gradient"),nextGradient))return false;
         std::vector<Rule> next;
@@ -353,6 +354,7 @@ struct Rules {
         showSubmenuSelections = root.value("showSubmenuSelections").toBool(false);
         modernTransforms = root.value("modernTransformFrame").toBool(false);
         collapsibleGroups = root.value("collapsiblePropertyGroups").toBool(false);
+        mixerBackside = root.value("mixerBackside").toBool(false);
         entries = std::move(next);
         gradient=nextGradient;
         gradientRaw=root.value("gradient").toObject();
@@ -766,7 +768,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr,const bool *modernTransforms=nullptr,const bool *collapsibleGroups=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr,const bool *modernTransforms=nullptr,const bool *collapsibleGroups=nullptr,const bool *mixerBackside=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -786,6 +788,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     else if (submenuSelections) root["showSubmenuSelections"]=*submenuSelections;
     else if (modernTransforms) root["modernTransformFrame"]=*modernTransforms;
     else if (collapsibleGroups) root["collapsiblePropertyGroups"]=*collapsibleGroups;
+    else if (mixerBackside) root["mixerBackside"]=*mixerBackside;
     else if(hidden) {
         const auto selector=canonicalSelector(entry);
         if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
@@ -873,6 +876,13 @@ bool Controller::collapsiblePropertyGroups() const {
 bool Controller::setCollapsiblePropertyGroups(bool enabled,QString *error) {
     return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,
         nullptr,nullptr,nullptr,nullptr,nullptr,&enabled);
+}
+bool Controller::mixerBacksideEnabled() const {
+    state->rules.refresh();return state->rules.mixerBackside;
+}
+bool Controller::setMixerBacksideEnabled(bool enabled,QString *error) {
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,
+        nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&enabled);
 }
 bool Controller::compactMenusEnabled() const {state->rules.refresh();return state->rules.compactMenus;}
 bool Controller::setCompactMenus(bool enabled,QString *error) {
