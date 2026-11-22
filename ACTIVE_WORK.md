@@ -713,3 +713,23 @@ not rewrite or reset native OBS workspace arrangements or external plugin
 state. Stress across other platforms, complex preview tab configurations,
 and runtime failure injection is unverified. The user's running OBS is
 untouched and there is no push.
+
+## Deployment checkpoint — native Audio Mixer backside installed (2026-11-21)
+
+User requested Remote Desktop Commander after asking if the audio bus was done.
+Confirmed the agreed native OBS patchbay existed in commit `0bdeeba`, but
+installed OBS plugin remained a stale older binary from Nov 20. On yuzu-mint,
+OBS 32.2.0 was closed, the current plugin rebuilt cleanly (`ninja: no work to
+do`) and all 16 CTests passed. Preserved the installed binary at
+`~/.local/share/aftermarket/rollback/obs-ui-augment.pre-audio-backside.4abebcf35892.so`
+(sha256 beginning `4abebcf35892`). Used the repository's atomic
+`scripts/install.sh` to install the current tested `build/obs-ui-augment.so`.
+Verified destination bytes match the build (sha256
+`b21716ac7a8f2cea275fe3448b96f8ef33616bc882d7873c4bfc31848879496b`).
+Verified actual `rules.json` SHA256 was unchanged
+(`ff8f1f55f824d437df1c9a17cfa178bad088d9e4f17dd1c1b61a11ec1ad54623`).
+No OBS scene collection, preferences or active process was changed; plugin
+will load when OBS is next opened. `mixerBackside` remains off by default:
+enable through Tools → UI Augment Inspector → Panels, then flip Audio Mixer.
+No push. This is native tracks 1–6 + monitoring, NOT an independent arbitrary
+DSP/audio bus engine.
