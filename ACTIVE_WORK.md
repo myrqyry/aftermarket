@@ -898,3 +898,19 @@ Scope boundary: this is OBS's ordinary six output tracks and native source
 flags, not atkAudio PluginHost2's internal VST/MIDI graph or a second
 audio engine. Review and licensing note: atkAudio v0.36.3 source is
 AGPL-3.0; conceptual behavior was assessed without copying code.
+
+### Slice 29 verified native installation (2026-11-22)
+
+- Committed as `c94b19e` on current `main`; did not push. Working tree clean.
+- Updated the installed native OBS 32 module via the existing atomic
+  `scripts/install.sh` without terminating or restarting the user's live
+  `obs --verbose` session (PID 2908069 at install).
+- Preserved the previous binary at
+  `~/.local/share/aftermarket/rollback/obs-ui-augment.pre-routing-health.11ef6232c9e9.so`.
+- Installed file and tested build SHA-256 match exactly:
+  `65666a050f4abdcc480d5966722f1c9da092786c3a483c24dceb7d8c192eaf50`.
+- Existing `rules.json` SHA-256 remains
+  `b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf`.
+- Current running OBS continues using its already-loaded module. The new
+  behavior becomes active on a voluntary next restart; no scene or audio
+  changes were made during this installation.
