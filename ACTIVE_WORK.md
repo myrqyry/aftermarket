@@ -1334,3 +1334,22 @@ TDD:
 - No user OBS scene/routing/settings changed, no production process
   restarted by our test commands, no upstream push. The separate
   native pan/sync on-disk save verification gap remains unresolved.
+
+### Slice 35 — verified native-title installation (2026-11-22)
+
+- Feature checkpoint: 084f135. Full CTest **21/21 pass**, no compiler
+  warnings. Original OBS 32.2.0/Colorway checked by real GUI clicks and
+  screenshot; exact final built SHA256
+  41920d1b9165bc5546f524952a79a74dd96abe1b1fced7c50cb7649ffdbded20
+  was subsequently loaded successfully in isolated OBS on Xvfb :118.
+- Installed through the repository's atomic scripts/install.sh.
+  Installed binary byte-for-byte matches the final built SHA256 above.
+  Previous binary SHA256
+  0b6af0a9b9c49b5c154822d7cf9c3f413f5788de85d8edf463d8457ba2e35f26
+  preserved in
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-native-dock-title.0b6af0a9b9c4.so.
+- All user configuration SHA256 hashes for rules.json, action-strip.json and
+  front-audio-controls.json remained unchanged. User's live OBS PID
+  3601543 was not restarted or changed by installation; it retains its
+  previously loaded code until the user voluntarily restarts OBS.
+  Disposable OBS and Xvfb :118 terminated. No upstream push.
