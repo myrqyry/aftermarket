@@ -1155,3 +1155,29 @@ docs/screenshots/readme/audiohub-front-knobs.webp.
 
 No user OBS scene, settings, recordings or audio routes touched, no
 physical audio output proof and no upstream push.
+
+### Slice 32 verified local installation (2026-11-22)
+
+- Source commit: ddd3f8a. Full CTest: **21/21 pass**, zero new warnings.
+- Installed tested binary via repository atomic scripts/install.sh; installed
+  /home/myrqyry/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so
+  matches built SHA256 00be17a62ce0243a94b0de005ad54dcfc801c0a1745895d61ab1ea6e5f1975dd.
+  Prior version backed up byte-for-byte to
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-audiohub-redesign.ba12c4f507c8.so.
+- Actual user OBS pid **3420671** (obs --verbose) was NOT restarted or
+  modified; it continues running its previously loaded module until the
+  user voluntarily closes/reopens OBS. Old vs new compiled module SHA
+  differ as expected.
+- User rules.json SHA unchanged:
+  b0286e2ec9e01ae6fc7d1ba29b688382ed0e41313c1bda70c3ad5edcbb0c0fbf.
+  User action-strip.json SHA unchanged:
+  0585e96a5a4f4b702372062a1a78b245a59424350a0a86d4b6c4a803fa192ced.
+  User front-audio-controls.json was absent before and after install;
+  it is created only when the user changes knob presentation.
+- Disposable test OBS / Xvfb :116 terminated. No user OBS scenes, routing,
+  levels, recordings or monitoring devices touched; no upstream push.
+- Still open: end-to-end verification that a pan/sync edit is durably
+  persisted to OBS's actual scene JSON. Native libobs setter/readback,
+  debounced frontend save request and UI redraw tested; isolated profile's
+  collection file did not reflect the test adjustment. Do not silently
+  promote this to a verified live persistence claim.
