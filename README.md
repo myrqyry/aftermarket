@@ -68,6 +68,37 @@ from four pages in one native, theme-aware window:
   Scenes and Sources switches with native-theme or custom row colors. The
   Tools → UI Augment Panels shortcut opens this page.
 
+### Emergency recovery mode
+
+**Ctrl+Alt+Shift+F12**, while OBS is focused, immediately activates
+**Aftermarket safe mode**. This shortcut is captured even when an Aftermarket
+popup has keyboard focus. A second path is always available under
+**Tools → Aftermarket: Emergency restore** (including inside the hamburger).
+Recovery disables Aftermarket's menu decorations, hamburger, gradient/rotary
+effects, audio meter tinting, source/scene row colors, collapsible property
+groups, dock backsides, and dock/preview layout enhancements. Original OBS
+widgets and actions are restored **without changing scenes, routing or
+Aftermarket preferences**. It is not OBS's own *Reset UI* command and does
+not reset OBS dock layouts or close the application.
+
+Before changing the UI, recovery writes a separate
+`plugin_config/obs-ui-augment/safe-mode.flag` alongside `rules.json`.
+On the next OBS startup, the plugin checks this marker and does not apply
+customizations, **even if** the settings file is unreadable. Repeated use of
+the emergency shortcut cannot accidentally re-enable a broken interface.
+After the issue is corrected, choose **Tools → Aftermarket: Resume UI
+customizations**. Only successful explicit resume removes the marker; the
+original `rules.json` is never rewritten by emergency mode.
+
+If OBS is unable to reach the shortcut because startup fails, create
+`safe-mode.flag` in the same plugin configuration folder as `rules.json`
+while OBS is closed, then reopen OBS. Remove it or use **Resume** only
+when ready to try the customizations again.
+
+The shortcut works within OBS/Qt, not as a system-wide hotkey when another
+application is focused. Desktop environments may intercept key combinations;
+the Tools action and on-disk marker are alternatives.
+
 ### Compact hamburger menu bar
 
 **Tools → UI Augment Inspector → Menus & widgets → ☰ Menu bar** replaces OBS's

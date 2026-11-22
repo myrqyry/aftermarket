@@ -38,6 +38,19 @@ int main(int argc, char **argv) {
     auto *unknown = menu.addAction("Unknown");
     bool triggered = false;
     QObject::connect(rename, &QAction::triggered, [&]{triggered=true;});
+    // Startup with a recovery marker must not attach menu decoration at all.
+    {
+        augment::Controller startSafe(path,nullptr,{},true);
+        REQUIRE(startSafe.runtimeSafeMode());
+        menu.popup(QPoint(40,40));app.processEvents();
+        REQUIRE(rename->icon().isNull());
+        REQUIRE(!menu.findChild<QWidget*>("obs-ui-augment-overlay"));
+        menu.hide();app.processEvents();
+        startSafe.setRuntimeSafeMode(false);
+        menu.popup(QPoint(40,40));app.processEvents();
+        REQUIRE(!rename->icon().isNull());
+        menu.hide();app.processEvents();
+    }
     {
         augment::Controller controller(path);
         menu.popup(QPoint(40,40)); app.processEvents();
@@ -67,6 +80,18 @@ int main(int argc, char **argv) {
         menu.hide(); app.processEvents();
         REQUIRE(rename->icon().isNull());
         REQUIRE(copy->icon().cacheKey()==key);
+        // Emergency suspension must immediately undo menu layout, artwork,
+        // and the entire live presentation, without changing rules.json.
+        controller.setRuntimeSafeMode(true);
+        REQUIRE(controller.runtimeSafeMode());
+        menu.popup(QPoint(40,40));app.processEvents();
+        REQUIRE(rename->icon().isNull()&&!overlay->isVisible());
+        menu.hide();app.processEvents();
+        controller.setRuntimeSafeMode(false);
+        REQUIRE(!controller.runtimeSafeMode());
+        menu.popup(QPoint(40,40));app.processEvents();
+        REQUIRE(!rename->icon().isNull()&&overlay->isVisible());
+        menu.hide();app.processEvents();
         REQUIRE(write(R"({"enabled":false,"rules":[]})"));
         menu.popup(QPoint(40,40)); app.processEvents();
         REQUIRE(rename->icon().isNull());

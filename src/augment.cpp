@@ -747,13 +747,15 @@ QIcon previewIcon(const QString &name, const QColor &color) {
 struct Controller::State {
     Rules rules;
     QHash<QMenu*,Overlay*> menus;
+    bool suspended=false;
     GradientController gradients;
     QFileSystemWatcher watcher;
     QTimer reload;
-    void refreshGradients(){auto spec=rules.gradient;spec.enabled &= rules.enabled;spec.knobs &= rules.enabled;gradients.configure(spec,rules.motion);}
+    void refreshGradients(){auto spec=rules.gradient;spec.enabled &= rules.enabled&&!suspended;spec.knobs &= rules.enabled&&!suspended;gradients.configure(spec,rules.motion&&!suspended);}
     explicit State(QString path, Logger logger):rules(std::move(path), std::move(logger)) {}
 };
-Controller::Controller(QString rulesFile, QObject *parent, Logger logger):QObject(parent),state(new State(std::move(rulesFile), std::move(logger))) {
+Controller::Controller(QString rulesFile, QObject *parent, Logger logger,bool initialSafeMode):QObject(parent),state(new State(std::move(rulesFile), std::move(logger))) {
+    state->suspended=initialSafeMode;
     qApp->installEventFilter(this);
     state->rules.refresh();state->refreshGradients();
     // Watch both in-place writes and QSaveFile/rename replacements. Re-arm
@@ -767,8 +769,9 @@ Controller::Controller(QString rulesFile, QObject *parent, Logger logger):QObjec
     connect(&state->watcher,&QFileSystemWatcher::fileChanged,this,[this]{state->reload.start();});
     connect(&state->watcher,&QFileSystemWatcher::directoryChanged,this,[this]{state->reload.start();});
     connect(&state->reload,&QTimer::timeout,this,[this,arm]{arm();state->rules.refresh();state->refreshGradients();});
-    for (auto *w : QApplication::allWidgets())
-        if (auto *menu = qobject_cast<QMenu*>(w)) attach(menu);
+    if(!state->suspended)
+        for (auto *w : QApplication::allWidgets())
+            if (auto *menu = qobject_cast<QMenu*>(w)) attach(menu);
 }
 Controller::~Controller() {
     if (qApp) qApp->removeEventFilter(this);
@@ -779,6 +782,26 @@ Controller::~Controller() {
     for (auto *overlay : overlays) overlay->restore();
     for (auto *overlay : overlays) overlay->restoreLayout();
     for (auto *overlay : overlays) delete overlay;
+}
+bool Controller::runtimeSafeMode() const{return state->suspended;}
+void Controller::setRuntimeSafeMode(bool enabled){
+    if(state->suspended==enabled)return;
+    state->suspended=enabled;
+    if(enabled){
+        closeThemePickers();
+        // Menu overlay edits are transient Qt presentation changes, but must
+        // all be restored immediately even if their popup was left open.
+        for(auto *menu:state->menus.keys())if(menu&&menu->isVisible())menu->hide();
+        for(auto *overlay:state->menus){
+            if(!overlay)continue;
+            overlay->restore();
+            overlay->restoreLayout();
+        }
+    }
+    state->refreshGradients(); // clears audio meter, rotary and gradient layers
+    if(!enabled)
+        for(auto *w:QApplication::allWidgets())
+            if(auto *menu=qobject_cast<QMenu*>(w))attach(menu);
 }
 namespace {
 constexpr qint64 maxRuleBytes=256*1024;
@@ -998,12 +1021,14 @@ void Controller::attach(QMenu *menu) {
     state->menus.insert(menu,overlay);
     connect(menu,&QObject::destroyed,this,[this,menu]{ state->menus.remove(menu);});
     connect(menu,&QMenu::aboutToShow,this,[this,overlay]{
+        if(state->suspended)return;
         state->rules.refresh();state->refreshGradients();
         overlay->prepare(state->rules);
     });
     connect(menu,&QMenu::hovered,overlay,[overlay](QAction *action){overlay->hover(action);});
 }
 bool Controller::eventFilter(QObject *object,QEvent *event) {
+    if(state->suspended)return false;
     if((event->type()==QEvent::MouseButtonPress||event->type()==QEvent::KeyPress)&&qobject_cast<QComboBox*>(object)) {
         state->rules.refresh();
         if(handleThemePicker(object,event,state->rules.enabled&&state->rules.compactMenus))return true;

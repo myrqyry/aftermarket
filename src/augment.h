@@ -19,9 +19,11 @@ QIcon previewIcon(const QString &name, const QColor &color);
 using Logger = std::function<void(const QString &)>;
 class Controller final : public QObject {
 public:
-    explicit Controller(QString rulesFile, QObject *parent = nullptr, Logger logger = {});
+    explicit Controller(QString rulesFile, QObject *parent = nullptr, Logger logger = {},bool initialSafeMode=false);
     ~Controller() override;
     // Returns false without overwriting an invalid or unreadable file.
+    void setRuntimeSafeMode(bool enabled);
+    bool runtimeSafeMode() const;
     void setMeterProvider(MeterProvider);
     void setAudioProvider(AudioProvider provider,AudioReset reset={});
     QJsonObject gradientSettings() const;

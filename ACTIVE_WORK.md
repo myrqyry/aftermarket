@@ -648,3 +648,68 @@ an action removed from the menubar may need an adapter extension.
 No additional user-customizable status controls or menu-bar styling
 framework added. User's running OBS process, configuration and installed
 plugin remain unchanged. No push.
+
+## Slice 26 — persistent emergency UI recovery hotkey (2026-11-21)
+
+User request: an emergency-mode hotkey to recover the UI when an Aftermarket
+customization traps native OBS controls. Implemented Ctrl+Alt+Shift+F12
+(in-app/Qt application shortcut, with application-wide KeyPress filter that
+can intercept even an open QMenu). Also added a native Tools menu action
+for emergency restore and, when safe, a separate *Resume UI customizations*
+action. The emergency keystroke only engages safe mode; it cannot toggle
+customizations back on.
+
+Safe mode persists via an independent `safe-mode.flag` marker adjacent to
+`rules.json`, committed via QSaveFile *before* live restoration. It never
+changes the user's rules, scene collection, audio routing, theme or recordings.
+Marker presence makes the plugin fail closed during startup even if the
+rules file is broken or unreadable. Resume is explicit through the native
+Tools menu and clears the marker only after the normal UI adapters are
+successfully reinstated.
+
+Controller gained `setRuntimeSafeMode` and an optional initially
+suspended constructor path: menu overlays/theme picker and gradient/audio/
+rotary effects stop and restore original Qt controls, and the file watcher
+cannot re-enable them. Initial safe startup does not attach menu overlays.
+Plugin UI teardown restores collapsed panels and native preview, unwraps
+Audio Mixer dock backsides, returns original top-level OBS QActions,
+restores Scene/Source palettes/stylesheets, removes property collapse
+controls and transform overlay; it keeps OBS itself running.
+The runtime activation callback is queued so that removing an active
+hamburger QMenu or Inspector cannot destroy a widget mid-signal. Restoring
+the UI recreates the adapters with saved preferences. The emergency
+key and tool actions remain available independently of the main inspector.
+Backend availability is unchanged: no service/recording actions are invoked.
+
+TDD: full CTest 16/16 passed. New `emergency-recovery-test` verifies the full chord (including
+keystroke while a popup is active), partial chord/repeat suppression,
+independent marker persistence, repeat safety, failed resume preserving the
+marker, successful explicit resume and unchanged rules file. `menu-test`
+includes a regression for live suspend/resume of original native QAction
+artwork/layout and a RED→GREEN startup test showing that an initially
+suspended Controller attaches no menu decoration until resumed.
+
+Real isolated OBS 32.2.0 with copied Colorway profile and hamburger,
+mixer backside, collapsible sections and alternating list colors enabled:
+XTest Ctrl+Alt+Shift+F12 sent with hamburger popup open wrote marker
+and restored original File/Edit/View/Tools top-level bar, native Audio
+Mixer and original list colors while OBS remained running. Compared SHA256
+of copied rules.json before/after: identical
+(`9874f7ade496183fb5d79a07f0302c22e4df161d416a0df88124a79c3a2023c7`).
+Terminated isolated OBS, restarted with marker present: native UI loaded,
+plugin log explicitly reported recovery mode, and native Tools menu had
+Inspector/Panels disabled and *Resume UI customizations* enabled.
+Clicking Resume cleared marker and immediately restored the hamburger,
+mixer backside and list colors, still without changing rules.json.
+A second XTest emergency chord while the Inspector window was open closed
+that window, restored the native UI, wrote the marker and left OBS running.
+The latest rebuilt module also restarted into safe mode with zero menu
+augmentations and the same unchanged preference SHA256.
+
+Limitations: the shortcut is scoped to OBS Qt focus (not global across
+other applications); OS shortcut managers may intercept it. The built-in
+Tools entry or marker-file fallback is supported. Emergency recovery does
+not rewrite or reset native OBS workspace arrangements or external plugin
+state. Stress across other platforms, complex preview tab configurations,
+and runtime failure injection is unverified. The user's running OBS is
+untouched and there is no push.
