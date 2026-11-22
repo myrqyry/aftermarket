@@ -27,6 +27,7 @@ namespace augment {
 using RouteTrackButton=FineStateToolButton;
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
+    static constexpr int monitorTarget=7;
     static constexpr int minStep=18;
     static constexpr int maxStep=32;
     static constexpr int sourceLeft=5;
@@ -49,16 +50,24 @@ class AudioPatchbay::Canvas final : public QWidget {
     QString focusedSource() const {
         return hoveredSource.isEmpty()?selected:hoveredSource;
     }
-    bool visibleWire(const RouteSource &src,int track) const {
+    bool hasConnection(const RouteSource &src,int target) const {
+        return target==monitorTarget?src.monitor!=0:
+            target>=1&&target<=6&&(src.tracks&(1u<<(target-1)));
+    }
+    bool visibleWire(const RouteSource &src,int target) const {
         if(hoveredTarget>0&&!dragging)
-            return track==hoveredTarget && (src.tracks&(1u<<(track-1)));
-        return (showAll||src.id==focusedSource()) && (src.tracks&(1u<<(track-1)));
+            return target==hoveredTarget&&hasConnection(src,target);
+        return (showAll||src.id==focusedSource())&&hasConnection(src,target);
     }
     QRect sourceRect(int i) const {
         return QRect(sourceLeft,firstY+i*rowStep()-nodeHeight()/2,
                      sourceWidth,nodeHeight());
     }
     QRect trackRect(int t) const {
+        // Keep the monitor jack pinned in the graph header even when OBS's
+        // stock Audio Mixer dock is too short to show all six track rows.
+        if(t==monitorTarget)
+            return QRect(width()-targetRight-targetWidth,3,targetWidth,23);
         return QRect(width()-targetRight-targetWidth,
                      firstY+(t-1)*rowStep()-nodeHeight()/2,targetWidth,nodeHeight());
     }
@@ -68,7 +77,7 @@ class AudioPatchbay::Canvas final : public QWidget {
         return -1;
     }
     int trackAt(QPoint pt) const {
-        for(int t=1;t<=6;++t)
+        for(int t=1;t<=monitorTarget;++t)
             if(trackRect(t).contains(pt))return t;
         return -1;
     }
@@ -102,13 +111,13 @@ public:
         setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
         setFocusPolicy(Qt::StrongFocus);
         setMouseTracking(true);
-        setToolTip("Drag a source to a track to connect. Click a source to focus; click a track to toggle its route.");
+        setToolTip("Drag a source to an OBS track or MON destination. MON is the native OBS monitor output, not a seventh track.");
     }
     int visibleCableCount() const {
         int count=0;
         for(const auto &src:routes)
-            for(int track=1;track<=6;++track)
-                if(visibleWire(src,track))++count;
+            for(int target=1;target<=monitorTarget;++target)
+                if(visibleWire(src,target))++count;
         return count;
     }
     void setRoutes(const QVector<RouteSource> &value,const QString &current){
@@ -148,20 +157,20 @@ protected:
         p.setFont(captionFont);
         p.setPen(caption);
         p.drawText(QRect(7,3,120,23),Qt::AlignVCenter,"Sources");
-        p.drawText(QRect(width()-65,3,58,23),Qt::AlignVCenter|Qt::AlignRight,"Tracks");
+        p.drawText(QRect(width()-112,3,65,23),Qt::AlignVCenter|Qt::AlignRight,"Tracks");
 
-        for(int t=1;t<=6;++t){
+        for(int t=1;t<=monitorTarget;++t){
             const auto rect=trackRect(t);
             const auto selectedIt=std::find_if(routes.begin(),routes.end(),
                 [this](const RouteSource &src){return src.id==selected;});
-            const bool connected=selectedIt!=routes.end()&&(selectedIt->tracks&(1u<<(t-1)));
+            const bool connected=selectedIt!=routes.end()&&hasConnection(*selectedIt,t);
             p.setPen(QPen((hoveredTarget==t||connected)?accent:muted,
                           (hoveredTarget==t||connected)?1.0:0.7));
             p.setBrush(connected?paletteBlend(base,accent,13):base);
             p.drawRoundedRect(rect,5,5);
             p.setFont(bodyFont);
             p.setPen(fg);
-            p.drawText(rect,Qt::AlignCenter,QString::number(t));
+            p.drawText(rect,Qt::AlignCenter,t==monitorTarget?QStringLiteral("MON"):QString::number(t));
             p.setFont(captionFont);
         }
         // Draw cables behind nodes. The all-wires view is intentionally
@@ -173,7 +182,7 @@ protected:
                 const auto &src=routes.at(i);
                 const bool current=src.id==focusedSource();
                 if(current!=(pass==1))continue;
-                for(int track=1;track<=6;++track){
+                for(int track=1;track<=monitorTarget;++track){
                     if(!visibleWire(src,track))continue;
                     // Muted/disabled source routes remain wired in OBS; their
                     // dashed strokes indicate status, not disconnected wiring.
@@ -183,7 +192,7 @@ protected:
                     p.setPen(QPen(wire,current?1.25:0.8,
                                   healthy?Qt::SolidLine:Qt::DashLine,Qt::RoundCap));
                     p.setBrush(Qt::NoBrush);
-                    p.drawPath(cable(firstY+i*rowStep(),firstY+(track-1)*rowStep()));
+                    p.drawPath(cable(firstY+i*rowStep(),trackRect(track).center().y()));
                 }
             }
         if(dragging){
@@ -194,7 +203,7 @@ protected:
             const int sourceIndex=sourceAt(pressPoint);
             if(sourceIndex>=0){
                 const int y=firstY+sourceIndex*rowStep();
-                if(hoveredTarget>0)p.drawPath(cable(y,firstY+(hoveredTarget-1)*rowStep()));
+                if(hoveredTarget>0)p.drawPath(cable(y,trackRect(hoveredTarget).center().y()));
                 else{
                     QPainterPath draft(QPointF(portX,y));
                     draft.cubicTo(portX+28,y,dragPoint.x()-28,dragPoint.y(),dragPoint.x(),dragPoint.y());
@@ -284,11 +293,14 @@ protected:
                 setToolTip(src.name+(state.isEmpty()?QString():(" · "+state.join(" · "))));
             }else if(target>0){
                 int incoming=0;
-                for(const auto &src:routes)if(src.tracks&(1u<<(target-1)))++incoming;
-                setToolTip(QStringLiteral("Track %1 · %2 connected %3").arg(target)
-                           .arg(incoming).arg(incoming==1?"source":"sources"));
+                for(const auto &src:routes)if(hasConnection(src,target))++incoming;
+                if(target==monitorTarget)
+                    setToolTip(QStringLiteral("Monitor · native OBS monitoring output · %1 connected %2 · not Track 7").arg(incoming).arg(incoming==1?"source":"sources"));
+                else
+                    setToolTip(QStringLiteral("Track %1 · %2 connected %3").arg(target)
+                               .arg(incoming).arg(incoming==1?"source":"sources"));
             }else{
-                setToolTip("Drag a source to a track to connect; hover to inspect current routes.");
+                setToolTip("Drag a source to a track or MON to connect; hover to inspect current routes.");
             }
         }
         event->accept();
@@ -371,13 +383,16 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     scroll->setWidgetResizable(true);
     canvas=new Canvas(scroll);
     canvas->onSource=[this](const QString &id){selectSource(id);};
-    canvas->onTrack=[this](int track){toggleTrack(track);};
+    canvas->onTrack=[this](int track){
+        if(track==7)toggleMonitorOutput();
+        else toggleTrack(track);
+    };
     canvas->onConnect=[this](const QString &id,int track){connectRoute(id,track);};
     scroll->setWidget(canvas);
     root->addWidget(scroll,1);
     auto *trackRow=new QHBoxLayout;
     trackRow->setSpacing(3);
-    auto *trackLabel=new QLabel("Tracks",this);
+    auto *trackLabel=new QLabel("Outputs",this);
     trackLabel->setObjectName("aftermarket-route-tracks-label");
     trackLabel->setFont(labelFont);
     trackRow->addWidget(trackLabel);
@@ -393,6 +408,15 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
         trackRow->addWidget(button,1);
         connect(button,&QToolButton::clicked,this,[this,i]{toggleTrack(i+1);});
     }
+    monitorOutput=new RouteTrackButton(this);
+    monitorOutput->setObjectName("aftermarket-monitor-output");
+    monitorOutput->setCheckable(true);
+    monitorOutput->setText("MON");
+    monitorOutput->setMinimumSize(36,24);
+    monitorOutput->setToolTip("Toggle the native OBS Monitor destination for this source. Use the Monitoring selector for Monitor Only. The device is selected in OBS Settings > Audio > Advanced > Monitoring Device; monitor paths can echo when captured again. Not OBS Track 7.");
+    monitorOutput->setAccessibleName("Toggle native OBS Monitor output");
+    trackRow->addWidget(monitorOutput,1);
+    connect(monitorOutput,&QToolButton::clicked,this,[this]{toggleMonitorOutput();});
     root->addLayout(trackRow);
     auto *monitorRow=new QHBoxLayout;
     monitorRow->setSpacing(3);
@@ -404,6 +428,7 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     monitoring->setObjectName("aftermarket-monitor");
     monitoring->addItems({"Off","Monitor Only","Monitor and Output"});
     monitoring->setAccessibleName("Native OBS monitoring mode");
+    monitoring->setToolTip("Monitor Only sends audio to the OBS Monitoring Device without normal program output. Monitor and Output sends to both. Choose the monitoring device in OBS Settings > Audio > Advanced.");
     monitorRow->addWidget(monitoring,1);
     root->addLayout(monitorRow);
     diagnostics=new QLabel(this);
@@ -412,7 +437,7 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     diagnostics->setToolTip("Read-only OBS state; Audio active does not mean audible signal.");
     diagnostics->setWordWrap(true);
     root->addWidget(diagnostics);
-    status=new QLabel("Drag a source onto a track to connect.",this);
+    status=new QLabel("Drag a source onto a track or MON to connect.",this);
     status->setObjectName("aftermarket-route-status");
     status->setWordWrap(true);
     root->addWidget(status);
@@ -459,6 +484,11 @@ void AudioPatchbay::syncControls(){
     }
     monitoring->setEnabled(chosen>=0);
     monitoring->setCurrentIndex(chosen<0?-1:routes.at(chosen).monitor);
+    {
+        const QSignalBlocker blocker(monitorOutput);
+        monitorOutput->setEnabled(chosen>=0);
+        monitorOutput->setChecked(chosen>=0&&routes.at(chosen).monitor!=0);
+    }
     if(chosen<0){
         diagnostics->setText("No audio source selected");
     }else{
@@ -497,6 +527,7 @@ bool AudioPatchbay::toggleTrack(int track){
     return ok;
 }
 bool AudioPatchbay::connectRoute(const QString &id,int track){
+    if(track==7)return connectMonitor(id);
     if(id.isEmpty()||track<1||track>6)return false;
     // Read OBS again immediately before the drop. Repeated drops onto an
     // existing connection are idempotent; they must never disconnect audio.
@@ -519,6 +550,51 @@ bool AudioPatchbay::connectRoute(const QString &id,int track){
     if(ok)selectSource(id);
     status->setText(ok?QStringLiteral("Connected source to OBS track %1").arg(track):
                        QStringLiteral("Source unavailable; OBS routing unchanged"));
+    return ok;
+}
+bool AudioPatchbay::connectMonitor(const QString &id){
+    if(id.isEmpty()||!monitor)return false;
+    // OBS remains authoritative. A repeated drop must not toggle a
+    // Monitor Only source into an output path (or disconnect it).
+    const auto current=query?query():routes;
+    const auto found=std::find_if(current.begin(),current.end(),
+        [&](const RouteSource &route){return route.id==id;});
+    if(found==current.end()){
+        refresh();
+        status->setText("Source unavailable; OBS monitoring unchanged");
+        return false;
+    }
+    if(found->monitor!=0){
+        refresh();
+        selectSource(id);
+        status->setText("Source is already connected to native OBS Monitor");
+        return true;
+    }
+    // Monitor and Output preserves normal output tracks. Monitor Only
+    // remains a separate explicit option in the per-source dropdown.
+    const bool ok=monitor(id,2);
+    refresh();
+    if(ok)selectSource(id);
+    status->setText(ok?"Connected source to native OBS Monitor and Output":
+                        "Source unavailable; OBS monitoring unchanged");
+    return ok;
+}
+bool AudioPatchbay::toggleMonitorOutput(){
+    if(selected.isEmpty()||!monitor)return false;
+    const auto current=query?query():routes;
+    const auto found=std::find_if(current.begin(),current.end(),
+        [&](const RouteSource &route){return route.id==selected;});
+    if(found==current.end()){
+        refresh();
+        status->setText("Source unavailable; OBS monitoring unchanged");
+        return false;
+    }
+    const int mode=found->monitor==0?2:0;
+    const bool ok=monitor(selected,mode);
+    refresh();
+    status->setText(ok?(mode==0?"Disconnected from native OBS Monitor":
+                                  "Connected to native OBS Monitor and Output"):
+                        "Source unavailable; OBS monitoring unchanged");
     return ok;
 }
 bool AudioPatchbay::setMonitoring(int mode){

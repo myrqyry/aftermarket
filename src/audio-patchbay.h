@@ -37,6 +37,8 @@ public:
     bool selectSource(const QString &id);
     bool toggleTrack(int track);
     bool connectRoute(const QString &id,int track);
+    bool connectMonitor(const QString &id);
+    bool toggleMonitorOutput();
     bool setMonitoring(int mode);
     bool showAllWires() const;
     int visibleCableCount() const;
@@ -53,6 +55,7 @@ private:
     QComboBox *sources=nullptr,*monitoring=nullptr;
     QCheckBox *allWires=nullptr;
     QToolButton *tracks[6]={};
+    QToolButton *monitorOutput=nullptr;
     QTimer *timer=nullptr;
     void syncControls();
 };

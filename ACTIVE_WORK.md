@@ -1003,3 +1003,53 @@ No user OBS scene collection was changed and no upstream push.
   the feature is opt-in, with an empty item list when first opened.
   No user OBS scene/recording/route changes, no user OBS process changes,
   no external push. It will load on the next ordinary OBS launch.
+
+## Slice 31 — native AudioHub Monitor output endpoint (2026-11-22)
+
+Intent: Aftermarket's native Audio Mixer backside/AudioHub already supported
+three OBS source monitoring modes through a dropdown, but its visual patchbay
+only represented six native output-track assignments. Add a distinct Monitor
+destination, not a fabricated track 7 or a secondary audio engine.
+
+Behavior: a pinned MON output jack in the graph header (visible in the short
+stock OBS mixer dock), plus a theme-aware checkable MON output button alongside
+tracks 1–6. The six numbered endpoints and native mixer masks retain their
+previous positions and semantics. Graph cables now render the native
+monitoring route when per-source OBS monitoring mode is not Off. Hover
+focus and Show all wires include the monitor route; MON hover reports source
+counts and explicitly distinguishes it from Track 7. Click graph MON or the
+button to toggle the selected source between Off and Monitor and Output;
+drag any source to MON to connect idempotently without changing existing
+Monitor Only or any of its assigned track bits. The existing 3-mode dropdown
+remains the exact control for Off, Monitor Only and Monitor and Output,
+synchronized from real OBS state. All routing uses the existing
+ObsRouting::setMonitoring(uuid,mode) with UUID checks.
+
+Safety: connecting to MON defaults to Monitor and Output rather than Monitor
+Only, so the operation does not silently suppress ordinary output. OBS
+Settings > Audio > Advanced owns the Monitoring Device. Monitoring can
+create echo/feedback when monitored device is captured; tooltip and README
+explain that. Monitor Only suppresses normal program output even if track
+assignments remain visible as wires. No separate destination device, internal
+mixing engine or libobs source was created.
+
+TDD: RED new connectMonitor method failed compilation; initial UI regression
+failed under original 170px dock minimum when MON was introduced as a
+seventh scrolling row; GREEN after pinning MON into the graph header and
+preserving six-track row geometry. Updated Qt test covers real QMouseEvent
+source-to-MON drag, idempotent re-drag, MON node click twice, checked
+indicator sync, native dropdown and Monitor Only preservation, unknown UUID
+rejection, unchanged mixer masks, responsive graph minimum and actual cable
+render pixel changes. Full CTest: 20/20 PASS; no unrelated change.
+
+Real isolated OBS 32.2.0 (Colorway theme), disposable Xvfb display :115 and
+copied XDG/OBS profile, exact compiled plugin SHA-256
+ba12c4f507c8b29247e82f7e43ab2e9e57377d16e674d8854a592c4084cb6691.
+Native Audio Mixer backside visibly displayed MON at graph header even with
+short graph viewport. Clicking MON on the selected Silent test source changed
+real OBS monitoring mode Monitor Only -> Off -> Monitor and Output in the
+source dropdown and diagram, without changing tracks 1,2,4,6. That test
+source was muted; audible playback to a physical device is NOT verified.
+Screenshot: docs/screenshots/readme/audio-monitor-output.webp. Full isolated
+screenshot trail under build/monitor-output-smoke. User's running OBS scene
+collection and audio devices were not touched. No upstream publication.

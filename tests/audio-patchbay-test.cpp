@@ -84,7 +84,7 @@ int main(int argc,char **argv){
  REQUIRE(!ui.showAllWires()&&ui.visibleCableCount()==1);
  const QImage focused=canvas->grab().toImage();
  showAll->click();app.processEvents();
- REQUIRE(ui.showAllWires()&&ui.visibleCableCount()==3);
+ REQUIRE(ui.showAllWires()&&ui.visibleCableCount()==4); // Desktop also uses OBS monitoring
  const QImage all=canvas->grab().toImage();
  int cablePixelsChanged=0;
  for(int y=35;y<qMin(220,all.height());++y)
@@ -118,7 +118,7 @@ int main(int argc,char **argv){
  REQUIRE(ui.selectSource("id-mic"));
  hover(QPoint(45,43+32)); // Desktop source: two existing wires
  REQUIRE(ui.selectedId()=="id-mic"&&!ui.showAllWires());
- REQUIRE(ui.visibleCableCount()==2);
+ REQUIRE(ui.visibleCableCount()==3); // Two output tracks plus native monitor path
  REQUIRE(canvas->toolTip().contains("Muted"));
  const auto hoveredDesk=canvas->grab().toImage();
  int hoverChanged=0;
@@ -134,7 +134,7 @@ int main(int argc,char **argv){
  hover(QPoint(canvas->width()/2,canvas->height()-2));
  REQUIRE(ui.visibleCableCount()==1);
  hover(QPoint(45,43+32));
- REQUIRE(ui.visibleCableCount()==2);
+ REQUIRE(ui.visibleCableCount()==3);
  QEvent leave(QEvent::Leave);
  QCoreApplication::sendEvent(canvas,&leave);
  app.processEvents();
@@ -204,6 +204,100 @@ int main(int argc,char **argv){
  saved.clear();ui.refresh();
  REQUIRE(ui.routeCount()==0&&ui.selectedId().isEmpty()&&!track4->isEnabled());
  REQUIRE(diagnostics->text().contains("No audio source selected"));
- std::cout<<"audio patchbay routing verified\n";
+ // A dedicated output on the graph represents native OBS monitoring, not
+ // a seventh output track or a newly generated audio bus.
+ QVector<augment::RouteSource> monitorSaved={
+     {"music","Music",1u,0,false,true,true},
+     {"voice","Voice",2u,1,false,true,true}
+ };
+ int monitorChanges=0,trackChanges=0;
+ augment::AudioPatchbay monitorUi(
+     [&]{return monitorSaved;},
+     [&](const QString &,int){++trackChanges;return false;},
+     [&](const QString &id,int mode){
+         for(auto &source:monitorSaved)if(source.id==id&&mode>=0&&mode<=2){
+             source.monitor=mode;++monitorChanges;return true;
+         }
+         return false;
+     });
+ monitorUi.resize(560,540);monitorUi.show();app.processEvents();
+ auto *monitorCanvas=monitorUi.findChild<QWidget*>("aftermarket-route-canvas");
+ auto *monitorOutput=monitorUi.findChild<QToolButton*>("aftermarket-monitor-output");
+ REQUIRE(monitorCanvas&&monitorOutput);
+ REQUIRE(monitorOutput->isCheckable()&&!monitorOutput->isChecked());
+ REQUIRE(monitorOutput->toolTip().contains("OBS"));
+ const uint32_t originalTracks=monitorSaved[0].tracks;
+ // The MON node must be visible even when the dock can only show its
+ // first one or two numbered tracks (not hidden below the scroll area).
+ const QPoint monitorPort(monitorCanvas->width()-23,14);
+ const auto sendMonitorGesture=[&](QPoint begin,QPoint end){
+     auto send=[&](QEvent::Type type,QPoint pt,Qt::MouseButton button,Qt::MouseButtons held){
+         QMouseEvent event(type,QPointF(pt),QPointF(monitorCanvas->mapToGlobal(pt)),
+                           button,held,Qt::NoModifier);
+         QCoreApplication::sendEvent(monitorCanvas,&event);
+     };
+     send(QEvent::MouseButtonPress,begin,Qt::LeftButton,Qt::LeftButton);
+     send(QEvent::MouseMove,end,Qt::NoButton,Qt::LeftButton);
+     send(QEvent::MouseButtonRelease,end,Qt::LeftButton,Qt::NoButton);
+     app.processEvents();
+ };
+ // Monitoring should appear as a visible wire and destination tooltip.
+ REQUIRE(monitorUi.visibleCableCount()==1);
+ REQUIRE(monitorUi.selectSource("voice"));
+ REQUIRE(monitorUi.visibleCableCount()==2);
+ {
+     QMouseEvent event(QEvent::MouseMove,QPointF(monitorPort),
+                       QPointF(monitorCanvas->mapToGlobal(monitorPort)),
+                       Qt::NoButton,Qt::NoButton,Qt::NoModifier);
+     QCoreApplication::sendEvent(monitorCanvas,&event);
+ }
+ REQUIRE(monitorCanvas->toolTip().contains("Monitor"));
+ REQUIRE(monitorUi.selectSource("music"));
+ const QImage beforeMonitor=monitorCanvas->grab().toImage();
+ sendMonitorGesture(QPoint(45,43),monitorPort);
+ REQUIRE(monitorSaved[0].monitor==2&&monitorChanges==1);
+ const QImage afterMonitor=monitorCanvas->grab().toImage();
+ int monitorCablePixels=0;
+ for(int y=33;y<qMin(monitorPort.y()+20,afterMonitor.height());++y)
+     for(int x=132;x<qMax(133,afterMonitor.width()-50);++x)
+         if(beforeMonitor.pixel(x,y)!=afterMonitor.pixel(x,y))++monitorCablePixels;
+ REQUIRE(monitorCablePixels>0); // Native monitor route is rendered as a cable.
+ REQUIRE(monitorSaved[0].tracks==originalTracks&&trackChanges==0);
+ REQUIRE(monitorOutput->isChecked());
+ REQUIRE(monitorUi.visibleCableCount()==2); // Track 1 plus Monitor output
+ sendMonitorGesture(QPoint(45,43),monitorPort);
+ REQUIRE(monitorChanges==1); // Reconnecting never toggles monitored sources off.
+ monitorOutput->click();app.processEvents();
+ REQUIRE(monitorSaved[0].monitor==0&&monitorChanges==2&&!monitorOutput->isChecked());
+ REQUIRE(monitorSaved[0].tracks==originalTracks);
+ REQUIRE(monitorUi.setMonitoring(1));
+ REQUIRE(monitorSaved[0].monitor==1&&monitorOutput->isChecked());
+ REQUIRE(monitorUi.connectMonitor("music")&&monitorSaved[0].monitor==1);
+ REQUIRE(monitorChanges==3); // Monitor Only is a valid existing connection.
+ REQUIRE(!monitorUi.connectMonitor("missing-uuid"));
+ REQUIRE(monitorChanges==3&&trackChanges==0);
+ REQUIRE(monitorUi.selectSource("voice")&&monitorOutput->isChecked());
+ monitorOutput->click();app.processEvents();
+ REQUIRE(monitorSaved[1].monitor==0&&!monitorOutput->isChecked());
+ REQUIRE(monitorSaved[1].tracks==2u);
+ // The MON output node itself is clickable, not just the extra row button.
+ REQUIRE(monitorUi.selectSource("music")&&monitorSaved[0].monitor==1);
+ const auto clickOutput=[&]{
+     QMouseEvent event(QEvent::MouseButtonPress,QPointF(monitorPort),
+                       QPointF(monitorCanvas->mapToGlobal(monitorPort)),
+                       Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+     QCoreApplication::sendEvent(monitorCanvas,&event);
+     QMouseEvent released(QEvent::MouseButtonRelease,QPointF(monitorPort),
+                          QPointF(monitorCanvas->mapToGlobal(monitorPort)),
+                          Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+     QCoreApplication::sendEvent(monitorCanvas,&released);
+     app.processEvents();
+ };
+ clickOutput();
+ REQUIRE(monitorSaved[0].monitor==0&&!monitorOutput->isChecked());
+ clickOutput();
+ REQUIRE(monitorSaved[0].monitor==2&&monitorOutput->isChecked());
+ REQUIRE(monitorSaved[0].tracks==originalTracks&&trackChanges==0);
+ std::cout<<"audio patchbay routing and native monitor output verified\n";
  return 0;
 }

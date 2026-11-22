@@ -219,11 +219,12 @@ This feature is **off by default** and stored as `"mixerBackside": true` in
 `rules.json` when enabled. The original Audio Mixer remains unchanged behind
 the flip button; floating and tabified docks retain OBS's own controls. The
 backside draws actual source-to-track connections and exposes six track
-toggles and the three OBS monitoring modes. The graph uses compact, adaptive
-row spacing so tracks 1–6 fit into short docks instead of requiring a large
-minimum height. Selecting a source uses its OBS UUID (not its display name).
-The interface refreshes from OBS while visible, so changes in Advanced Audio
-Properties appear here, and vice versa.
+toggles, a separate **MON** destination, and the three native OBS monitoring
+modes. The MON jack stays in the graph header so it remains accessible
+even in short Audio Mixer docks; the six numbered tracks retain their
+original positions. Selecting a source uses its OBS UUID (not its display
+name). The interface refreshes from OBS while visible, so changes in
+Advanced Audio Properties appear here, and vice versa.
 
 **Drag a source node onto a numbered track** to connect it in native OBS.
 The cable is previewed while dragging. Dropping on an already connected
@@ -233,6 +234,24 @@ the graph shows only the selected source's wires. Check **Show all wires**
 for every source's routes, with the selected source emphasized. This display
 checkbox is session-only; it does not change audio state. Colors are derived
 from the current OBS/Qt theme.
+
+**Drag a source to MON** to connect it to OBS's existing monitoring output.
+A repeated drag does not disconnect or override **Monitor Only**. Clicking
+the **MON** graph jack (or its checkable button beside Tracks 1–6) toggles
+monitoring for the selected source: **Off** or **Monitor and Output**.
+The separate Monitoring dropdown retains **Off / Monitor Only / Monitor
+and Output** and remains synchronized with the cable and MON indicator.
+Connecting MON does **not** modify any of the six track assignments.
+The graph shows assigned track wires even for Monitor Only; that mode
+suppresses normal program output, so a wire does not guarantee audibility.
+
+MON is **not Track 7 or a separate audio bus**. It uses the Monitoring
+Device selected under **OBS Settings → Audio → Advanced**. OBS's audio
+monitoring can echo/loop if that device is also captured as a source.
+Aftermarket doesn't choose the hardware monitor device or create new audio
+outputs; it only surfaces and controls the native monitoring route.
+
+![Native OBS Monitor output in Aftermarket's routing graph](docs/screenshots/readme/audio-monitor-output.webp)
 
 Tracks **1–6** are native OBS assignments, not newly invented buses or six
 independent hardware outputs. Stream/record output-track selection and detailed
