@@ -64,7 +64,25 @@ from four pages in one native, theme-aware window:
   Enable **Collapsible source / filter property groups** to add independent
   fold arrows to ordinary grouped OBS settings, preserving their live controls.
   Toggle **Audio Mixer backside (native routing)** to add a flip button to
-  OBS's real Audio Mixer dock. The Tools → UI Augment Panels shortcut opens this page.
+  OBS's real Audio Mixer dock. **Alternating list backgrounds** adds separate
+  Scenes and Sources switches with native-theme or custom row colors. The
+  Tools → UI Augment Panels shortcut opens this page.
+
+### Alternating Scenes and Sources backgrounds
+
+In **Tools → UI Augment Inspector → Panels → Alternating list backgrounds**,
+turn on **Scenes** and/or **Sources** independently. By default both are off.
+**Normal rows** and **Alternating rows** can each use a chosen solid color
+or **Use theme** to return to native Colorway/OBS styling. The settings
+are stored atomically as `listRows` in `rules.json`; changes apply immediately
+and disabling the feature restores the original palette and stylesheets.
+
+This augments the **existing OBS widgets**. The built-in scene selection and
+hover colors remain native; source-specific row colors assigned through OBS
+are preserved. Scene *grid mode* stays untouched. Other OBS/third-party lists
+are deliberately excluded until their native behavior can be checked.
+
+![Alternating row colors on native Scenes and Sources lists](docs/screenshots/readme/alternating-scenes-sources.webp)
 
 ### Native Audio Mixer backside
 

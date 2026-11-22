@@ -548,3 +548,47 @@ test-profile limitation). Thus the full 166-entry *real OBS* popup was not
 visually validated in that instance. The changed code is also subject to the
 existing theme-picker opt-in gating via Compact menus. User's OBS instance and
 settings were not changed. No push.
+
+## Slice 24 — opt-in alternating backgrounds for native Scenes and Sources (2026-11-21)
+
+Added independently toggleable native SceneTree and SourceTree row striping.
+Inspector → Panels → Alternating list backgrounds offers Scenes/Sources switches
+and two separately configurable opaque colors, Normal and Alternating; both
+color slots may instead inherit the OBS theme (the default). Settings persist
+atomically as a validated optional `listRows` root object in rules.json,
+with controls updating live and failures rolled back.
+
+The presentation adapter attaches only to the actual OBS widgets by Qt
+class identity + objectName. It preserves native models, index widgets,
+source-specific color presets, selection, hover and drag/drop. Sources use
+`QListView::setAlternatingRowColors` with the two native palette roles.
+Colorway's Scenes list has a global QSS `QListWidget::item:alternate` rule
+that overrides Qt palette colors; for custom colors the adapter adds an
+in-view `SceneTree::item` color rule ONLY for unselected, non-hovered list
+rows, preserving the original native stylesheet. Scene tile/grid mode
+temporarily suspends row striping and then restores it on return to ListMode.
+On toggle-off, teardown or plugin unload, original flags, palette and
+stylesheets are restored; Qt theme/style changes are reconciled rather than
+retaining our colors as the next "native" palette.
+
+TDD: 14/14 full CTests passed. New `row-stripes-test` exercises both target widgets, excludes
+generic/third-party lists, preserves original source index widgets,
+selection highlights and source styles, applies custom normal/alternate
+colors, restores edited themes, and guards a reproduced grid-mode QSS
+restoration failure. A second red test reproduces Colorway-like
+QListWidget::item:alternate stylesheet precedence with rendered-pixel
+comparison; a scoped SceneTree override makes it pass. Inspector tests
+cover atomic storage, invalid settings, two immediate toggles and
+theme-reset. Screenshot: docs/screenshots/readme/alternating-scenes-sources.webp.
+
+Real isolated OBS 32.2.0 with the actual Colorway theme, copied profile and
+three scenes: Sources row 2 changed from configured #606088 to native
+#191724 when disabled (pixel at x199,y556), while Scenes remained enabled;
+Scene row 2 rendered #606088 after the theme-specific scoped override,
+and selected Scene row 3 remained OBS's native #31748f. Disabling Scenes
+returned row 2 to native #191724 while Sources remained #606088; re-enabling
+returned it to #606088. Scoped UI toggles persisted only to the disposable
+OBS profile. User's live OBS, themes and source settings untouched.
+
+Limits: other widgets and third-party list implementations are excluded,
+and no claim is made about all Qt/OBS platforms or custom themes. No push.

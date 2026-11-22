@@ -16,6 +16,9 @@
 #include "gradient.h"
 #include "panels.h"
 #include "property-sections.h"
+#include "row-stripes.h"
+#include <QGroupBox>
+#include <QGridLayout>
 #include <QMainWindow>
 #include <QTabWidget>
 #include <QAbstractButton>
@@ -441,7 +444,7 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle):QDialog(parent),ui(new Ui(controller)) {
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes):QDialog(parent),ui(new Ui(controller)) {
     setWindowTitle("UI Augment · Inspector");
     setObjectName("obs-ui-augment-inspector");
     setModal(false);
@@ -722,6 +725,87 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
                     ui->status->setText(error);
                 }
             });
+        }
+        if(rowStripes){
+            auto *section=new QGroupBox("Alternating list backgrounds",page);
+            section->setObjectName("augment-striped-list-settings");
+            auto *contents=new QVBoxLayout(section);
+            auto *hint=new QLabel("Use native row striping in OBS's Scenes and Sources lists. Source-specific colors remain native.",section);
+            hint->setWordWrap(true);contents->addWidget(hint);
+            QPointer<RowStripes> safe(rowStripes);
+            auto commit=[this,&controller,safe](const QJsonObject &next){
+                QString error;
+                if(!controller.setListRowSettings(next,&error)){
+                    ui->status->setText(error);
+                    return false;
+                }
+                if(safe)safe->configure(next);
+                ui->status->setText("List background settings saved.");
+                return true;
+            };
+            auto *scopeRow=new QHBoxLayout;
+            for(const auto &target:{qMakePair(QStringLiteral("scenes"),QStringLiteral("Scenes")),
+                                    qMakePair(QStringLiteral("sources"),QStringLiteral("Sources"))}){
+                auto *toggle=new QCheckBox(target.second,section);
+                toggle->setObjectName("augment-striped-"+target.first);
+                toggle->setChecked(controller.listRowSettings().value(target.first).toBool(false));
+                scopeRow->addWidget(toggle);
+                connect(toggle,&QCheckBox::toggled,section,[&controller,commit,toggle,key=target.first](bool enabled){
+                    auto next=controller.listRowSettings();
+                    next[key]=enabled;
+                    if(!commit(next)){
+                        const QSignalBlocker blocker(toggle);
+                        toggle->setChecked(controller.listRowSettings().value(key).toBool(false));
+                    }
+                });
+            }
+            scopeRow->addStretch();contents->addLayout(scopeRow);
+            auto *colorGrid=new QGridLayout;
+            int colorRow=0;
+            for(const auto &field:{qMakePair(QStringLiteral("base"),QStringLiteral("Normal rows")),
+                                   qMakePair(QStringLiteral("alternate"),QStringLiteral("Alternating rows"))}){
+                const QString key=field.first;
+                auto *label=new QLabel(field.second,section);
+                auto *choose=new QPushButton(section);
+                choose->setObjectName("augment-striped-"+key+"-pick");
+                auto *theme=new QPushButton("Use theme",section);
+                theme->setObjectName("augment-striped-"+key+"-theme");
+                choose->setAccessibleName("Choose "+field.second+" background color");
+                theme->setAccessibleName("Restore "+field.second+" to OBS theme color");
+                const auto updateLabel=[choose,key,&controller]{
+                    const QString color=controller.listRowSettings().value(key).toString();
+                    choose->setText(color.isEmpty()?"Choose color…":color);
+                    choose->setToolTip(color.isEmpty()?"Default OBS theme color":color);
+                    if(color.isEmpty())choose->setIcon(QIcon());
+                    else {
+                        QPixmap swatch(14,14);
+                        swatch.fill(QColor(color));
+                        choose->setIcon(QIcon(swatch));
+                    }
+                };
+                updateLabel();
+                colorGrid->addWidget(label,colorRow,0);
+                colorGrid->addWidget(choose,colorRow,1);
+                colorGrid->addWidget(theme,colorRow,2);
+                connect(choose,&QPushButton::clicked,section,[=,&controller]{
+                    QColor initial(controller.listRowSettings().value(key).toString());
+                    if(!initial.isValid())initial=section->palette().color(key=="base"?QPalette::Base:QPalette::AlternateBase);
+                    const auto color=QColorDialog::getColor(initial,section,field.second);
+                    if(!color.isValid())return;
+                    auto next=controller.listRowSettings();
+                    next[key]=color.name();
+                    if(commit(next))updateLabel();
+                });
+                connect(theme,&QPushButton::clicked,section,[=,&controller]{
+                    auto next=controller.listRowSettings();
+                    next.remove(key);
+                    if(commit(next))updateLabel();
+                });
+                ++colorRow;
+            }
+            contents->addLayout(colorGrid);
+            if(auto *layout=qobject_cast<QVBoxLayout*>(page->layout()))
+                layout->insertWidget(1,section);
         }
         ui->tabs->addTab(page,"Panels");
     }

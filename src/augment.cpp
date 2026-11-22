@@ -22,6 +22,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QMenu>
 #include <QPainter>
 #include <QPointer>
@@ -214,11 +215,24 @@ struct Rule {
         return std::all_of(anchors.begin(), anchors.end(), [&labels](const QString &a){return labels.contains(a);});
     }
 };
+bool validListRows(const QJsonValue &value){
+    if(value.isUndefined())return true;
+    if(!value.isObject())return false;
+    const auto rows=value.toObject();
+    for(const char *key:{"scenes","sources"})
+        if(rows.contains(key)&&!rows.value(key).isBool())return false;
+    const QRegularExpression colorPattern(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+    for(const char *key:{"base","alternate"})
+        if(rows.contains(key)&&(!rows.value(key).isString()||
+           !colorPattern.match(rows.value(key).toString()).hasMatch()))return false;
+    return true;
+}
 struct Rules {
     QString path;
     Logger logger;
     QByteArray lastRead;
     bool enabled = true, inspect = false, motion = false, compactMenus = true, showSubmenuSelections = false, modernTransforms=false, collapsibleGroups=false, mixerBackside=false;
+    QJsonObject listRows;
     std::vector<Rule> entries, overflowEntries, hiddenEntries;
     struct Custom {
         QString id,label,program,icon,menuObjectName;
@@ -255,7 +269,8 @@ struct Rules {
             (root.contains("showSubmenuSelections")&&!root.value("showSubmenuSelections").isBool()) ||
             (root.contains("modernTransformFrame")&&!root.value("modernTransformFrame").isBool()) ||
             (root.contains("collapsiblePropertyGroups")&&!root.value("collapsiblePropertyGroups").isBool()) ||
-            (root.contains("mixerBackside")&&!root.value("mixerBackside").isBool())) return false;
+            (root.contains("mixerBackside")&&!root.value("mixerBackside").isBool()) ||
+            !validListRows(root.value("listRows"))) return false;
         GradientSpec nextGradient;
         if(!GradientSpec::parse(root.value("gradient"),nextGradient))return false;
         std::vector<Rule> next;
@@ -355,6 +370,7 @@ struct Rules {
         modernTransforms = root.value("modernTransformFrame").toBool(false);
         collapsibleGroups = root.value("collapsiblePropertyGroups").toBool(false);
         mixerBackside = root.value("mixerBackside").toBool(false);
+        listRows = root.value("listRows").toObject();
         entries = std::move(next);
         gradient=nextGradient;
         gradientRaw=root.value("gradient").toObject();
@@ -768,7 +784,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr,const bool *modernTransforms=nullptr,const bool *collapsibleGroups=nullptr,const bool *mixerBackside=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr,const bool *modernTransforms=nullptr,const bool *collapsibleGroups=nullptr,const bool *mixerBackside=nullptr,const QJsonObject *listRows=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -789,6 +805,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     else if (modernTransforms) root["modernTransformFrame"]=*modernTransforms;
     else if (collapsibleGroups) root["collapsiblePropertyGroups"]=*collapsibleGroups;
     else if (mixerBackside) root["mixerBackside"]=*mixerBackside;
+    else if (listRows) root["listRows"]=*listRows;
     else if(hidden) {
         const auto selector=canonicalSelector(entry);
         if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
@@ -883,6 +900,14 @@ bool Controller::mixerBacksideEnabled() const {
 bool Controller::setMixerBacksideEnabled(bool enabled,QString *error) {
     return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,
         nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&enabled);
+}
+QJsonObject Controller::listRowSettings() const {
+    state->rules.refresh();return state->rules.listRows;
+}
+bool Controller::setListRowSettings(const QJsonObject &settings,QString *error){
+    if(!validListRows(QJsonValue(settings)))return fail(error,"Invalid alternating row settings.");
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,
+        nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&settings);
 }
 bool Controller::compactMenusEnabled() const {state->rules.refresh();return state->rules.compactMenus;}
 bool Controller::setCompactMenus(bool enabled,QString *error) {

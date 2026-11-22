@@ -23,6 +23,7 @@
 #include <QDockWidget>
 #include "panels.h"
 #include "property-sections.h"
+#include "row-stripes.h"
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
 int main(int argc,char **argv) {
@@ -35,6 +36,15 @@ int main(int argc,char **argv) {
     augment::Controller c(path);
     REQUIRE(!c.modernTransformFrame());
     REQUIRE(!c.collapsiblePropertyGroups());
+    REQUIRE(c.listRowSettings().isEmpty());
+    const QJsonObject stripeSettings{{"scenes",true},{"sources",true},{"base","#223344"},{"alternate","#425466"}};
+    REQUIRE(c.setListRowSettings(stripeSettings));
+    REQUIRE(c.listRowSettings()==stripeSettings);
+    REQUIRE(QJsonDocument::fromJson(read()).object().value("listRows").toObject()==stripeSettings);
+    REQUIRE(!c.setListRowSettings({{"sources","not boolean"}}));
+    REQUIRE(!c.setListRowSettings({{"alternate","invalid!"}}));
+    REQUIRE(c.listRowSettings()==stripeSettings);
+    REQUIRE(c.setListRowSettings({}));
     REQUIRE(!c.mixerBacksideEnabled());
     REQUIRE(c.setMixerBacksideEnabled(true));
     REQUIRE(c.mixerBacksideEnabled());
@@ -55,8 +65,24 @@ int main(int argc,char **argv) {
         QMainWindow main;
         augment::Panels panels;
         augment::PropertySections sections;
+        augment::RowStripes stripes;
         int flips=0;
-        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;});
+        augment::Inspector inspector(c,&main,&panels,&sections,[&](bool){++flips;return true;},&stripes);
+        auto *sceneStripes=inspector.findChild<QCheckBox*>("augment-striped-scenes");
+        auto *sourceStripes=inspector.findChild<QCheckBox*>("augment-striped-sources");
+        REQUIRE(sceneStripes&&sourceStripes&&!sceneStripes->isChecked()&&!sourceStripes->isChecked());
+        sceneStripes->click();
+        REQUIRE(c.listRowSettings().value("scenes").toBool()&&stripes.settings().value("scenes").toBool());
+        sourceStripes->click();
+        REQUIRE(c.listRowSettings().value("sources").toBool()&&stripes.settings().value("sources").toBool());
+        auto *resetAlternate=inspector.findChild<QPushButton*>("augment-striped-alternate-theme");
+        REQUIRE(resetAlternate);
+        REQUIRE(c.setListRowSettings({{"scenes",true},{"sources",true},{"alternate","#304050"}}));
+        stripes.configure(c.listRowSettings());
+        resetAlternate->click();
+        REQUIRE(!c.listRowSettings().contains("alternate")&&stripes.settings()==c.listRowSettings());
+        sceneStripes->click();sourceStripes->click();
+        REQUIRE(!c.listRowSettings().value("sources").toBool()&&!c.listRowSettings().value("scenes").toBool());
         auto *mixerBack=inspector.findChild<QCheckBox*>("augment-mixer-backside");
         REQUIRE(mixerBack&&!mixerBack->isChecked());
         mixerBack->click();

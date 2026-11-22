@@ -44,6 +44,8 @@ public:
     bool setCollapsiblePropertyGroups(bool enabled,QString *error=nullptr);
     bool mixerBacksideEnabled() const;
     bool setMixerBacksideEnabled(bool enabled,QString *error=nullptr);
+    QJsonObject listRowSettings() const;
+    bool setListRowSettings(const QJsonObject &settings,QString *error=nullptr);
     bool compactMenusEnabled() const;
     bool setCompactMenus(bool enabled, QString *error = nullptr);
     bool motionEnabled() const;

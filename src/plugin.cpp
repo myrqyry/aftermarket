@@ -5,6 +5,7 @@
 #include "inspector.h"
 #include "panels.h"
 #include "property-sections.h"
+#include "row-stripes.h"
 #include "dock-faces.h"
 #include "audio-patchbay.h"
 #include "obs-routing.h"
@@ -26,6 +27,7 @@ static QPointer<augment::Inspector> inspector;
 static QPointer<QAction> toolsAction, panelsAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
+static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::DockFaces> dockFaces;
 static bool setAudioMixerBackside(bool enabled) {
     if(!dockFaces)return false;
@@ -50,6 +52,7 @@ static void cleanupUi() {
     delete inspector.data();
     if(panels)panels->restoreAll();
     dockFaces.reset();
+    rowStripes.reset();
     propertySections.reset();
     transforms.reset(); // Restore original OBS accessibility colors before exit-save.
     panels.reset();
@@ -87,11 +90,13 @@ MODULE_EXPORT bool obs_module_load(void) {
     controller->setMeterProvider([](const QWidget *w){return audio?audio->sample(w):std::optional<augment::MeterReading>{};});
     propertySections=std::make_unique<augment::PropertySections>();
     propertySections->setEnabled(controller->collapsiblePropertyGroups());
+    rowStripes=std::make_unique<augment::RowStripes>();
+    rowStripes->configure(controller->listRowSettings());
     dockFaces=std::make_unique<augment::DockFaces>();
     toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
     if (toolsAction) QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if (!inspector) inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside);
+            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get());
         inspector->show();
         inspector->raise();
         inspector->activateWindow();
@@ -102,7 +107,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         []{return controller&&controller->modernTransformFrame();});
     panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
     if(panelsAction) QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
-        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside);
+        if(!inspector)inspector=new augment::Inspector(*controller,static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get());
         inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
     });
     obs_frontend_add_event_callback(frontendEvent,nullptr);
