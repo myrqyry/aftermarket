@@ -7,6 +7,7 @@ class QMainWindow;
 class QDockWidget;
 class QWidget;
 class QToolButton;
+class QMenu;
 class QEvent;
 
 namespace augment {
@@ -22,18 +23,24 @@ public:
     static constexpr int titleTextInset(){return 20;}
     bool titleIndented(QDockWidget *dock) const;
     QString originalTitle(QDockWidget *dock) const;
-    explicit DockTitleIcons(QMainWindow *window,Panels *panels=nullptr,QObject *parent=nullptr);
+    explicit DockTitleIcons(QMainWindow *window,Panels *panels=nullptr,
+                            const QString &settingsPath={},QObject *parent=nullptr);
     ~DockTitleIcons() override;
     void refresh();
     int decoratedCount() const;
     QWidget *glyph(QDockWidget *dock) const;
     QToolButton *moreButton(QDockWidget *dock) const;
+    Qt::TextElideMode ellipsisMode() const;
+    bool setEllipsisMode(Qt::TextElideMode mode);
+    void appendEllipsisMenu(QMenu *menu);
 private:
     bool eventFilter(QObject *watched,QEvent *event) override;
     void scheduleRefresh();
     void place(QDockWidget *dock,QWidget *icon);
     QPointer<QMainWindow> window_;
     QPointer<Panels> panels_;
+    QString settingsPath_;
+    Qt::TextElideMode ellipsisMode_=Qt::ElideRight;
     QHash<QDockWidget*,QPointer<QWidget>> icons_;
     QHash<QDockWidget*,QPointer<QToolButton>> moreButtons_;
     QHash<QDockWidget*,QString> originalTitles_;

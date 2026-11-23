@@ -242,6 +242,12 @@ Enable **Audio Mixer backside (native routing)** in **Tools → UI Augment Inspe
 
 ![Audio Mixer retains its options under the first Collapse action](docs/screenshots/readme/dock-mixer-overflow.webp)
 
+**Long dock titles:** Every dock's three-dot menu includes **Long titles → Ellipsis at end / Ellipsis in middle**. End truncation remains the default for existing installations; selecting middle truncation preserves the beginning **and** end of long names (for example, `Scene…itions`). Both use Qt's native font measurements, update immediately across docks, and keep the complete original title in OBS's Docks menu. The global choice is stored in Aftermarket's `plugin_config/obs-ui-augment/dock-title-settings.ini` and survives restarts. It never changes the native dock object name or source identity.
+
+![Choose where long dock titles show their ellipsis](docs/screenshots/readme/dock-title-ellipsis-choice.webp)
+
+![The Scene Transitions dock with a middle ellipsis](docs/screenshots/readme/dock-title-middle.webp)
+
 **Native mixer title and bottom control:** After **Collapse/Expand**, the **vertical three-dot button in the genuine OBS dock title** opens the pan/sync presentation setting and the original **hidden sources, mixer orientation, Advanced Audio Properties and Mixer options** actions, plus a **Channel settings** submenu with per-source native Pan and Sync editors. The old OBS footer is hidden only when the header menu is actually available; floating or cramped docks restore it, so controls remain accessible. The interactive **AudioBus** button lives by itself at the dock's bottom edge and switches between mixer and routing pages, never stacking the entire routing graph below OBS. Dock icons, native titles, native undock controls, and drag behavior remain untouched.
 
 ![Mixer with only the AudioBus switch at the bottom](docs/screenshots/readme/audiohub-bottom-switch.webp)

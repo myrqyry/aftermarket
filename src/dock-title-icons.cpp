@@ -4,6 +4,8 @@
 #include <QMainWindow>
 #include <QDockWidget>
 #include <QMenu>
+#include <QActionGroup>
+#include <QSettings>
 #include <QToolButton>
 #include <QWidget>
 #include <QEvent>
@@ -124,8 +126,14 @@ DockTitleIcons::Kind DockTitleIcons::classify(const QString &objectName,const QS
 int DockTitleIcons::glyphSizeForRoom(int freePixels){
     return freePixels>=21?14:freePixels>=14?10:0;
 }
-DockTitleIcons::DockTitleIcons(QMainWindow *window,Panels *panels,QObject *parent)
-    :QObject(parent),window_(window),panels_(panels){
+DockTitleIcons::DockTitleIcons(QMainWindow *window,Panels *panels,
+                               const QString &settingsPath,QObject *parent)
+    :QObject(parent),window_(window),panels_(panels),settingsPath_(settingsPath){
+    if(!settingsPath_.isEmpty()){
+        const QSettings settings(settingsPath_,QSettings::IniFormat);
+        if(settings.value("title/ellipsis","end").toString()=="middle")
+            ellipsisMode_=Qt::ElideMiddle;
+    }
     if(window_)window_->installEventFilter(this);
     refresh();
 }
@@ -171,6 +179,39 @@ QWidget *DockTitleIcons::glyph(QDockWidget *dock)const{
 QToolButton *DockTitleIcons::moreButton(QDockWidget *dock)const{
     return moreButtons_.value(dock);
 }
+Qt::TextElideMode DockTitleIcons::ellipsisMode()const{return ellipsisMode_;}
+bool DockTitleIcons::setEllipsisMode(Qt::TextElideMode mode){
+    if(mode!=Qt::ElideRight&&mode!=Qt::ElideMiddle)return false;
+    if(mode==ellipsisMode_)return true;
+    if(!settingsPath_.isEmpty()){
+        QSettings settings(settingsPath_,QSettings::IniFormat);
+        settings.setValue("title/ellipsis",mode==Qt::ElideMiddle?"middle":"end");
+        settings.sync();
+        if(settings.status()!=QSettings::NoError)return false;
+    }
+    ellipsisMode_=mode;
+    refresh();
+    return true;
+}
+void DockTitleIcons::appendEllipsisMenu(QMenu *menu){
+    if(!menu)return;
+    auto *submenu=menu->addMenu("Long titles");
+    submenu->setObjectName("aftermarket-title-ellipsis-menu");
+    auto *group=new QActionGroup(submenu);
+    group->setExclusive(true);
+    for(const auto mode : {Qt::ElideRight,Qt::ElideMiddle}){
+        auto *action=submenu->addAction(mode==Qt::ElideMiddle?
+                                        "Ellipsis in middle":"Ellipsis at end");
+        action->setObjectName(mode==Qt::ElideMiddle?
+                              "aftermarket-ellipsis-middle":"aftermarket-ellipsis-end");
+        action->setCheckable(true);
+        action->setChecked(ellipsisMode_==mode);
+        group->addAction(action);
+        connect(action,&QAction::triggered,this,[this,mode]{
+            setEllipsisMode(mode);
+        });
+    }
+}
 void DockTitleIcons::refresh(){
     if(!window_)return;
     const auto docks=window_->findChildren<QDockWidget*>();
@@ -191,14 +232,17 @@ void DockTitleIcons::refresh(){
         more->setPopupMode(QToolButton::InstantPopup);
         QPointer<QDockWidget> safe=dock;
         QPointer<Panels> panel=panels_;
-        connect(menu,&QMenu::aboutToShow,more,[menu,safe,panel]{
+        QPointer<DockTitleIcons> owner=this;
+        connect(menu,&QMenu::aboutToShow,more,[menu,safe,panel,owner]{
             menu->clear();
-            if(!safe)return;
+            if(!safe||!owner)return;
             if(panel)panel->addCollapseAction(menu,safe);
             else {
                 auto *unavailable=menu->addAction("Collapse");
                 unavailable->setEnabled(false);
             }
+            menu->addSeparator();
+            owner->appendEllipsisMenu(menu);
         });
         moreButtons_.insert(dock,more);
         auto *icon=new TitleGlyph(kind,dock);
@@ -320,7 +364,7 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
     const int actual=metrics.horizontalAdvance(spacer);
     const int maxLabelWidth=qMax(0,text.width()-actual-moreSpace-4);
     const QString renderedTitle=titleWidth<=maxLabelWidth?title:
-        metrics.elidedText(title,Qt::ElideRight,maxLabelWidth);
+        metrics.elidedText(title,ellipsisMode_,maxLabelWidth);
     if(renderedTitle.isEmpty()){conceal();return;}
     const QString displayed=spacer+renderedTitle;
     if(dock->windowTitle()!=displayed){

@@ -1682,3 +1682,45 @@ Verification:
 
 Open: custom/floating title bars deliberately retain their own controls.
 Verification was in isolated OBS, not a subsequent personal-profile session.
+
+## Slice 41 — selectable middle ellipsis for long dock titles (2026-11-22)
+
+User asked for an option to place an ellipsis in the middle instead of
+at the end when a dock name is too long. Continues Slice 40.
+
+Implementation:
+- Every generic dock three-dot menu and the specialized Audio Mixer menu
+  now include a Long titles submenu with mutually exclusive Ellipsis at end
+  and Ellipsis in middle actions. Collapse/Expand remains the first action.
+- Reuses Qt QFontMetrics::elidedText with ElideRight or ElideMiddle,
+  preserving native full names in OBS Docks menu, click targets and teardown.
+- One shared preference is stored in
+  ~/.config/obs-studio/plugin_config/obs-ui-augment/dock-title-settings.ini
+  via QSettings atomic sync. Default remains End when not configured.
+  No source routing or existing user configuration is changed.
+
+Verification:
+- TDD red first showed missing settings-aware constructor and menu API.
+  Green assertions cover both title modes, live update, checked menu actions,
+  full native Docks menu name, persistence, reload, and restored titles.
+- CMake build and serial 22/22 CTests passed; git diff --check clean.
+- Isolated real OBS 32.2.0 / Colorway / Xvfb: open Scene Transitions
+  three-dot overflow, Long titles submenu, click Ellipsis in middle,
+  observe displayed Scene…itions, persist [title] ellipsis=middle to
+  isolated config. Restart isolated OBS with the same config confirmed
+  middle choice persisted; Audio Mixer retained its original options and
+  exposed the shared Long titles submenu.
+- README and optimized screenshots updated in
+  docs/screenshots/readme/dock-title-ellipsis-choice.webp and
+  docs/screenshots/readme/dock-title-middle.webp.
+- Installed matching plugin binary SHA256
+  bbeb95d87a3f90637c48edbf1dcc9f5ad33a822ef2389ea200b224dd28f718f0
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so,
+  previous version backed up at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-middle-ellipsis.ea8daeb442a2.so.
+  User OBS PID 147889 stayed running and was not restarted. Four tracked
+  user configuration paths had identical before/after hashes.
+
+Boundary: personal OBS session must restart to load the new build, and
+the user's preference remains unchanged until they select Middle.
+No GitHub push, release or external publication.

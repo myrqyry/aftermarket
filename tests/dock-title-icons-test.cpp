@@ -8,6 +8,8 @@
 #include <QLabel>
 #include <QToolButton>
 #include <QMenu>
+#include <QSettings>
+#include <QTemporaryDir>
 #include <QStyleOptionDockWidget>
 #include <QStyle>
 #include <QFontMetrics>
@@ -55,9 +57,12 @@ int main(int argc,char **argv){
     docks.append({dock,spec.title,dock->titleBarWidget()});
  }
  main.resize(1350,720);main.show();app.processEvents();
+ QTemporaryDir tmp;
+ REQUIRE(tmp.isValid());
+ const QString settingsPath=tmp.filePath("dock-titles.ini");
  {
    augment::Panels panels;
-   augment::DockTitleIcons icons(&main,&panels);
+   augment::DockTitleIcons icons(&main,&panels,settingsPath);
    icons.refresh();app.processEvents();
    REQUIRE(icons.decoratedCount()==5);
    QList<QImage> pictures;
@@ -181,6 +186,35 @@ int main(int argc,char **argv){
    REQUIRE(icons.originalTitle(custom)==QString(200,'W'));
    REQUIRE(custom->windowTitle().size()<200); // reversible visual elision
    REQUIRE(custom->toggleViewAction()->text()==QString(200,'W'));
+   REQUIRE(custom->windowTitle().endsWith(QChar(0x2026))); // legacy end elision
+   auto *more=icons.moreButton(custom);
+   more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
+   app.processEvents();
+   QMenu *titleMenu=nullptr;
+   for(auto *action:more->menu()->actions())
+       if(action->menu()&&action->text()=="Long titles")titleMenu=action->menu();
+   REQUIRE(titleMenu&&titleMenu->actions().size()==2);
+   auto *endElide=titleMenu->actions().at(0);
+   auto *middleElide=titleMenu->actions().at(1);
+   REQUIRE(endElide->isChecked()&&!middleElide->isChecked());
+   middleElide->trigger();app.processEvents();
+   REQUIRE(custom->windowTitle().contains(QChar(0x2026)));
+   REQUIRE(custom->windowTitle().startsWith('W')&&custom->windowTitle().endsWith('W'));
+   REQUIRE(icons.originalTitle(custom)==QString(200,'W'));
+   REQUIRE(custom->toggleViewAction()->text()==QString(200,'W'));
+   REQUIRE(QSettings(settingsPath,QSettings::IniFormat).value("title/ellipsis").toString()=="middle");
+   more->menu()->hide();app.processEvents();
+   more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
+   app.processEvents();
+   titleMenu=nullptr;
+   for(auto *action:more->menu()->actions())
+       if(action->menu()&&action->text()=="Long titles")titleMenu=action->menu();
+   REQUIRE(titleMenu&&titleMenu->actions().at(1)->isChecked());
+   titleMenu->actions().at(0)->trigger();app.processEvents();
+   REQUIRE(custom->windowTitle().endsWith(QChar(0x2026)));
+   REQUIRE(QSettings(settingsPath,QSettings::IniFormat).value("title/ellipsis").toString()=="end");
+   titleMenu->actions().at(1)->trigger();app.processEvents(); // persist selected middle mode
+   more->menu()->hide();app.processEvents();
    custom->setWindowTitle("Plugin");
    icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());
@@ -203,6 +237,21 @@ int main(int argc,char **argv){
    REQUIRE(icons.glyph(custom)->isVisible());
    REQUIRE(faces.detach(mixer));
    REQUIRE(mixer->titleBarWidget()==docks[2].nativeTitle);
+ }
+ app.processEvents();
+ REQUIRE(QSettings(settingsPath,QSettings::IniFormat).value("title/ellipsis").toString()=="middle");
+ {
+   augment::Panels panels;
+   augment::DockTitleIcons restored(&main,&panels,settingsPath);
+   REQUIRE(restored.ellipsisMode()==Qt::ElideMiddle);
+   auto *transitions=docks[3].dock;
+   transitions->setWindowTitle(QString(180,'Z'));
+   restored.refresh();app.processEvents();
+   REQUIRE(transitions->windowTitle().startsWith('Z'));
+   REQUIRE(transitions->windowTitle().endsWith('Z'));
+   REQUIRE(restored.originalTitle(transitions)==QString(180,'Z'));
+   transitions->setWindowTitle(docks[3].title);
+   restored.refresh();app.processEvents();
  }
  app.processEvents();
  for(const auto &entry:docks){

@@ -115,6 +115,10 @@ static bool setAudioMixerBackside(bool enabled) {
             panels->addCollapseAction(menu,safeDock);
             menu->addSeparator();
         }
+        if(dockTitleIcons){
+            dockTitleIcons->appendEllipsisMenu(menu);
+            menu->addSeparator();
+        }
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);
         knobs->setChecked(frontAudio->knobs());
@@ -171,7 +175,9 @@ static bool startCustomUi(){
         [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);});
     panels=std::make_unique<augment::Panels>();
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
-        dockTitleIcons=std::make_unique<augment::DockTitleIcons>(main,panels.get());
+        dockTitleIcons=std::make_unique<augment::DockTitleIcons>(
+            main,panels.get(),QDir(QFileInfo(stripConfigPath).absolutePath())
+                               .filePath("dock-title-settings.ini"));
     dockFaces=std::make_unique<augment::DockFaces>();
     mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
     transforms=std::make_unique<augment::ObsTransformStyle>(
