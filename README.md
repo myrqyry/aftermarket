@@ -40,10 +40,30 @@ Restart OBS (or open it if closed). The module creates its rules file at
 `~/.config/obs-studio/plugin_config/obs-ui-augment/rules.json` by default.
 If XDG_CONFIG_HOME is set, use that configuration root.
 
+## Settings inside OBS
+
+Open **OBS → Settings → Aftermarket** from OBS's normal Settings dialog.
+Aftermarket has its own **native Settings sidebar entry** after Advanced,
+not an extra dock menu, a Tools-menu shortcut, or another floating Settings
+window. It groups interface preferences into **Appearance, Menus, Mixer,
+Panels, and Action strip**. The app-wide **Long text** option lives under
+**Appearance → At end / In middle**; it no longer appears in every dock's
+three-dot menu.
+
+The options are staged until you click OBS's existing **Apply** or **OK**
+button. **Cancel discards unapplied Aftermarket changes**, using the same
+native Settings controls as other OBS pages. Source names, mixer routing,
+and unrelated OBS settings are preserved. Advanced target-specific tools
+remain in the Inspector; the regular preferences now have their own home.
+
+![Aftermarket entry in the real OBS Settings sidebar, with global Appearance preferences](docs/screenshots/readme/aftermarket-obs-settings.webp)
+
+![Mixer and gradient preferences inside OBS Settings Aftermarket](docs/screenshots/readme/aftermarket-settings-mixer.webp)
+
 ## Inspector workspace
 
-Open **Tools → UI Augment Inspector**. All existing effects are now accessible
-from four pages in one native, theme-aware window:
+Open **Tools → UI Augment Inspector** for advanced per-target editing and
+richer visual editors. Its specialized pages remain available for:
 
 - **Menus & widgets:** Pick target with an adjustable 2–10 second delay,
   open a context menu and hover an action. Filter captured labels, see saved
@@ -139,8 +159,9 @@ The remaining menu-bar space can hold the optional Action Strip described below.
 
 ### Configurable Action Strip: live status, native hotkeys and docks
 
-**Tools → Aftermarket: Action Strip…** opens a small editor. The same controls
-are available under **UI Augment Inspector → Action strip**. Choose
+**OBS Settings → Aftermarket → Action strip** controls visibility and
+opens the button editor. The **Tools → Aftermarket: Action Strip…** shortcut
+is still available for editing. Choose
 **Show action strip in OBS menu bar** to place your configured items at the
 right of the *existing* native menu bar, including when the hamburger is off.
 It is **off by default** and does not replace OBS's Controls dock, native
@@ -183,8 +204,10 @@ new multi-dock manager or copy Timeline's macro data.
 
 ### Alternating Scenes and Sources backgrounds
 
-In **Tools → UI Augment Inspector → Panels → Alternating list backgrounds**,
-turn on **Scenes** and/or **Sources** independently. By default both are off.
+In **OBS Settings → Aftermarket → Appearance**, turn on **Scenes** and/or
+**Sources** alternate rows independently. The Inspector's detailed
+**Panels → Alternating list backgrounds** editor remains available for
+choosing custom row colors. By default both are off.
 **Normal rows** and **Alternating rows** can each use a chosen solid color
 or **Use theme** to return to native Colorway/OBS styling. The settings
 are stored atomically as `listRows` in `rules.json`; changes apply immediately
@@ -215,7 +238,7 @@ widgets, menus and source list selection remain owned by OBS and its theme.**
 
 ### Native Audio Mixer and AudioHub
 
-Enable **Audio Mixer backside (native routing)** in **Tools → UI Augment Inspector → Panels**. The native Audio Mixer and AudioHub remain **two alternate views inside the same dock**, not two vertically stacked panels. Only the **interactive AudioBus switch** has moved to a small bottom-edge control: click **AudioBus** to open the routing view, then **Audio Mixer** to return. The original OBS audio controls are preserved, and emergency recovery **Ctrl+Alt+Shift+F12** restores the native mixer without changing scene or audio routing.
+Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket → Mixer**. The native Audio Mixer and AudioHub remain **two alternate views inside the same dock**, not two vertically stacked panels. Only the **interactive AudioBus switch** has moved to a small bottom-edge control: click **AudioBus** to open the routing view, then **Audio Mixer** to return. The original OBS audio controls are preserved, and emergency recovery **Ctrl+Alt+Shift+F12** restores the native mixer without changing scene or audio routing.
 
 **AudioHub (alternate routing view)** is a compact source-to-output patchbay:
 
@@ -242,7 +265,7 @@ Enable **Audio Mixer backside (native routing)** in **Tools → UI Augment Inspe
 
 ![Audio Mixer retains its options under the first Collapse action](docs/screenshots/readme/dock-mixer-overflow.webp)
 
-**App-wide long-text truncation:** Every dock's three-dot menu includes **Long text · Entire app → Ellipsis at end / Ellipsis in middle**. The same preference controls truncation in dock titles, native Qt source/scene lists and other item views, tabs, non-editable dropdowns, pushbuttons, checkboxes/radio buttons, ordinary non-wrapping display labels, and Aftermarket's custom AudioHub source labels and menu selection summaries. Middle truncation preserves both ends (for example, Scene…itions) and applies to newly created windows and plugin docks. Existing installations default to End, which **leaves other OBS widget types' existing presentation untouched**. Turning middle mode off restores previous Qt view/tab preferences and full label text. The choice is saved in plugin_config/obs-ui-augment/dock-title-settings.ini.
+**App-wide long-text truncation:** Choose **OBS Settings → Aftermarket → Appearance → Long text → At end / In middle**. The same preference controls truncation in dock titles, native Qt source/scene lists and other item views, tabs, non-editable dropdowns, pushbuttons, checkboxes/radio buttons, ordinary non-wrapping display labels, and Aftermarket's custom AudioHub source labels and menu selection summaries. Middle truncation preserves both ends (for example, Scene…itions) and applies to newly created windows and plugin docks. Existing installations default to End, which **leaves other OBS widget types' existing presentation untouched**. Turning middle mode off restores previous Qt view/tab preferences and full label text. The choice is saved in plugin_config/obs-ui-augment/dock-title-settings.ini.
 
 The presentation layer does **not** rewrite OBS source/model names, editable text fields, actual button or dropdown values, rich/word-wrapped labels, or native Docks menu names. Native Qt elision is used for item views and tabs; buttons/dropdowns use Qt-style drawing; plain labels are reversibly shortened. Third-party widgets with completely custom painting may need their own adapter.
 
@@ -251,8 +274,6 @@ The presentation layer does **not** rewrite OBS source/model names, editable tex
 ![OBS Sources list before middle truncation](docs/screenshots/readme/app-elision-end.webp)
 
 ![OBS Sources list with global middle ellipsis selected](docs/screenshots/readme/app-elision-middle.webp)
-
-![The same app-wide text choice in every native dock menu](docs/screenshots/readme/app-elision-menu.webp)
 
 ![The Scene Transitions dock with a middle ellipsis](docs/screenshots/readme/dock-title-middle.webp)
 

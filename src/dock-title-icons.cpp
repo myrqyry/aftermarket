@@ -5,7 +5,6 @@
 #include <QMainWindow>
 #include <QDockWidget>
 #include <QMenu>
-#include <QActionGroup>
 #include <QSettings>
 #include <QToolButton>
 #include <QWidget>
@@ -197,25 +196,6 @@ bool DockTitleIcons::setEllipsisMode(Qt::TextElideMode mode){
     refresh();
     return true;
 }
-void DockTitleIcons::appendEllipsisMenu(QMenu *menu){
-    if(!menu)return;
-    auto *submenu=menu->addMenu("Long text · Entire app");
-    submenu->setObjectName("aftermarket-title-ellipsis-menu");
-    auto *group=new QActionGroup(submenu);
-    group->setExclusive(true);
-    for(const auto mode : {Qt::ElideRight,Qt::ElideMiddle}){
-        auto *action=submenu->addAction(mode==Qt::ElideMiddle?
-                                        "Ellipsis in middle":"Ellipsis at end");
-        action->setObjectName(mode==Qt::ElideMiddle?
-                              "aftermarket-ellipsis-middle":"aftermarket-ellipsis-end");
-        action->setCheckable(true);
-        action->setChecked(ellipsisMode_==mode);
-        group->addAction(action);
-        connect(action,&QAction::triggered,this,[this,mode]{
-            setEllipsisMode(mode);
-        });
-    }
-}
 void DockTitleIcons::refresh(){
     if(!window_)return;
     const auto docks=window_->findChildren<QDockWidget*>();
@@ -245,8 +225,6 @@ void DockTitleIcons::refresh(){
                 auto *unavailable=menu->addAction("Collapse");
                 unavailable->setEnabled(false);
             }
-            menu->addSeparator();
-            owner->appendEllipsisMenu(menu);
         });
         moreButtons_.insert(dock,more);
         auto *icon=new TitleGlyph(kind,dock);

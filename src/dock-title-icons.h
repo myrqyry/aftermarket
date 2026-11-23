@@ -34,7 +34,6 @@ public:
     QToolButton *moreButton(QDockWidget *dock) const;
     Qt::TextElideMode ellipsisMode() const;
     bool setEllipsisMode(Qt::TextElideMode mode);
-    void appendEllipsisMenu(QMenu *menu);
 private:
     bool eventFilter(QObject *watched,QEvent *event) override;
     void scheduleRefresh();

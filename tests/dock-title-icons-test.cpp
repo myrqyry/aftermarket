@@ -190,31 +190,21 @@ int main(int argc,char **argv){
    auto *more=icons.moreButton(custom);
    more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
    app.processEvents();
-   QMenu *titleMenu=nullptr;
-   for(auto *action:more->menu()->actions())
-       if(action->menu()&&action->text()=="Long text · Entire app")titleMenu=action->menu();
-   REQUIRE(titleMenu&&titleMenu->actions().size()==2);
-   auto *endElide=titleMenu->actions().at(0);
-   auto *middleElide=titleMenu->actions().at(1);
-   REQUIRE(endElide->isChecked()&&!middleElide->isChecked());
-   middleElide->trigger();app.processEvents();
+   REQUIRE(more->menu()->actions().size()==1); // only dock-scoped Collapse
+   REQUIRE(more->menu()->actions().first()->text()=="Collapse");
+   more->menu()->hide();app.processEvents();
+   REQUIRE(icons.setEllipsisMode(Qt::ElideMiddle));
+   app.processEvents();
    REQUIRE(custom->windowTitle().contains(QChar(0x2026)));
    REQUIRE(custom->windowTitle().startsWith('W')&&custom->windowTitle().endsWith('W'));
    REQUIRE(icons.originalTitle(custom)==QString(200,'W'));
    REQUIRE(custom->toggleViewAction()->text()==QString(200,'W'));
    REQUIRE(QSettings(settingsPath,QSettings::IniFormat).value("title/ellipsis").toString()=="middle");
-   more->menu()->hide();app.processEvents();
-   more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
+   REQUIRE(icons.setEllipsisMode(Qt::ElideRight));
    app.processEvents();
-   titleMenu=nullptr;
-   for(auto *action:more->menu()->actions())
-       if(action->menu()&&action->text()=="Long text · Entire app")titleMenu=action->menu();
-   REQUIRE(titleMenu&&titleMenu->actions().at(1)->isChecked());
-   titleMenu->actions().at(0)->trigger();app.processEvents();
    REQUIRE(custom->windowTitle().endsWith(QChar(0x2026)));
-   REQUIRE(QSettings(settingsPath,QSettings::IniFormat).value("title/ellipsis").toString()=="end");
-   titleMenu->actions().at(1)->trigger();app.processEvents(); // persist selected middle mode
-   more->menu()->hide();app.processEvents();
+   REQUIRE(icons.setEllipsisMode(Qt::ElideMiddle));
+   app.processEvents();
    custom->setWindowTitle("Plugin");
    icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());

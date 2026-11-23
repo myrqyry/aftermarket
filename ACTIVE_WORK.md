@@ -1783,3 +1783,84 @@ Verification:
 Outstanding: next personal OBS restart loads the new binary. Third-party
 custom drawing requires per-control adapters; editable text intentionally
 is not modified. No GitHub push or publishing requested.
+
+## Slice 43 — Aftermarket category inside native OBS Settings (2026-11-22)
+
+User corrected the global ellipsis preference location and reminded us of the
+previous plan to move Aftermarket settings into an OWN entry in the main OBS
+Settings sidebar. Prior assistant research had deferred this for native
+dialog lifecycle and Apply/Cancel behavior. The earlier interim attempt at
+placing a global Appearance tab inside the Inspector was not committed and
+was replaced with this native integration.
+
+Implementation:
+- Added ObsSettingsPage, a reversible Qt adapter for OBS 32.2.0's actual
+  OBSBasicSettings QDialog. It discovers the native listWidget/settingsPages
+  pair on dialog creation and inserts ONE Aftermarket sidebar item and
+  corresponding native QStackedWidget page at the end (after Advanced),
+  preserving all nine original category indices, layout, labels and widgets.
+  Native OBS remains the owner of the dialog.
+- The Aftermarket page uses normal OBS/Colorway palette and groups the
+  regular UI preferences as Appearance, Menus, Mixer, Panels, Action strip.
+  Includes app-wide Long text End/Middle; theme transform styling, Scenes
+  and Sources stripe toggles; compact/hamburger menus, motion and submenu
+  selected choices; AudioBus view, gain knobs and integrated meters, gradient
+  tracks/reactive/native meters, loop and color values, source selection;
+  property-group collapse; Action strip enabled and its specialized editor.
+- Dock header three-dot menus now hold dock-local Collapse/Expand (plus the
+  existing native mixer-specific actions). The global ellipsis selector is
+  removed from ALL dock menus. Existing persisted selection in
+  dock-title-settings.ini migrates without changing the file format.
+- Aftermarket edits stage locally until the EXISTING OBS Settings Apply/OK
+  button is clicked. Plugin-owned changes enable the otherwise disabled
+  native Apply button; Cancel discards unapplied Aftermarket edits. Saves
+  use existing controller/runtime setters with rollback on an operation
+  failure and preserve concurrent unrelated settings. The page is removed
+  on plugin emergency teardown without deleting any OBS settings page.
+  The native inspector remains for specialized per-target rule editing and
+  detailed color/source tools, not as the primary global settings location.
+
+Verification:
+- RED test first showed absent native settings integration. Then tested fake
+  OBSBasicSettings QWidget tree with native nine-row list/stack; Aftermarket
+  insertion once; categories/indices/ownership unchanged; five-tab page;
+  Apply initially disabled, plugin edit enables it; Cancel discards; Apply
+  persists app-wide mode and mixer/stripes/property/knobs/action-strip;
+  later reopen reads saved state; native OK also saves; invalid gradients
+  do not modify gradient config; adapter destruction removes only plugin
+  page and restores a valid native selection.
+- Full clean CMake build with no compiler warnings and serial CTest
+  24/24 passed; diff check clean.
+- Real isolated OBS Studio 32.2.0 / Colorway with copied sandbox-only
+  plugin/config: OBS Settings opens showing ninth native categories plus
+  Aftermarket as last sidebar entry. Clicking it shows native-themed
+  Appearance / Menus / Mixer / Panels / Action strip content. In live XTest,
+  changing the global middle setting to End enabled native Apply without
+  immediately changing source names. Clicking Cancel closed Settings and
+  retained middle-truncated Sources text. Reopening, choosing End, and
+  clicking native Apply persisted ellipsis=end in disposable QSettings and
+  visibly restored normal OBS Sources label presentation. Main OBS Settings
+  buttons, native pages, and OBS scene/source identities remain.
+- Updated README documents OBS Settings -> Aftermarket, native Apply/OK/
+  Cancel, screenshot of its Appearance and Mixer pages, and the continuing
+  specialized role of the Inspector. Earlier misleading docs pointing to
+  the global option in every dock three-dot menu were corrected.
+- Installed clean module SHA256
+  2516150b0d904b3b00985c4b598e2e6a6d6ea2127c7b96c8cfe103b9659e17b9
+  in ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so,
+  matching the compiled binary byte-for-byte. Previous installed build
+  preserved at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-native-settings.d498c3633777.so.
+  User OBS PID 147889 was not restarted; four tracked user config files had
+  identical checksums before/after installation. All configuration changes
+  made in the runtime tests used an ignored disposable OBS profile.
+
+Boundaries:
+- The plugin does not replace OBS itself or its native Settings class;
+  integration is guarded for the OBS 32.x Qt widget names/structure checked
+  at runtime. Unrecognized future layouts are not altered.
+- Specialized menu-rule authoring and extra advanced color pickers remain
+  in Tools -> UI Augment Inspector until those editors are deliberately
+  moved; the native sidebar contains normal global preferences now.
+- Actual running user OBS must restart to load the newly installed module.
+  No changes to scenes/audio routing or GitHub publication requested.

@@ -1,0 +1,209 @@
+#include "obs-settings-page.h"
+#include "augment.h"
+#include "dock-title-icons.h"
+#include <QApplication>
+#include <QDialog>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
+#include <QListWidget>
+#include <QStackedWidget>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QLabel>
+#include <QCheckBox>
+#include <QMainWindow>
+#include <QDockWidget>
+#include <QTemporaryDir>
+#include <QFile>
+#include <QSettings>
+#include <QSignalBlocker>
+#include <QTabWidget>
+#include <iostream>
+#define REQUIRE(x) do{if(!(x)){std::cerr<<"FAILED line "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
+static QDialog *openSettings(){
+    auto *dlg=new QDialog;
+    dlg->setObjectName("OBSBasicSettings");
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    auto *row=new QHBoxLayout(dlg);
+    auto *list=new QListWidget(dlg);list->setObjectName("listWidget");
+    auto *stack=new QStackedWidget(dlg);stack->setObjectName("settingsPages");
+    for(auto name:{"General","Appearance","Stream","Output","Audio",
+                   "Video","Hotkeys","Accessibility","Advanced"}){
+        list->addItem(name);
+        stack->addWidget(new QWidget(stack));
+    }
+    list->setCurrentRow(0);
+    QObject::connect(list,&QListWidget::currentRowChanged,stack,&QStackedWidget::setCurrentIndex);
+    auto *box=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel|
+                                   QDialogButtonBox::Apply,dlg);
+    box->setObjectName("buttonBox");
+    box->button(QDialogButtonBox::Apply)->setEnabled(false); // native OBS starts with Apply disabled
+    QObject::connect(box,&QDialogButtonBox::clicked,dlg,[dlg,box](QAbstractButton *button){
+        if(box->buttonRole(button)==QDialogButtonBox::RejectRole)
+            dlg->close();
+        else if(box->buttonRole(button)==QDialogButtonBox::AcceptRole)
+            dlg->close();
+    });
+    auto *column=new QVBoxLayout;
+    column->addWidget(stack);
+    column->addWidget(box);
+    row->addWidget(list);
+    row->addLayout(column);
+    dlg->resize(930,670);
+    dlg->show();
+    QApplication::processEvents();
+    return dlg;
+}
+int main(int argc,char **argv){
+    QApplication app(argc,argv);
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    auto rules=dir.filePath("rules.json");
+    QFile file(rules);
+    REQUIRE(file.open(QIODevice::WriteOnly));
+    REQUIRE(file.write("{\"enabled\":true,\"rules\":[]}")>0);
+    file.close();
+    augment::Controller controller(rules);
+    QMainWindow main;
+    main.setObjectName("OBSBasic");
+    main.resize(900,500);
+    main.show();
+    augment::DockTitleIcons titles(&main,nullptr,dir.filePath("dock-title-settings.ini"));
+    int mixerCalls=0,sectionUpdates=0,stripeUpdates=0,stripCalls=0;
+    bool stripEnabled=false;
+    augment::ObsSettingsPage::Services services;
+    services.setMixer=[&](bool){++mixerCalls;return true;};
+    services.setActionStrip=[&](bool b){stripEnabled=b;++stripCalls;return true;};
+    services.actionStripEnabled=[&]{return stripEnabled;};
+    services.setPropertySections=[&](bool){++sectionUpdates;};
+    services.setRowStripes=[&](const QJsonObject &){++stripeUpdates;};
+    auto bridge=std::make_unique<augment::ObsSettingsPage>(controller,titles,services);
+
+    {
+        auto *dialog=openSettings();
+        bridge->scan();
+        auto *nav=dialog->findChild<QListWidget*>("listWidget");
+        auto *pages=dialog->findChild<QStackedWidget*>("settingsPages");
+        REQUIRE(nav&&pages&&nav->count()==10&&pages->count()==10);
+        REQUIRE(nav->item(9)->text()=="Aftermarket");
+        bridge->scan();
+        REQUIRE(nav->count()==10&&pages->count()==10);
+        nav->setCurrentRow(9);
+        REQUIRE(pages->currentWidget()->objectName()=="aftermarket-native-settings");
+        auto *tabs=pages->currentWidget()->findChild<QTabWidget*>("aftermarket-settings-tabs");
+        REQUIRE(tabs&&tabs->count()==5);
+        REQUIRE(tabs->tabText(0)=="Appearance");
+        auto *ellipsis=pages->currentWidget()->findChild<QComboBox*>("augment-global-ellipsis");
+        REQUIRE(ellipsis&&ellipsis->currentData().toString()=="end");
+        REQUIRE(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        ellipsis->setCurrentIndex(ellipsis->findData("middle"));
+        QApplication::processEvents();
+        REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        REQUIRE(titles.ellipsisMode()==Qt::ElideRight); // native Cancel must truly discard
+        auto *mixer=pages->currentWidget()->findChild<QCheckBox*>("aftermarket-setting-mixer-back");
+        REQUIRE(mixer);
+        mixer->setChecked(true);
+        REQUIRE(!controller.mixerBacksideEnabled()&&mixerCalls==0);
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
+        QApplication::processEvents();
+        REQUIRE(titles.ellipsisMode()==Qt::ElideRight);
+        REQUIRE(!controller.mixerBacksideEnabled()&&mixerCalls==0);
+    }
+    {
+        auto *dialog=openSettings();
+        bridge->scan();
+        auto *nav=dialog->findChild<QListWidget*>("listWidget");
+        nav->setCurrentRow(9);
+        auto *ellipsis=dialog->findChild<QComboBox*>("augment-global-ellipsis");
+        auto *mixer=dialog->findChild<QCheckBox*>("aftermarket-setting-mixer-back");
+        REQUIRE(ellipsis&&mixer&&ellipsis->currentData().toString()=="end");
+        ellipsis->setCurrentIndex(ellipsis->findData("middle"));
+        mixer->setChecked(true);
+        dialog->findChild<QCheckBox*>("aftermarket-setting-scene-stripes")->setChecked(true);
+        dialog->findChild<QCheckBox*>("aftermarket-setting-sections")->setChecked(true);
+        dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
+        dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
+        REQUIRE(!controller.mixerBacksideEnabled()&&titles.ellipsisMode()==Qt::ElideRight);
+        REQUIRE(controller.listRowSettings().value("scenes").toBool()==false);
+        REQUIRE(!controller.collapsiblePropertyGroups()&&!stripEnabled);
+        QApplication::processEvents();
+        REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->click();
+        QApplication::processEvents();
+        REQUIRE(controller.mixerBacksideEnabled()&&mixerCalls==1);
+        REQUIRE(controller.listRowSettings().value("scenes").toBool()&&stripeUpdates==1);
+        REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
+        REQUIRE(stripEnabled&&stripCalls==1);
+        REQUIRE(controller.gradientSettings().value("knobs").toBool());
+        REQUIRE(titles.ellipsisMode()==Qt::ElideMiddle);
+        REQUIRE(QSettings(dir.filePath("dock-title-settings.ini"),QSettings::IniFormat)
+                    .value("title/ellipsis").toString()=="middle");
+        dialog->close();
+        QApplication::processEvents();
+    }
+    {
+        auto *dialog=openSettings();
+        bridge->scan();
+        auto *nav=dialog->findChild<QListWidget*>("listWidget");
+        nav->setCurrentRow(9);
+        REQUIRE(dialog->findChild<QComboBox*>("augment-global-ellipsis")
+                       ->currentData().toString()=="middle");
+        REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-mixer-back")->isChecked());
+        REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->isChecked());
+        REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->isChecked());
+        // Do not shift / override the original OBS native settings categories.
+        for(int i=0;i<9;++i)REQUIRE(nav->item(i)->text()!="Aftermarket");
+        dialog->close();
+    }
+    // OK is handled by OBS's own slot before the extension receives its
+    // clicked notification. It must still commit staged edits.
+    {
+        auto *dialog=openSettings();
+        bridge->scan();
+        dialog->findChild<QListWidget*>("listWidget")->setCurrentRow(9);
+        auto *ellipsis=dialog->findChild<QComboBox*>("augment-global-ellipsis");
+        REQUIRE(ellipsis&&ellipsis->currentData().toString()=="middle");
+        ellipsis->setCurrentIndex(ellipsis->findData("end"));
+        QApplication::processEvents();
+        REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+        QApplication::processEvents();
+        REQUIRE(titles.ellipsisMode()==Qt::ElideRight);
+        REQUIRE(QSettings(dir.filePath("dock-title-settings.ini"),QSettings::IniFormat)
+                    .value("title/ellipsis").toString()=="end");
+    }
+    {
+        auto *dialog=openSettings();
+        bridge->scan();
+        auto *nav=dialog->findChild<QListWidget*>("listWidget");
+        nav->setCurrentRow(9);
+        auto *colors=dialog->findChild<QLineEdit*>("aftermarket-setting-gradient-colors");
+        REQUIRE(colors);
+        colors->setText("not a valid color");
+        REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        const QJsonObject previousGradient=controller.gradientSettings();
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->click();
+        QApplication::processEvents();
+        REQUIRE(controller.gradientSettings()==previousGradient);
+        REQUIRE(dialog->findChild<QLabel*>("aftermarket-settings-status")->text()
+                    .contains("Invalid gradient color"));
+        dialog->close();QApplication::processEvents();
+    }
+    {
+        auto *dialog=openSettings();
+        bridge->scan();
+        auto *nav=dialog->findChild<QListWidget*>("listWidget");
+        auto *pages=dialog->findChild<QStackedWidget*>("settingsPages");
+        REQUIRE(nav->count()==10&&pages->count()==10);
+        nav->setCurrentRow(9);
+        bridge.reset();QApplication::processEvents();
+        REQUIRE(nav->count()==9&&pages->count()==9);
+        REQUIRE(nav->currentRow()==0);
+        REQUIRE(!dialog->findChild<QWidget*>("aftermarket-native-settings"));
+        dialog->close();QApplication::processEvents();
+    }
+    std::cout<<"OBS native Settings Apply/Cancel/OK, rollback and teardown passed\n";
+    return 0;
+}

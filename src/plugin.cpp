@@ -17,6 +17,7 @@
 #include "front-audio-controls.h"
 #include "dock-header-button.h"
 #include "dock-title-icons.h"
+#include "obs-settings-page.h"
 #include "native-audio-settings.h"
 #include "obs-signal-levels.h"
 #include <QToolButton>
@@ -50,6 +51,7 @@ static std::unique_ptr<augment::DockAttachRetry> mixerRetry;
 static QString stripConfigPath;
 static std::unique_ptr<augment::DockFaces> dockFaces;
 static std::unique_ptr<augment::DockTitleIcons> dockTitleIcons;
+static std::unique_ptr<augment::ObsSettingsPage> nativeSettings;
 static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
@@ -115,10 +117,6 @@ static bool setAudioMixerBackside(bool enabled) {
             panels->addCollapseAction(menu,safeDock);
             menu->addSeparator();
         }
-        if(dockTitleIcons){
-            dockTitleIcons->appendEllipsisMenu(menu);
-            menu->addSeparator();
-        }
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);
         knobs->setChecked(frontAudio->knobs());
@@ -143,6 +141,7 @@ static void stopCustomUi(){
     // scene collection, audio state, saved dock layout, or rules.json.
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
+    nativeSettings.reset(); // remove only plugin page from any open native Settings
     if(panels)panels->restoreAll();
     mixerRetry.reset();
     actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
@@ -192,6 +191,34 @@ static bool startCustomUi(){
             blog(LOG_WARNING,"[ui-augment] action strip unavailable in this layout");
     }
     if(frontendReady&&controller->mixerBacksideEnabled())mixerRetry->start();
+    if(dockTitleIcons){
+        augment::ObsSettingsPage::Services services;
+        services.setMixer=[](bool enabled){return setAudioMixerBackside(enabled);};
+        services.setHamburger=[](bool enabled){return setHamburgerMenuBar(enabled);};
+        services.setActionStrip=[](bool enabled){
+            auto *main=qobject_cast<QMainWindow*>(
+                static_cast<QWidget*>(obs_frontend_get_main_window()));
+            if(!main||!actionStrip)return false;
+            return actionStrip->setEnabled(main->menuBar(),enabled);
+        };
+        services.actionStripEnabled=[]{
+            return actionStrip&&actionStrip->desiredEnabled();
+        };
+        services.editActionStrip=[](QWidget *owner){
+            if(!actionStrip)return;
+            auto *main=qobject_cast<QMainWindow*>(
+                static_cast<QWidget*>(obs_frontend_get_main_window()));
+            if(main)actionStrip->showEditor(owner,main->menuBar());
+        };
+        services.setPropertySections=[](bool enabled){
+            if(propertySections)propertySections->setEnabled(enabled);
+        };
+        services.setRowStripes=[](const QJsonObject &settings){
+            if(rowStripes)rowStripes->configure(settings);
+        };
+        nativeSettings=std::make_unique<augment::ObsSettingsPage>(
+            *controller,*dockTitleIcons,std::move(services));
+    }
     uiActive=true;
     if(toolsAction)toolsAction->setEnabled(true);
     if(panelsAction)panelsAction->setEnabled(true);
