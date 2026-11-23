@@ -1724,3 +1724,62 @@ Verification:
 Boundary: personal OBS session must restart to load the new build, and
 the user's preference remains unchanged until they select Middle.
 No GitHub push, release or external publication.
+
+## Slice 42 — app-wide middle ellipsis, beyond dock titles (2026-11-22)
+
+User clarified middle ellipsis should apply across OBS, not only dock
+headers. The previously installed dock-title preference is reused as one
+shared app-wide setting, available through Long text · Entire app on all
+native dock three-dot menus.
+
+Implementation:
+- New AppTextElision attaches to the Qt application from the existing
+  DockTitleIcons lifecycle. Middle mode applies native textElideMode to item
+  views and QTabBar; handles plain one-line non-interactive QLabels with
+  reversible visible text and original-name tooltip; paints narrow
+  QComboBox selection, QPushButton, QCheckBox and QRadioButton display text
+  via existing native QStyle without altering actual values or action state.
+- Newly created widgets/dialogs are handled. Custom Aftermarket AudioHub
+  source names and submenu value captions obey the same mode.
+- End remains the existing default and restores each native widget's
+  former elision behavior (which may clip instead of draw a literal ending
+  ellipsis), original source names and label text. Underlying OBS source
+  IDs, model values, editable fields, source buttons, menu identities and
+  rich/word-wrapped content are not changed. Fully custom-drawn third-party
+  widgets are outside universal support; no claim of overriding them.
+- The persisted preference stays in dock-title-settings.ini for backwards
+  compatibility; no new user config format. Added app-text-elision-test
+  and current README screenshots from the real OBS Sources list.
+
+Verification:
+- Test-first: initial missing app adapter fails, then full serial CTest
+  23/23 passes; zero compiler warnings and clean whitespace check.
+  Regression covers default native state, middle mode and return to end,
+  model/name immutability, dynamic widgets, external label changes,
+  Qt-list and tab modes, native-styled button/combo/checkbox painted pixels,
+  original values and checked state, restoration and repaint lifecycle.
+- Real OBS 32.2.0 with isolated Xvfb profiles loaded two synthetic sources,
+  including exact full name:
+  Extremely Long Microphone Input With A Distinct Ending
+  In Middle mode OBS Sources list visibly paints the start and ending:
+  Extremely Long M… Distinct Ending
+  OBS logs confirm the complete original source name is still used. Audio
+  Mixer labels, dock titles and non-interactive labels follow the mode.
+  End mode preserves original native display behavior with same scene.
+- Important smoke correction: old disposable profile had a stale external
+  scene collection path AND an older local copied plugin binary. Corrected
+  both under the ignored smoke directories, then verified loaded module
+  path through /proc/PID/maps and binary hashes. A final clean binary
+  was run and visually confirmed, after removing all diagnostics.
+- Installed SHA256 of the clean plugin:
+  d498c36337779e65038b218b0c195bbe948cb3231771d36606353eac04182700
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Rollback of previously installed clean version:
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-global-text-ellipsis.bbeb95d87a3f.so
+  Live OBS PID 147889 was NOT restarted. The existing user rules,
+  action strip, front-audio and title setting hashes were identical pre/post.
+  Only ignored disposable scene copies were renamed, not real user scenes.
+
+Outstanding: next personal OBS restart loads the new binary. Third-party
+custom drawing requires per-control adapters; editable text intentionally
+is not modified. No GitHub push or publishing requested.

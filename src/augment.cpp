@@ -1,4 +1,5 @@
 #include "augment.h"
+#include "app-text-elision.h"
 #include "menu-layout.h"
 #include "theme-picker.h"
 #include "motion.h"
@@ -672,7 +673,7 @@ protected:
             const QFontMetrics metrics(menu->font());
             const int available=qMax(0,region.width()-metrics.horizontalAdvance("()"));
             if(!available)continue;
-            const QString visible="("+metrics.elidedText(status.choice,Qt::ElideRight,available)+")";
+            const QString visible="("+metrics.elidedText(status.choice,AppTextElision::currentCustomMode(),available)+")";
             const QColor tint=menu->palette().color(QPalette::Link);
             p.save();
             p.setClipRect(region);

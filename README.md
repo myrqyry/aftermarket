@@ -242,9 +242,17 @@ Enable **Audio Mixer backside (native routing)** in **Tools → UI Augment Inspe
 
 ![Audio Mixer retains its options under the first Collapse action](docs/screenshots/readme/dock-mixer-overflow.webp)
 
-**Long dock titles:** Every dock's three-dot menu includes **Long titles → Ellipsis at end / Ellipsis in middle**. End truncation remains the default for existing installations; selecting middle truncation preserves the beginning **and** end of long names (for example, `Scene…itions`). Both use Qt's native font measurements, update immediately across docks, and keep the complete original title in OBS's Docks menu. The global choice is stored in Aftermarket's `plugin_config/obs-ui-augment/dock-title-settings.ini` and survives restarts. It never changes the native dock object name or source identity.
+**App-wide long-text truncation:** Every dock's three-dot menu includes **Long text · Entire app → Ellipsis at end / Ellipsis in middle**. The same preference controls truncation in dock titles, native Qt source/scene lists and other item views, tabs, non-editable dropdowns, pushbuttons, checkboxes/radio buttons, ordinary non-wrapping display labels, and Aftermarket's custom AudioHub source labels and menu selection summaries. Middle truncation preserves both ends (for example, Scene…itions) and applies to newly created windows and plugin docks. Existing installations default to End, which **leaves other OBS widget types' existing presentation untouched**. Turning middle mode off restores previous Qt view/tab preferences and full label text. The choice is saved in plugin_config/obs-ui-augment/dock-title-settings.ini.
 
-![Choose where long dock titles show their ellipsis](docs/screenshots/readme/dock-title-ellipsis-choice.webp)
+The presentation layer does **not** rewrite OBS source/model names, editable text fields, actual button or dropdown values, rich/word-wrapped labels, or native Docks menu names. Native Qt elision is used for item views and tabs; buttons/dropdowns use Qt-style drawing; plain labels are reversibly shortened. Third-party widgets with completely custom painting may need their own adapter.
+
+**Same real OBS Sources list, same full names—only the display changes:**
+
+![OBS Sources list before middle truncation](docs/screenshots/readme/app-elision-end.webp)
+
+![OBS Sources list with global middle ellipsis selected](docs/screenshots/readme/app-elision-middle.webp)
+
+![The same app-wide text choice in every native dock menu](docs/screenshots/readme/app-elision-menu.webp)
 
 ![The Scene Transitions dock with a middle ellipsis](docs/screenshots/readme/dock-title-middle.webp)
 

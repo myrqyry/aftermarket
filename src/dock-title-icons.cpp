@@ -1,4 +1,5 @@
 #include "dock-title-icons.h"
+#include "app-text-elision.h"
 #include "dock-header-button.h"
 #include "panels.h"
 #include <QMainWindow>
@@ -135,6 +136,8 @@ DockTitleIcons::DockTitleIcons(QMainWindow *window,Panels *panels,
             ellipsisMode_=Qt::ElideMiddle;
     }
     if(window_)window_->installEventFilter(this);
+    applicationElision_=std::make_unique<AppTextElision>(window_,this);
+    applicationElision_->setMode(ellipsisMode_);
     refresh();
 }
 DockTitleIcons::~DockTitleIcons(){
@@ -190,12 +193,13 @@ bool DockTitleIcons::setEllipsisMode(Qt::TextElideMode mode){
         if(settings.status()!=QSettings::NoError)return false;
     }
     ellipsisMode_=mode;
+    if(applicationElision_)applicationElision_->setMode(mode);
     refresh();
     return true;
 }
 void DockTitleIcons::appendEllipsisMenu(QMenu *menu){
     if(!menu)return;
-    auto *submenu=menu->addMenu("Long titles");
+    auto *submenu=menu->addMenu("Long text · Entire app");
     submenu->setObjectName("aftermarket-title-ellipsis-menu");
     auto *group=new QActionGroup(submenu);
     group->setExclusive(true);

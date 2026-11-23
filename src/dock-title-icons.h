@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QHash>
+#include <memory>
 #include <QPointer>
 #include <QString>
 class QMainWindow;
@@ -12,6 +13,7 @@ class QEvent;
 
 namespace augment {
 class Panels;
+class AppTextElision;
 // Passive, reversible decoration of *native* OBS dock title bars.
 // Does not replace the titleBarWidget, title text, native buttons, or hit areas.
 class DockTitleIcons final : public QObject {
@@ -39,6 +41,7 @@ private:
     void place(QDockWidget *dock,QWidget *icon);
     QPointer<QMainWindow> window_;
     QPointer<Panels> panels_;
+    std::unique_ptr<AppTextElision> applicationElision_;
     QString settingsPath_;
     Qt::TextElideMode ellipsisMode_=Qt::ElideRight;
     QHash<QDockWidget*,QPointer<QWidget>> icons_;

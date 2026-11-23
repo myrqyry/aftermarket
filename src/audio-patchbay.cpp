@@ -1,4 +1,5 @@
 #include "audio-patchbay.h"
+#include "app-text-elision.h"
 #include "visual-polish.h"
 #include <QApplication>
 #include <QCheckBox>
@@ -314,7 +315,7 @@ protected:
             sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
             p.setFont(sourceFont);
             p.setPen(fg);
-            const QString name=p.fontMetrics().elidedText(src.name,Qt::ElideRight,sourceWidth-44);
+            const QString name=p.fontMetrics().elidedText(src.name,AppTextElision::currentCustomMode(),sourceWidth-44);
             p.drawText(rect.adjusted(22,0,-17,0),Qt::AlignVCenter|Qt::AlignLeft,name);
             // Palette-derived source-type pictogram at the left of the label.
             const QRectF icon(rect.left()+6,rect.center().y()-5,10,10);

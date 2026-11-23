@@ -192,7 +192,7 @@ int main(int argc,char **argv){
    app.processEvents();
    QMenu *titleMenu=nullptr;
    for(auto *action:more->menu()->actions())
-       if(action->menu()&&action->text()=="Long titles")titleMenu=action->menu();
+       if(action->menu()&&action->text()=="Long text · Entire app")titleMenu=action->menu();
    REQUIRE(titleMenu&&titleMenu->actions().size()==2);
    auto *endElide=titleMenu->actions().at(0);
    auto *middleElide=titleMenu->actions().at(1);
@@ -208,7 +208,7 @@ int main(int argc,char **argv){
    app.processEvents();
    titleMenu=nullptr;
    for(auto *action:more->menu()->actions())
-       if(action->menu()&&action->text()=="Long titles")titleMenu=action->menu();
+       if(action->menu()&&action->text()=="Long text · Entire app")titleMenu=action->menu();
    REQUIRE(titleMenu&&titleMenu->actions().at(1)->isChecked());
    titleMenu->actions().at(0)->trigger();app.processEvents();
    REQUIRE(custom->windowTitle().endsWith(QChar(0x2026)));
