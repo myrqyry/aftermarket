@@ -2171,3 +2171,87 @@ Verification:
 
 Boundary: a real OBS restart is required to load the installed plugin.
 No GitHub push/release or audio scene/routing change requested.
+
+## Slice 49 — restore native Qt text ownership (2026-11-22)
+
+Reason: User reported app-wide nonsensical middle-ellipsis of ordinary labels,
+including Filters and Select color, after a sequence of narrower mixer-width
+fixes. This reflected architectural drift from Aftermarket's Tampermonkey-
+for-OBS purpose into global replacement of native QWidget paint paths.
+
+Current root-cause evidence:
+- The installed module's AppTextElision intercepted all QEvent::Paint
+  events for QPushButton/QCheckBox/QRadioButton/QComboBox, built incomplete
+  QStyle options, subtracted extra pixels from already style-managed content
+  rects and substituted shortened strings. Separately, it rewrote QLabel
+  text to an elided copy, which also changed QLabel sizeHint and could cause
+  Qt layouts to shrink around the abbreviation. Native buttons must retain
+  Qt/Colorway painting and layout authority.
+- Two isolated real OBS 32.2.0 copies with the *same* scene, window geometry,
+  theme and stored middle-ellipsis preference showed independent failures
+  in the installed module: Select color appeared as Sele...olor and a third-
+  party Free upgrade to Stream Suite button became needlessly abbreviated.
+  The corrected module shows both complete. Scene and source names in OBS
+  logs and data remained unchanged. Side-by-side evidence is in
+  docs/screenshots/readme/native-control-paint-comparison.webp.
+
+Implemented:
+- Removed app-wide custom painting of standard Qt pushbuttons, checkboxes,
+  radio buttons and combo boxes. Their QStyle/style-sheet rendering,
+  native geometry, focus/disabled/checked semantics, original text and
+  QSS stay owned by OBS/Colorway and respective plugins.
+- Eliminated all QLabel::setText-based elision. Normal QLabel widgets are
+  untouched. A deliberately narrow known OBSSourceLabel display adapter
+  paints only a *visually overflowing* source name in the selected middle
+  mode and exposes the original name as a tooltip. Original QLabel::text,
+  sizeHint, source IDs and rename notifications stay intact; tooltip is
+  restored only when it was injected by this adapter.
+- Retained native QAbstractItemView::textElideMode and QTabBar::elideMode,
+  with prior preferences restored when switching off or unloading. The
+  stored user preference remains in the existing Aftermarket Settings
+  Appearance page and requires no migration. Aftermarket-owned dock title,
+  AudioBus, and menu-choice text continues using its own existing bounded
+  font-metric calculations.
+- Eliminated global whole-widget-tree scans on every resize/layout request
+  and child-add event. Newly shown/polished native item views and tabs pick
+  up the current mode locally, with a single full scan on explicit mode
+  transition. Removed dead public text helper methods.
+- README corrected: the preference applies where supported by native Qt
+  elide APIs or a specific Aftermarket adapter, not an unconditional right
+  to repaint every native or third-party widget. This is a deliberate
+  compatibility boundary rather than an attempt to silently emulate Qt.
+
+Verification:
+- Focused Qt regression covers native style-sheet Filters button retaining
+  both native paint and full text; native buttons, checkboxes and combo boxes
+  paint unchanged with the global middle preference; ordinary QLabel text
+  and sizeHint unaffected; OBS source-name QLabel elides only in paint, never
+  rewrites source text or layout; dynamic source rename, child item views and
+  tab bars; settings transition and teardown restore full native behavior.
+- Full CMake build clean, serial CTest **24/24 passed**, no compiler warnings,
+  and whitespace check clean.
+- Final exact module SHA256:
+  dd67f6ce0eb65e512472adf317fe0c3dd475cd438a1d01227f94a8d1558b6c58.
+  Verified in isolated real OBS with matching sandbox module from proc maps;
+  same source names load fully, selected native Color source displays
+  "Select color" in full, while third-party "Free upgrade to Stream Suite"
+  also remains full. No OBS log errors attributed to Aftermarket.
+- Installed byte-exact module at
+  ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Saved prior installed module at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-native-text-restoration.b668f0bea95d.so.
+  User OBS PID 294527 left running; tracked user config files
+  rules.json, action-strip.json, front-audio-controls.json, and
+  dock-title-settings.ini had identical hashes before/after install.
+
+Boundaries and remaining architecture audit:
+- This slice closes a verified shared rendering regression, not a blanket
+  certification of all Aftermarket features. Other architecture-sensitive
+  interceptors (gradient paint hooks, dock-title feature changes, mixer
+  label sizing, panel layout changes, and menu QSS) remain candidates for
+  targeted review against real OBS behavior; no unverified broad refactor.
+- Qt/third-party custom-painted widgets do not automatically support
+  forced middle ellipsis. The default native behavior is intentional;
+  future adapters require concrete user value and real runtime tests.
+- User OBS needs restart to load installed library. No GitHub push or release
+  requested. No scene/audio data was touched.

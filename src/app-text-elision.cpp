@@ -3,22 +3,14 @@
 #include <QAbstractItemView>
 #include <QTabBar>
 #include <QLabel>
-#include <QComboBox>
-#include <QAbstractButton>
-#include <QPushButton>
-#include <QCheckBox>
-#include <QRadioButton>
-#include <QStylePainter>
-#include <QStyleOptionComboBox>
-#include <QStyleOptionButton>
 #include <QStyle>
 #include <QFontMetrics>
 #include <QEvent>
-#include <QTimer>
 #include <QScopedValueRollback>
 #include <QTextDocument>
 #include <QPointer>
 #include <QWidget>
+#include <QPainter>
 
 namespace augment {
 namespace {
@@ -33,13 +25,7 @@ AppTextElision::AppTextElision(QWidget *mainWindow,QObject *parent)
 AppTextElision::~AppTextElision(){
     if(qApp)qApp->removeEventFilter(this);
     if(qApp)qApp->setProperty(customModeProperty,originalPaintProperty_);
-    QScopedValueRollback<bool> guard(updating_,true);
-    for(const auto &item:labels_)if(item.label){
-        if(item.label->text()==item.applied)
-            item.label->setText(item.original);
-        if(item.addedTooltip&&item.label->toolTip()==item.original)
-            item.label->setToolTip(item.tooltip);
-    }
+    restoreLabelTooltips();
     for(const auto &item:views_)if(item.view&&item.view->textElideMode()==item.applied)
         item.view->setTextElideMode(item.original);
     for(const auto &item:tabs_)if(item.tab&&item.tab->elideMode()==item.applied)
@@ -57,17 +43,12 @@ bool AppTextElision::setMode(Qt::TextElideMode mode){
         // Default is NOT an application-wide override; restore the
         // widget-specific behavior OBS and third-party plugins chose.
         QScopedValueRollback<bool> guard(updating_,true);
-        for(const auto &item:labels_)if(item.label){
-            if(item.label->text()==item.applied)
-                item.label->setText(item.original);
-            if(item.addedTooltip&&item.label->toolTip()==item.original)
-                item.label->setToolTip(item.tooltip);
-        }
+        restoreLabelTooltips();
         for(const auto &item:views_)if(item.view&&item.view->textElideMode()==item.applied)
             item.view->setTextElideMode(item.original);
         for(const auto &item:tabs_)if(item.tab&&item.tab->elideMode()==item.applied)
             item.tab->setElideMode(item.original);
-        labels_.clear();views_.clear();tabs_.clear();
+        views_.clear();tabs_.clear();
     }else refresh();
     return true;
 }
@@ -75,102 +56,28 @@ Qt::TextElideMode AppTextElision::currentCustomMode(){
     return qApp&&qApp->property(customModeProperty).toBool()?
         Qt::ElideMiddle:Qt::ElideRight;
 }
-QString AppTextElision::visibleText(const QString &text,
-                                  const QFontMetrics &metrics,int width)const{
-    return width<=0?text:metrics.elidedText(text,mode_,width);
-}
-QString AppTextElision::originalLabel(const QLabel *label)const{
-    if(!label)return {};
-    auto it=labels_.constFind(const_cast<QLabel*>(label));
-    return it==labels_.cend()?label->text():it->original;
-}
-void AppTextElision::scheduleRefresh(){
-    if(scheduled_||!qApp)return;
-    scheduled_=true;
-    QTimer::singleShot(0,this,[this]{
-        scheduled_=false;
-        refresh();
-    });
-}
 bool AppTextElision::eventFilter(QObject *watched,QEvent *event){
     if(updating_||!event||mode_!=Qt::ElideMiddle)return false;
     const auto type=event->type();
     switch(type){
     case QEvent::Show:
     case QEvent::Polish:
-    case QEvent::Resize:
-    case QEvent::FontChange:
-    case QEvent::StyleChange:
-    case QEvent::LayoutRequest:
-    case QEvent::ChildAdded:
-        scheduleRefresh();
+        // New widgets adopt the native mode once; Qt automatically
+        // relayouts/re-elides them when their geometry or font changes.
+        // Do not scan the entire OBS widget tree for every Resize or
+        // LayoutRequest: those events can fire constantly during docking.
+        if(auto *widget=qobject_cast<QWidget*>(watched))
+            updateWidget(widget);
         break;
     case QEvent::Paint:
-        // Never alter QAction, QAbstractButton or QComboBox values: some
-        // OBS-native source identity paths depend on those exact strings.
-        // Draw shortened DISPLAY labels using each widget's own QStyle.
-        if(auto *combo=qobject_cast<QComboBox*>(watched)){
-            if(!combo->isEditable()&&combo->currentIndex()>=0){
-                QStyleOptionComboBox option;
-                option.initFrom(combo);
-                option.editable=false;
-                option.frame=combo->hasFrame();
-                option.currentText=combo->currentText();
-                option.currentIcon=combo->itemIcon(combo->currentIndex());
-                option.iconSize=combo->iconSize();
-                const QRect content=combo->style()->subControlRect(
-                    QStyle::CC_ComboBox,&option,QStyle::SC_ComboBoxEditField,combo);
-                int width=content.width()-4;
-                if(!option.currentIcon.isNull())width-=option.iconSize.width()+4;
-                const QString shown=visibleText(option.currentText,
-                                                 combo->fontMetrics(),width);
-                if(shown!=option.currentText){
-                    option.currentText=shown;
-                    QStylePainter painter(combo);
-                    painter.drawComplexControl(QStyle::CC_ComboBox,option);
-                    painter.drawControl(QStyle::CE_ComboBoxLabel,option);
-                    return true;
-                }
-            }
-        }else if(auto *button=qobject_cast<QAbstractButton*>(watched)){
-            // Tool buttons (including OBS mixer sources) use specialized
-            // native painters. Do not override them with generic controls.
-            auto *push=qobject_cast<QPushButton*>(button);
-            auto *check=qobject_cast<QCheckBox*>(button);
-            auto *radio=qobject_cast<QRadioButton*>(button);
-            if((push||check||radio)&&!button->text().isEmpty()){
-                QStyleOptionButton option;
-                option.initFrom(button);
-                option.text=button->text();
-                option.icon=button->icon();
-                option.iconSize=button->iconSize();
-                if(button->isChecked())option.state|=QStyle::State_On;
-                else option.state|=QStyle::State_Off;
-                if(button->isDown())option.state|=QStyle::State_Sunken;
-                if(push){
-                    if(push->isDefault())option.features|=QStyleOptionButton::DefaultButton;
-                    if(push->autoDefault())option.features|=QStyleOptionButton::AutoDefaultButton;
-                    if(push->isFlat())option.features|=QStyleOptionButton::Flat;
-                    if(push->menu())option.features|=QStyleOptionButton::HasMenu;
-                }
-                const QStyle::SubElement sub=push?QStyle::SE_PushButtonContents:
-                    check?QStyle::SE_CheckBoxContents:QStyle::SE_RadioButtonContents;
-                const QStyle::ControlElement control=push?QStyle::CE_PushButton:
-                    check?QStyle::CE_CheckBox:QStyle::CE_RadioButton;
-                const QRect content=button->style()->subElementRect(sub,&option,button);
-                int width=content.width()-4;
-                if(!option.icon.isNull())width-=option.iconSize.width()+4;
-                const QString shown=visibleText(option.text,button->fontMetrics(),width);
-                if(shown!=option.text){
-                    option.text=shown;
-                    QStylePainter painter(button);
-                    painter.drawControl(control,option);
-                    return true;
-                }
-            }
-        }else if(auto *label=qobject_cast<QLabel*>(watched)){
-            // Catch external QLabel::setText before the actual widget paint.
-            updateLabel(label);
+        // Standard Qt buttons, checkboxes, comboboxes and labels keep
+        // their own paintEvent, QStyle and style-sheet integration.
+        // Only OBS's known simple source-name label needs an explicit
+        // display adapter; lists and tabs already use Qt's elide APIs.
+        if(auto *label=qobject_cast<QLabel*>(watched)){
+            if(label->inherits("OBSSourceLabel")||
+               label->objectName()=="OBSSourceLabel")
+                return paintLabel(label);
         }
         break;
     default:break;
@@ -211,58 +118,68 @@ void AppTextElision::updateWidget(QWidget *widget){
         }
         it->applied=mode_;
     }
-    if(auto *label=qobject_cast<QLabel*>(widget))updateLabel(label);
+    // Only repaint the supported source-name label, not every QLabel in OBS.
+    if(auto *label=qobject_cast<QLabel*>(widget)){
+        if(label->inherits("OBSSourceLabel")||
+           label->objectName()=="OBSSourceLabel")label->update();
+    }
 }
-void AppTextElision::updateLabel(QLabel *label){
+void AppTextElision::restoreLabelTooltips(){
+    const QScopedValueRollback<bool> guard(updating_,true);
+    for(const auto &item:labels_)if(item.label){
+        if(item.label->toolTip()==item.appliedTooltip)
+            item.label->setToolTip(item.previousTooltip);
+    }
+    labels_.clear();
+}
+bool AppTextElision::paintLabel(QLabel *label){
     if(!label||updating_||mode_!=Qt::ElideMiddle||!label->isVisible()||
        label->wordWrap()||label->textFormat()==Qt::RichText||
+       label->frameWidth()>0||label->pixmap(Qt::ReturnByValue).isNull()==false||
        (label->textInteractionFlags() & (Qt::TextSelectableByMouse |
                                          Qt::TextSelectableByKeyboard |
                                          Qt::TextEditable)))
-        return;
-    auto text=label->text();
-    auto it=labels_.find(label);
-    if(it==labels_.end()){
-        if(text.isEmpty()||text.contains('\n')||
-           (label->textFormat()==Qt::AutoText&&Qt::mightBeRichText(text)))return;
-        labels_.insert(label,{label,text,text,label->toolTip(),false});
-        QObject::connect(label,&QObject::destroyed,this,[this,label]{labels_.remove(label);});
-        it=labels_.find(label);
-    }else if(text!=it->applied){
-        // OBS updated the label; the external full string is authoritative.
-        const QString oldFull=it->original;
-        it->original=text;
-        it->applied=text;
-        if(it->addedTooltip){
-            if(label->toolTip()==oldFull){
-                const QScopedValueRollback<bool> guard(updating_,true);
-                label->setToolTip(it->tooltip);
-            }
-            it->addedTooltip=false;
-        }
-    }
-    const auto &full=it->original;
+        return false;
+    const QString full=label->text();
     if(full.isEmpty()||full.contains('\n')||
-       (label->textFormat()==Qt::AutoText&&Qt::mightBeRichText(full)))return;
-    const int available=label->contentsRect().width()-2*label->margin()-
-        qMax(0,label->indent());
-    if(available<=0)return;
-    const QString visible=label->fontMetrics().elidedText(full,mode_,available);
-    if(visible!=label->text()){
-        const QScopedValueRollback<bool> guard(updating_,true);
-        label->setText(visible);
+       (label->textFormat()==Qt::AutoText&&Qt::mightBeRichText(full)))return false;
+    QRect content=label->contentsRect();
+    const int margin=label->margin();
+    content.adjust(margin,margin,-margin,-margin);
+    const int indent=qMax(0,label->indent());
+    if(label->alignment() & Qt::AlignRight)content.adjust(0,0,-indent,0);
+    else content.adjust(indent,0,0,0);
+    if(content.width()<=0)return false;
+    const auto metrics=label->fontMetrics();
+    const QString visible=metrics.elidedText(full,mode_,content.width());
+    if(visible==full){
+        auto it=labels_.find(label);
+        if(it!=labels_.end()){
+            if(label->toolTip()==it->appliedTooltip){
+                const QScopedValueRollback<bool> guard(updating_,true);
+                label->setToolTip(it->previousTooltip);
+            }
+            labels_.erase(it);
+        }
+        return false; // OBS/Qt paints the unchanged full label naturally
     }
-    it->applied=visible;
-    // Expose the exact full label on hover only when it is elided and the
-    // widget has no user/OBS tooltip already.
-    if(visible!=full&&label->toolTip().isEmpty()){
+    if(!labels_.contains(label)&&label->toolTip().isEmpty()){
+        labels_.insert(label,{label,label->toolTip(),full});
+        connect(label,&QObject::destroyed,this,[this,label]{labels_.remove(label);});
         const QScopedValueRollback<bool> guard(updating_,true);
         label->setToolTip(full);
-        it->addedTooltip=true;
-    }else if(visible==full&&it->addedTooltip&&label->toolTip()==full){
+    }else if(auto it=labels_.find(label);it!=labels_.end()&&
+             label->toolTip()==it->appliedTooltip&&it->appliedTooltip!=full){
+        it->appliedTooltip=full;
         const QScopedValueRollback<bool> guard(updating_,true);
-        label->setToolTip(it->tooltip);
-        it->addedTooltip=false;
+        label->setToolTip(full);
     }
+    // Only the *painted* glyphs are shortened. QLabel::text and sizeHint
+    // remain intact, so an ordinary label can still take free layout space.
+    QPainter painter(label);
+    label->style()->drawItemText(&painter,content,
+        label->alignment()|Qt::TextSingleLine,label->palette(),label->isEnabled(),
+        visible,QPalette::WindowText);
+    return true;
 }
 }
