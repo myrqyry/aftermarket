@@ -16,6 +16,7 @@
 #include "obs-routing.h"
 #include "front-audio-controls.h"
 #include "dock-header-button.h"
+#include "dock-title-icons.h"
 #include "native-audio-settings.h"
 #include "obs-signal-levels.h"
 #include <QToolButton>
@@ -46,6 +47,7 @@ static std::unique_ptr<augment::NativeActionBridge> nativeActions;
 static std::unique_ptr<augment::DockAttachRetry> mixerRetry;
 static QString stripConfigPath;
 static std::unique_ptr<augment::DockFaces> dockFaces;
+static std::unique_ptr<augment::DockTitleIcons> dockTitleIcons;
 static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
@@ -113,6 +115,7 @@ static void stopCustomUi(){
     actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
     frontAudio.reset(); // remove pan/offset controls before original mixer is restored
     dockFaces.reset(); // unwrap original mixer widget before panel teardown
+    dockTitleIcons.reset(); // remove only plugin-painted native title icons
     compactBar.reset(); // return original OBS QAction identities
     rowStripes.reset();
     propertySections.reset();
@@ -137,6 +140,8 @@ static bool startCustomUi(){
         []{return frontendReady&&nativeActions?nativeActions->snapshot():augment::StatusSnapshot{};},
         []{return frontendReady&&nativeActions?nativeActions->enumerateHotkeys():QList<augment::HotkeyChoice>{};},
         [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);});
+    if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
+        dockTitleIcons=std::make_unique<augment::DockTitleIcons>(main);
     dockFaces=std::make_unique<augment::DockFaces>();
     mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
     panels=std::make_unique<augment::Panels>();

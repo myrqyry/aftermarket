@@ -225,8 +225,11 @@ void DockFaces::positionTitleButtons(QDockWidget *dock){
         QStyle::SE_DockWidgetTitleBarText,&option,dock);
     if(!text.isValid()){hide();return;}
     // Reserve the real dock text and Qt's native undock/close hit area.
-    const int titleRight=text.left()+QFontMetrics(dock->font())
+    int titleRight=text.left()+QFontMetrics(dock->font())
         .horizontalAdvance(dock->windowTitle())+9;
+    if(auto *icon=dock->findChild<QWidget*>("aftermarket-dock-title-icon",
+                                            Qt::FindDirectChildrenOnly))
+        if(icon->isVisible())titleRight=qMax(titleRight,icon->geometry().right()+5);
     const int usable=text.right()-titleRight;
     constexpr int spacing=2;
     const bool showFlip=usable>=flip->width();

@@ -1353,3 +1353,64 @@ TDD:
   3601543 was not restarted or changed by installation; it retains its
   previously loaded code until the user voluntarily restarts OBS.
   Disposable OBS and Xvfb :118 terminated. No upstream push.
+
+## Slice 36 — passive, theme-aware icons beside native OBS dock titles (2026-11-22)
+
+User request: add icons to the titles of **each** dock, following earlier
+placement of Mixer/Routing and Knobs buttons directly in the real OBS dock
+title bars. Do not create another internal header, change dock titles, replace
+Qt title painting, interfere with native undock/close hit targets, or disturb
+the user's scene/layout.
+
+Implemented new DockTitleIcons manager (src/dock-title-icons.{h,cpp}),
+initialized in startCustomUi before DockFaces and removed on stopCustomUi
+after DockFaces. It attaches transparent-for-mouse, nonfocusable,
+Qt-palette-colored 14px vector glyphs directly to native QDockWidget
+children. Icons are drawn immediately **after** the native title text.
+QDockWidget titleBarWidget, windowTitle, features, toggleViewAction,
+native title painter and drag/float/close semantics remain unchanged.
+Icons classify actual dock object IDs where available, then displayed titles:
+Scenes (stacked frames), Sources (linked nodes), Audio Mixer (faders),
+Transitions (bidirectional arrows), Controls (toggle), Preview (monitor),
+Chat (speech bubble), Browser (globe), and a generic panel fallback.
+This supports third-party docks without assuming their identity.
+
+Automatic main ChildAdded scanning discovers newly created plugin docks.
+A dock name change updates the glyph classification; font, theme, style,
+title, parent dock resizing and visibility trigger refresh. If the Qt
+native title region has 21 or more free pixels, use a 14px icon; 14-20
+free pixels use 10px compact artwork; otherwise hide rather than cover
+native text/float/close actions. Floating, vertical-title, no-content,
+hidden/tabbed, and custom title-bar docks are skipped. The existing
+DockFaces mixer title controls reserve space after any visible title
+icon, avoiding icon/button overlap.
+
+TDD / verification:
+- RED test for missing feature and classifier, then GREEN. Additional RED
+  when plugin dock was renamed from generic to Twitch Chat but kept the
+  previous generic glyph; GREEN after automatic glyph kind refresh.
+  Additional RED/GREEN for 10px adaptive icon availability.
+- New dock-title-icons-test covers each native dock role/fallback,
+  distinct glyph pixels, palette-based repaint, true native title
+  identity, transparent mouse behavior, title/text/controls geometry,
+  existing Audio Mixer face-toggle coexistence, auto discovery of
+  late-added plugin docks, rename classification, long-title overflow,
+  floating/redocking, custom title bar precedence, and exact teardown.
+- Full CMake build + **22/22 CTest PASS**, no new compiler warnings,
+  git diff --check clean. The previous 21 test suite grew by one test.
+- Loaded the EXACT SHA256
+  886fc1295e87c1ca32cec87ed47b01ba684a136855482c9ccff1706ebb318d14
+  in a separate real OBS Studio 32.2.0 instance on disposable Xvfb :119,
+  copied Colorway profile with no user settings mutations. Screenshots
+  show distinct icons beside native Scenes, Sources, Audio Mixer, Controls
+  and show AudioHub face switch into and out of the same titled dock.
+  Scene Transitions was too narrow in that OBS dock arrangement to show
+  its icon without colliding with native undock control, so it hides;
+  wider docks can show it. Screenshot:
+  docs/screenshots/readme/dock-title-icons.webp.
+
+No user OBS scene, audio state, saved layout, recording, or settings altered.
+The feature is default-on as requested while Aftermarket UI is active,
+and its entire decorator is removed on emergency stop/unload.
+No independent user toggle or per-dock customization was added, and
+no upstream push is implied.
