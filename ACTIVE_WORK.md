@@ -2115,3 +2115,59 @@ Verification:
 Boundary: Native OBS needs restart to load the installed library. No
 GitHub push or release requested. Fully custom third-party mixer widgets
 are outside this size policy adapter.
+
+## Slice 48 — correct needless audio-source label truncation (2026-11-22)
+
+User reported that the previous name-independent mixer sizing pass had
+started shortening names even when the mixer had space. Root cause was
+the fixed 68-pixel fallback assigned to *all* native OBS label widgets.
+Although horizontal sizeHint was ignored correctly, this small minimum
+unnecessarily collapsed the vertical source labels despite the native
+VolControl's 110-pixel maximum channel width.
+
+Implementation:
+- Keep the name-independent QSizePolicy::Ignored horizontal policy, so
+  source text length cannot expand the mixer channel.
+- For native OBS VolControl with an explicit maximum width, use the
+  existing channel width minus its layout margins as the NAME-INDEPENDENT
+  readable label minimum (OBS vertical VolControl max 110). Thus the
+  label can use the space OBS already allows, with no extra channel growth.
+  The small fallback applies only to uncapped third-party/horizontal
+  layouts, which retain expansion to available container space.
+- Complete OBS source text, native tooltip/paint path, meter and gain,
+  pan/sync controls, and the global user-selected ellipsis mode remain
+  unchanged. The exact original label policy/minimum are still restored
+  on detach and emergency recovery.
+- README now clarifies when elision is justified and shows an updated,
+  cropped real OBS screenshot at
+  docs/screenshots/readme/mixer-name-independent-width.webp.
+
+Verification:
+- RED TDD: regression expecting native channel-capacity label width failed
+  on the previous 68px implementation. GREEN test verifies both long and
+  normal label have name-independent width equal to OBS's 110px cap,
+  that the normal Live Latent: TTS label fits when its text measures
+  within that cap, full name survives rename, and original minimum and
+  sizing policy are restored. Horizontal real-style layout test requires
+  substantial readable width (>=120px); prior tests still pass.
+- REAL OBS 32.2.0 side-by-side with two disposable profiles using the
+  same scene sources: Live Latent: TTS and A Very Long Microphone Name
+  For Testing Channel Width Independent Of This Entire Name. Verified
+  each OBS process loaded the specific old/new module from its sandbox
+  XDG path and full source names in OBS logs. Old screenshot shows
+  Live…TTS needlessly shortened; corrected screenshot shows the full
+  Live Latent: TTS, with the very long source still appropriately
+  truncated. Both channels stay equal-width; gain, monitor, pan/sync,
+  and meter controls remain present. No actual user's scenes modified.
+- Clean full CMake build, 24/24 serial CTests passed, no compiler
+  warnings, git diff --check clean.
+- Installed SHA256:
+  b668f0bea95d5444f756d29602cc81198e474fa9c84bf5e25b152900e518d580
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so,
+  verified bytewise. Previous binary backed up at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-name-label-width-fix.5eb75d76004c.so.
+  User OBS PID 294527 remains running and was not restarted; the
+  four monitored real user config files had unchanged hashes.
+
+Boundary: a real OBS restart is required to load the installed plugin.
+No GitHub push/release or audio scene/routing change requested.

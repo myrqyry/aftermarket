@@ -248,7 +248,7 @@ int main(int argc,char **argv){
      return qMakePair(vol,label);
  };
  auto longChannel=makeNativeColumn("An Extremely Long Microphone Source Name That Should Never Stretch Its Channel");
- auto shortChannel=makeNativeColumn("Mic");
+ auto shortChannel=makeNativeColumn("Live Latent: TTS");
  nativeChannels.resize(320,230);
  nativeChannels.show();app.processEvents();
  const auto longOriginalPolicy=longChannel.second->sizePolicy();
@@ -262,9 +262,16 @@ int main(int argc,char **argv){
  app.processEvents();
  REQUIRE(longChannel.second->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored);
  REQUIRE(shortChannel.second->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored);
- REQUIRE(longChannel.second->width()>=60&&shortChannel.second->width()>=60);
  REQUIRE(longChannel.second->minimumWidth()==shortChannel.second->minimumWidth());
- REQUIRE(longChannel.second->minimumWidth()<=84); // compact and independent of name
+ // OBS itself caps these vertical channels at 110 px. Use their available
+ // width, not an arbitrary 68px placeholder that pointlessly elides TTS.
+ REQUIRE(longChannel.second->minimumWidth()==longChannel.first->maximumWidth());
+ REQUIRE(shortChannel.second->minimumWidth()==shortChannel.first->maximumWidth());
+ REQUIRE(longChannel.second->width()>=100&&shortChannel.second->width()>=100);
+ if(shortChannel.second->fontMetrics().horizontalAdvance(shortChannel.second->text())
+       <=shortChannel.first->maximumWidth())
+     REQUIRE(shortChannel.second->fontMetrics().horizontalAdvance(shortChannel.second->text())
+             <=shortChannel.second->contentsRect().width());
  REQUIRE(longChannel.first->sizeHint().width()==shortChannel.first->sizeHint().width());
  const QString longExact=longChannel.second->text();
  longChannel.second->setText(longExact+" [new descriptive suffix]");
@@ -340,7 +347,7 @@ int main(int argc,char **argv){
      []{return QList<augment::AudioPropertyState>{};},{},{});
  REQUIRE(hWidths.attach(&horizontalNative));app.processEvents();
  REQUIRE(horizontalLong.first->sizeHint().width()==horizontalShort.first->sizeHint().width());
- REQUIRE(horizontalLong.second->width()>=60);
+ REQUIRE(horizontalLong.second->width()>=120); // existing meter row offers ample width
  REQUIRE(horizontalLong.second->text().contains("must not expand"));
  horizontalLong.second->setText("Updated very long horizontal source name");
  hWidths.refresh();app.processEvents();

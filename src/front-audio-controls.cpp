@@ -105,14 +105,23 @@ struct FrontAudioControls::State {
             const auto already=std::find_if(namePolicies.cbegin(),namePolicies.cend(),
                 [label](const NamePolicy &entry){return entry.label==label;});
             if(already!=namePolicies.cend())continue;
-            // A source's text belongs to OBS and must not become a geometry
-            // requirement. Keep a compact NAME-INDEPENDENT readable label
-            // width: IgnoreFlag alone makes Qt collapse the QLabel entirely
-            // under OBS's centered vertical channel layout.
-            constexpr int compactLabelWidth=68;
+            // OBS vertical VolControl already has a 110px max width. Use
+            // that native channel budget for its name label rather than
+            // inventing a narrower 68px limit (which needlessly shortens
+            // ordinary source names). Ignored horizontal sizeHint prevents
+            // *name length* from influencing channel width; the minimum
+            // avoids OBS's centered vertical name layout collapsing to 0.
+            // Uncapped horizontal / third-party layouts can still expand to
+            // available width and retain a compact fallback.
+            constexpr int uncappedFallbackWidth=68;
+            int nameWidth=uncappedFallbackWidth;
+            if(volume->maximumWidth()<QWIDGETSIZE_MAX){
+                const auto margins=volume->layout()?volume->layout()->contentsMargins():QMargins{};
+                nameWidth=qMax(1,volume->maximumWidth()-margins.left()-margins.right());
+            }
             const auto original=label->sizePolicy();
             const int previousMinimum=label->minimumWidth();
-            const int minimum=qMax(previousMinimum,compactLabelWidth);
+            const int minimum=qMax(previousMinimum,nameWidth);
             namePolicies.append({label,original,previousMinimum,minimum});
             auto policy=original;
             policy.setHorizontalPolicy(QSizePolicy::Ignored);
