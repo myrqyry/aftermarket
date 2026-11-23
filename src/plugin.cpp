@@ -110,12 +110,6 @@ static bool setAudioMixerBackside(bool enabled) {
     QObject::connect(menu,&QMenu::aboutToShow,more,[menu,safeDock]{
         menu->clear();
         if(!safeDock||!dockFaces||!frontAudio)return;
-        auto *routing=menu->addAction("Show AudioHub below mixer");
-        routing->setCheckable(true);
-        routing->setChecked(dockFaces->backVisible(safeDock));
-        QObject::connect(routing,&QAction::triggered,menu,[safeDock](bool show){
-            if(safeDock&&dockFaces)dockFaces->showBack(safeDock,show);
-        });
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);
         knobs->setChecked(frontAudio->knobs());
@@ -130,8 +124,8 @@ static bool setAudioMixerBackside(bool enabled) {
         // overflow hides, so no OBS button becomes unreachable.
         frontAudio->setMenuButton(more);
     }else delete more;
-    // AudioHub is a bottom section now, not a swapped-out mixer face.
-    dockFaces->showBack(dock,true);
+    // The small AudioBus button at the bottom switches between the two pages.
+    // Do not stack the entire routing canvas under OBS's native mixer.
     return true;
 }
 static void stopCustomUi(){

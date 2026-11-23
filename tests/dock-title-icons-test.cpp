@@ -99,12 +99,11 @@ int main(int argc,char **argv){
    augment::DockFaces faces;
    REQUIRE(faces.attach(mixer,new QLabel("AudioHub")));
    icons.refresh();app.processEvents();
-   auto *flip=mixer->findChild<QToolButton*>("aftermarket-face-flip");
+   auto *toggle=mixer->findChild<QToolButton*>("aftermarket-audiobus-toggle");
    auto *glyph=icons.glyph(mixer);
-   REQUIRE(flip&&glyph);
-   REQUIRE(!flip->isVisible()||flip->geometry().left()>
-      glyph->x()+augment::DockTitleIcons::titleTextInset()+
-      QFontMetrics(mixer->font()).horizontalAdvance(mixer->windowTitle()));
+   REQUIRE(toggle&&glyph&&toggle->isVisible());
+   REQUIRE(toggle->mapTo(mixer,QPoint(0,0)).y()>=mixer->widget()->geometry().top());
+   REQUIRE(!mixer->findChild<QToolButton*>("aftermarket-face-flip"));
    // Theme-derived glyph color, not a hardcoded SVG stroke.
    auto before=glyph->grab().toImage();
    auto palette=glyph->palette();

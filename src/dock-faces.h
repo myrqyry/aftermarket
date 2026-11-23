@@ -4,7 +4,7 @@
 class QDockWidget;
 class QWidget;
 namespace augment {
-// Reversible mixer host: original OBS widget stays above an optional bottom AudioHub.
+// Reversible two-page mixer: bottom AudioBus control switches native mixer/routing.
 class DockFaces final : public QObject {
 public:
     explicit DockFaces(QObject *parent=nullptr);

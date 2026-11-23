@@ -1578,3 +1578,59 @@ other platforms/themes, and physical audio delivery were not claimed as
 end-to-end proven. The pre-existing pan/sync native disk-persistence gap
 remains separate and open. No scene/audio routing or user's current profile
 was edited, no user process restarted, and no GitHub push requested.
+
+## Slice 39 — correction: bottom AudioBus *control*, not bottom AudioHub pane (2026-11-22)
+
+User clarified that "move audiobus to bottom" meant moving the **interactive
+AudioBus view-switch element** to the bottom of the mixer dock, **not** putting
+the entire routing interface beneath the native mixer. The prior Slice 38
+split-panel interpretation was incorrect. This entry supersedes that layout;
+Slice 38 remains in history as evidence of the misinterpretation.
+
+Implemented and checked in the same checkout:
+- Restored the native mixer/AudioHub **exclusive two-page QStackedWidget**.
+  Front is the existing original OBS AudioMixer widget, back is the existing
+  AudioPatchbay. Only one occupies the dock content at a time.
+- Added a *single compact*, native themed, checkable **AudioBus** QToolButton
+  at the bottom edge of the dock. Clicking opens the AudioHub routing page
+  and its text changes to **Audio Mixer**; clicking again restores the mixer.
+  It remains usable when the dock floats or its title buttons are hidden.
+  No routing graph, second header, or native toolbar is duplicated.
+- Removed the old title-bar flip glyph; the title keeps the **vertical ellipsis**
+  menu for native Hidden, Options, orientation and Advanced Audio Properties,
+  knob mode and the channel pan/sync submenu. The native footer restoration
+  fallback and the one-row horizontal pan/sync controls remain. Reverted the
+  split-only tall fader/meter compression; real native sizes no longer need
+  to shrink to make space for a second pane.
+- Corrected README and actual cropped 8–16 KB WebP views: current native
+  mixer with bottom switch, alternate AudioHub routing, and title settings
+  dropdown. Removed misleading Slice 38 screenshots from the working tree;
+  their original bytes remain recoverable from Git history.
+
+Verification:
+- Wrote the failing regression first (old layout still had splitter and
+  no bottom AudioBus button). Focused green for dock faces/dock title icons;
+  full **22/22 CTest passed**, no compiler warnings or diff whitespace errors.
+  Tests check exclusive pages, bottom position, real button click, title
+  accessory independence, floating and long-title fallback, restore and
+  teardown.
+- Real isolated OBS 32.2.0/Colorway, disposable Xvfb and config, observed
+  full native mixer on first load with just the bottom AudioBus button,
+  clicked bottom switch into full routing view, clicked **Audio Mixer** to
+  return, then clicked vertical ellipsis to show original hidden controls
+  and channel settings. Preserved native theme and source readouts in the
+  screenshots. The isolated OBS instance shut down.
+- Installed the exact final built binary SHA256
+  `370d4baf126dfe11514843a88d660c9d745eb59e38cd8c40553f627e8d2ef961`
+  through scripts/install.sh; installed file matched build byte for byte.
+  Rollback backed up at
+  `~/.local/share/aftermarket/rollback/obs-ui-augment.pre-toggle-only.0d63bbad9ba0.so`.
+  Live user OBS PID **73590** was unchanged and not restarted; it may still
+  have the previous module loaded until the user's next restart. The three
+  live config file hashes (rules, action strip, front-audio) were identical
+  before and after install. No user scene/audio/routing values changed.
+- No push or external publication; source is local to the user's loam.
+
+Remaining: a subsequent restart of the user's live OBS is needed to see this
+installed binary in that running process; isolated tests are not evidence of
+the user's active audio delivery or on-disk pan/sync source persistence.

@@ -8,11 +8,7 @@
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
-#include <QSplitter>
 #include <QStackedWidget>
-#include <QSlider>
-#include <QList>
-#include <QLayout>
 #include <QToolButton>
 #include <QStyle>
 #include <QFont>
@@ -44,68 +40,10 @@ struct DockFaces::State {
         QPointer<QWidget> native;
         QPointer<QWidget> alternate;
         QPointer<QWidget> host;
-        QPointer<QSplitter> splitter;
-        bool expanded=false;
+        QPointer<QStackedWidget> stack;
         QPointer<QToolButton> flip,prev,next;
         QPointer<QWidget> accessory;
         bool wasHidden=false;
-        struct FaderConstraint {
-            QPointer<QWidget> control;
-            int minimum,maximum,appliedMinimum,appliedMaximum;
-        };
-        QList<FaderConstraint> compactFaders;
-        void setCompactFaders(bool enabled){
-            if(enabled&&native){
-                if(auto *pages=native->findChild<QStackedWidget*>("stackedMixerArea"))
-                    if(pages->currentWidget()&&
-                       pages->currentWidget()->objectName()=="hMixerScrollArea")
-                        enabled=false; // OBS's horizontal mixer has separate geometry.
-            }
-            if(!enabled){
-                for(const auto &item:compactFaders)if(item.control){
-                    if(item.control->maximumHeight()==item.appliedMaximum)
-                        item.control->setMaximumHeight(item.maximum);
-                    if(item.control->minimumHeight()==item.appliedMinimum)
-                        item.control->setMinimumHeight(item.minimum);
-                }
-                compactFaders.clear();
-            }else if(compactFaders.isEmpty()&&native){
-                // Native OBS keeps a tall volMeterFrame even when its
-                // volume meter is hidden behind Aftermarket's rotary gain.
-                // Constrain the frame AND its children, preserving originals.
-                const auto compress=[this](QWidget *widget,int cap){
-                    const int originalMin=widget->minimumHeight();
-                    const int originalMax=widget->maximumHeight();
-                    const int compactMax=qMin(cap,originalMax);
-                    const int compactMin=qMin(originalMin,qMin(72,compactMax));
-                    compactFaders.append({widget,originalMin,originalMax,
-                                         compactMin,compactMax});
-                    widget->setMinimumHeight(compactMin);
-                    widget->setMaximumHeight(compactMax);
-                    widget->updateGeometry();
-                };
-                for(auto *widget:native->findChildren<QWidget*>()){
-                    bool inVolume=false;
-                    for(auto *ancestor=widget->parentWidget();ancestor&&ancestor!=native;
-                        ancestor=ancestor->parentWidget()){
-                        if(ancestor->inherits("VolumeControl")||
-                           ancestor->objectName()=="VolumeControl"){
-                            inVolume=true;break;
-                        }
-                    }
-                    if(!inVolume)continue;
-                    if(widget->objectName()=="volMeterFrame")
-                        compress(widget,116);
-                    else if(widget->inherits("VolumeMeter"))
-                        compress(widget,110);
-                    else if(auto *slider=qobject_cast<QSlider*>(widget);
-                            slider&&slider->orientation()==Qt::Vertical)
-                        compress(slider,100);
-                }
-            }
-            if(native&&native->layout())native->layout()->invalidate();
-            if(native)native->updateGeometry();
-        }
     };
     QHash<QDockWidget*,Entry> entries;
 };
@@ -136,22 +74,37 @@ bool DockFaces::attach(QDockWidget *dock,QWidget *back) {
                       "Previous dock tab",DockHeaderGlyph::Previous);
     auto *next=button(dock,"aftermarket-tab-next",
                       "Next dock tab",DockHeaderGlyph::Next);
-    auto *flip=button(dock,"aftermarket-face-flip",
-                      "Show routing below mixer",DockHeaderGlyph::Flip);
-    auto *splitter=new QSplitter(Qt::Vertical,host);
-    splitter->setObjectName("aftermarket-mixer-split");
-    splitter->setHandleWidth(4);
-    splitter->setChildrenCollapsible(false);
-    layout->addWidget(splitter,1);
+    // Only the interactive AudioBus switch belongs at the bottom.
+    // The routing graph is a separate page, not an extra panel under OBS.
+    auto *bottom=new QWidget(host);
+    bottom->setObjectName("aftermarket-audiobus-controls");
+    auto *bottomRow=new QHBoxLayout(bottom);
+    bottomRow->setContentsMargins(4,0,4,1);
+    bottomRow->setSpacing(2);
+    auto *flip=new QToolButton(bottom);
+    flip->setObjectName("aftermarket-audiobus-toggle");
+    flip->setText("AudioBus");
+    flip->setCheckable(true);
+    flip->setAutoRaise(true);
+    flip->setFixedHeight(23);
+    flip->setToolTip("Show AudioBus routing");
+    flip->setAccessibleName(flip->toolTip());
+    flip->setFocusPolicy(Qt::StrongFocus);
+    bottomRow->addWidget(flip);
+    bottomRow->addStretch(1);
+    auto *stack=new QStackedWidget(host);
+    stack->setObjectName("aftermarket-dock-pages");
+    layout->addWidget(stack,1);
+    layout->addWidget(bottom,0);
 
     // Native pages retain their identity, signals and exact hierarchy.
     dock->setWidget(host);
-    splitter->addWidget(native);
-    splitter->addWidget(back);
-    back->hide(); // The AudioHub opens BELOW the mixer, without replacing it.
+    stack->addWidget(native);
+    stack->addWidget(back);
+    stack->setCurrentWidget(native);
     if(!entry.wasHidden && dock->isVisible())native->show();
 
-    entry.host=host;entry.splitter=splitter;
+    entry.host=host;entry.stack=stack;
     entry.flip=flip;entry.prev=prev;entry.next=next;
     state->entries.insert(dock,entry);
     dock->installEventFilter(this);
@@ -184,21 +137,6 @@ bool DockFaces::attach(QDockWidget *dock,QWidget *back) {
             [updateTabs](Qt::DockWidgetArea){updateTabs();});
     connect(dock,&QDockWidget::topLevelChanged,this,
             [updateTabs](bool){updateTabs();});
-    // Native OBS switches between vMixerScrollArea and hMixerScrollArea.
-    // Restore original fader dimensions on horizontal layout, then reapply
-    // compact vertical geometry when switching back.
-    if(auto *pages=native->findChild<QStackedWidget*>("stackedMixerArea")){
-        connect(pages,&QStackedWidget::currentChanged,this,[this,safeDock](int){
-            if(!safeDock)return;
-            auto it=state->entries.find(safeDock);
-            if(it==state->entries.end())return;
-            it->setCompactFaders(false);
-            it->setCompactFaders(it->expanded);
-            if(it->splitter&&it->expanded)
-                it->splitter->setSizes({it->splitter->height()/2,
-                                         it->splitter->height()/2});
-        });
-    }
     positionTitleButtons(dock);
     return true;
 }
@@ -213,18 +151,16 @@ bool DockFaces::addFrontAccessory(QDockWidget *dock,QWidget *accessory){
 bool DockFaces::detach(QDockWidget *dock) {
     auto it=state->entries.find(dock);
     if(it==state->entries.end())return false;
-    State::Entry e=it.value();
+    const State::Entry e=it.value();
     state->entries.erase(it);
-    e.setCompactFaders(false);
     if(e.dock)e.dock->removeEventFilter(this);
     if(e.accessory)delete e.accessory.data();
-    if(e.flip)delete e.flip.data();
     if(e.prev)delete e.prev.data();
     if(e.next)delete e.next.data();
     if(!e.dock||!e.host)return true;
     if(e.dock->widget()!=e.host)return true; // External owner replaced the dock.
     if(e.native){
-        // Reparent native before disposing of the splitter/AudioHub.
+        if(e.stack)e.stack->removeWidget(e.native);
         e.native->hide();
         e.native->setParent(nullptr);
         e.dock->setWidget(e.native);
@@ -241,23 +177,18 @@ QWidget *DockFaces::back(QDockWidget *dock)const {
 }
 bool DockFaces::backVisible(QDockWidget *dock)const {
     const auto e=state->entries.value(dock);
-    return e.splitter&&e.alternate&&e.expanded;
+    return e.stack&&e.alternate&&e.stack->currentWidget()==e.alternate;
 }
 bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     auto it=state->entries.find(dock);
-    if(it==state->entries.end()||!it->splitter||!it->native||!it->alternate)return false;
-    it->expanded=visible;
-    it->setCompactFaders(visible);
-    it->alternate->setVisible(visible);
-    if(visible){
-        const int available=qMax(300,it->splitter->height());
-        it->splitter->setSizes({available/2,available/2});
-    }
+    if(it==state->entries.end()||!it->stack||!it->native||!it->alternate)return false;
+    it->stack->setCurrentWidget(visible?it->alternate.data():it->native.data());
     // The native dock title already renders the real name.
     positionTitleButtons(dock);
     if(it->flip){
         it->flip->setChecked(visible);
-        it->flip->setToolTip(visible?"Hide routing below mixer":"Show routing below mixer");
+        it->flip->setText(visible?"Audio Mixer":"AudioBus");
+        it->flip->setToolTip(visible?"Show original Audio Mixer":"Show AudioBus routing");
         it->flip->setAccessibleName(it->flip->toolTip());
     }
     return true;
@@ -287,16 +218,16 @@ bool DockFaces::eventFilter(QObject *watched,QEvent *event){
 }
 void DockFaces::positionTitleButtons(QDockWidget *dock){
     auto it=state->entries.find(dock);
-    if(it==state->entries.end()||!it->flip||!dock->widget())return;
-    auto *flip=it->flip.data();
+    if(it==state->entries.end()||!dock->widget())return;
+    // Only the three-dot options accessory and optional tab navigation live
+    // in Qt's native title. AudioBus is a real button at the bottom of host.
     const auto hide=[&]{
         if(it->accessory)it->accessory->hide();
         if(it->prev)it->prev->hide();
         if(it->next)it->next->hide();
-        flip->hide();
     };
     if(dock->isFloating()||(dock->features()&QDockWidget::DockWidgetVerticalTitleBar)){
-        hide();return; // platform title bar is not the dock's Qt title region
+        hide();return;
     }
     const int titleHeight=dock->widget()->geometry().top();
     if(titleHeight<16||titleHeight>48){hide();return;}
@@ -310,26 +241,20 @@ void DockFaces::positionTitleButtons(QDockWidget *dock){
     const QRect text=dock->style()->subElementRect(
         QStyle::SE_DockWidgetTitleBarText,&option,dock);
     if(!text.isValid()){hide();return;}
-    // Reserve the real dock text and Qt's native undock/close hit area.
-    int titleRight=text.left()+QFontMetrics(dock->font())
-        .horizontalAdvance(dock->windowTitle())+9;
-    // The native Qt title painter already includes the temporary leading
-    // display spacing for a left-hand icon; never double-count it here.
+    const int titleRight=text.left()+
+        QFontMetrics(dock->font()).horizontalAdvance(dock->windowTitle())+9;
     const int usable=text.right()-titleRight;
     constexpr int spacing=2;
-    const bool showFlip=usable>=flip->width();
-    int used=showFlip?flip->width():0;
-    const bool showAccessory=it->accessory&&
-        usable>=used+spacing+it->accessory->width();
-    if(showAccessory)used+=spacing+it->accessory->width();
+    int used=0;
+    const bool showAccessory=it->accessory&&usable>=it->accessory->width();
+    if(showAccessory)used+=it->accessory->width();
     const bool tabbed=it->main&&!it->main->tabifiedDockWidgets(dock).isEmpty();
     const int tabsWidth=it->prev&&it->next?
         it->prev->width()+it->next->width()+2*spacing:0;
     const bool showTabs=tabbed&&tabsWidth>0&&usable>=used+tabsWidth;
     if(showTabs)used+=tabsWidth;
-    if(!showFlip){hide();return;}
     int x=text.right()-used+1;
-    const int y=qMax(0,(titleHeight-flip->height())/2);
+    const int y=qMax(0,(titleHeight-18)/2);
     auto place=[&](QWidget *widget,bool visible){
         if(!widget)return;
         if(!visible){widget->hide();return;}
@@ -341,6 +266,5 @@ void DockFaces::positionTitleButtons(QDockWidget *dock){
     place(it->accessory,showAccessory);
     place(it->prev,showTabs);
     place(it->next,showTabs);
-    place(flip,true);
 }
 }
