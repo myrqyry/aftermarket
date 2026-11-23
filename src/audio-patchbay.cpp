@@ -2,14 +2,12 @@
 #include "app-text-elision.h"
 #include "visual-polish.h"
 #include <QApplication>
-#include <QCheckBox>
 #include <QMenu>
 #include <QActionGroup>
 #include <QLabel>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QScrollArea>
-#include <QToolButton>
 #include <QToolTip>
 #include <QPushButton>
 #include <QTimer>
@@ -23,6 +21,8 @@
 #include <QFontMetrics>
 #include <QStringList>
 #include <QEvent>
+#include <QPointer>
+#include <QIcon>
 #include <QStyleOptionFocusRect>
 #include <QStyle>
 #include <algorithm>
@@ -496,15 +496,6 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     heading->setFont(font);
     header->addWidget(heading);
     header->addStretch();
-    allWires=new QCheckBox("Show all wires",this);
-    allWires->setObjectName("aftermarket-show-all-wires");
-    allWires->setToolTip("Show connections from every OBS audio source; otherwise show only the selected source.");
-    header->addWidget(allWires);
-    auto *refreshButton=new QToolButton(this);
-    refreshButton->setText("↻");
-    refreshButton->setToolTip("Refresh native OBS audio routing");
-    refreshButton->setAccessibleName("Refresh audio routes");
-    header->addWidget(refreshButton);
     root->addLayout(header);
     auto *scroll=new QScrollArea(this);
     scroll->setFrameShape(QFrame::NoFrame);
@@ -536,8 +527,6 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
         syncMonitorMenu();
         monitorMenu->popup(global);
     };
-    connect(refreshButton,&QToolButton::clicked,this,[this]{refresh();});
-    connect(allWires,&QCheckBox::toggled,this,[this](bool enabled){canvas->setShowAll(enabled);});
     timer=new QTimer(this);
     timer->setInterval(950);
     connect(timer,&QTimer::timeout,this,[this]{if(isVisible())refresh();});
@@ -552,7 +541,41 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
 }
 int AudioPatchbay::routeCount() const{return routes.size();}
 QString AudioPatchbay::selectedId() const{return selected;}
-bool AudioPatchbay::showAllWires() const{return allWires->isChecked();}
+bool AudioPatchbay::showAllWires() const{return canvas->showAll;}
+void AudioPatchbay::setShowAllWires(bool enabled){canvas->setShowAll(enabled);}
+void AudioPatchbay::populateRoutingMenu(QMenu *menu){
+    if(!menu)return;
+    // QMenu/QAction own the native checked, hover, focus and disabled
+    // rendering. No stylesheet, Unicode refresh glyph, or fixed accent.
+    auto *wires=menu->addAction("Show all wires");
+    wires->setObjectName("aftermarket-show-all-wires");
+    wires->setToolTip("Show connections from every OBS audio source; otherwise show only the selected source.");
+    wires->setCheckable(true);
+    wires->setChecked(showAllWires());
+    QPointer<AudioPatchbay> safe=this;
+    connect(wires,&QAction::toggled,menu,[safe](bool enabled){
+        if(safe)safe->setShowAllWires(enabled);
+    });
+    // Take the refresh SHAPE from the active Qt style, then tint its alpha
+    // mask with the actual OBS menu foreground color. The system desktop's
+    // "view-refresh" icon theme can be bright blue even when OBS is dark.
+    // Build on each menu opening so live OBS theme changes are reflected.
+    const int iconSide=qBound(14,menu->style()->pixelMetric(
+        QStyle::PM_SmallIconSize,nullptr,menu),24);
+    QPixmap refreshGlyph=menu->style()->standardIcon(
+        QStyle::SP_BrowserReload,nullptr,menu).pixmap(iconSide,iconSide);
+    if(!refreshGlyph.isNull()){
+        QPainter tint(&refreshGlyph);
+        tint.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        tint.fillRect(refreshGlyph.rect(),menu->palette().color(QPalette::Text));
+    }
+    auto *reload=menu->addAction(QIcon(refreshGlyph),"Refresh audio routes");
+    reload->setObjectName("aftermarket-refresh-audio-routes");
+    reload->setToolTip("Read current audio routes from OBS.");
+    connect(reload,&QAction::triggered,menu,[safe]{
+        if(safe)safe->refresh();
+    });
+}
 int AudioPatchbay::visibleCableCount() const{return canvas->visibleCableCount();}
 void AudioPatchbay::refresh(){
     auto latest=query?query():routes;

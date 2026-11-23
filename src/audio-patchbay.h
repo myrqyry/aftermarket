@@ -7,7 +7,6 @@
 #include <functional>
 class QLabel;
 class QMenu;
-class QCheckBox;
 class QTimer;
 namespace augment {
 struct SignalReading {
@@ -56,6 +55,10 @@ public:
     bool toggleMonitorOutput();
     bool setMonitoring(int mode);
     bool showAllWires() const;
+    void setShowAllWires(bool enabled);
+    // Append native, theme-aware routing actions to the existing dock menu.
+    // Action state is read afresh each time the title menu is opened.
+    void populateRoutingMenu(QMenu *menu);
     int visibleCableCount() const;
     bool sourceSignal(const QString &id) const;
     bool outputSignal(int track) const; // 1–6 native track; 7 OBS Monitor
@@ -72,7 +75,6 @@ private:
     QString selected;
     Canvas *canvas=nullptr;
     QMenu *monitorMenu=nullptr;
-    QCheckBox *allWires=nullptr;
     QTimer *timer=nullptr,*signalTimer=nullptr;
     void syncControls();
     void syncMonitorMenu();

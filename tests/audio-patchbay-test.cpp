@@ -11,6 +11,8 @@
 #include <QPainter>
 #include <QImage>
 #include <QCoreApplication>
+#include <QStyle>
+#include <QPalette>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 
@@ -29,10 +31,10 @@ int main(int argc,char **argv){
  sources[0].sourceType="live_latent_tts";
  sources[1].sourceType="browser_source";
  sources[2].sourceType="ffmpeg_source";
- int trackWrites=0,monitorWrites=0;
+ int trackWrites=0,monitorWrites=0,routeQueries=0;
  QHash<QString,augment::SignalReading> levels;
  augment::AudioPatchbay bay(
-   [&]{return sources;},
+   [&]{++routeQueries;return sources;},
    [&](const QString &id,int track){
       for(auto &s:sources)if(s.id==id){s.tracks^=1u<<(track-1);++trackWrites;return true;}
       return false;
@@ -51,8 +53,43 @@ int main(int argc,char **argv){
  bay.resize(350,340);bay.show();app.processEvents();
  auto *canvas=bay.findChild<QWidget*>("aftermarket-route-canvas");
  auto *menu=bay.findChild<QMenu*>("aftermarket-monitor-mode-menu");
- auto *all=bay.findChild<QCheckBox*>("aftermarket-show-all-wires");
- REQUIRE(canvas&&menu&&all);
+ REQUIRE(canvas&&menu);
+ // AudioBus has only a native-styled section heading; the two actions live
+ // in the existing dock-title overflow, never in another row of controls.
+ REQUIRE(!bay.findChild<QCheckBox*>("aftermarket-show-all-wires"));
+ REQUIRE(!bay.findChild<QToolButton*>("aftermarket-route-refresh"));
+ REQUIRE(!bay.findChild<QToolButton*>());
+ QMenu routing(&bay);
+ routing.setObjectName("aftermarket-test-dock-overflow");
+ bay.populateRoutingMenu(&routing);
+ REQUIRE(routing.actions().size()==2);
+ auto *all=routing.actions()[0];
+ auto *reload=routing.actions()[1];
+ REQUIRE(all->objectName()=="aftermarket-show-all-wires");
+ REQUIRE(all->text()=="Show all wires"&&all->isCheckable()&&!all->isChecked());
+ REQUIRE(reload->objectName()=="aftermarket-refresh-audio-routes");
+ REQUIRE(reload->text()=="Refresh audio routes"&&!reload->isCheckable());
+ REQUIRE(!reload->icon().isNull()); // Qt theme / QStyle, not a Unicode refresh glyph
+ REQUIRE(routing.styleSheet().isEmpty());
+ // This must follow OBS's actual QPalette, not the desktop icon theme
+ // (which may render a hardcoded blue refresh glyph in a dark OBS theme).
+ QMenu pale(&bay),dark(&bay);
+ auto palePalette=routing.palette();
+ palePalette.setColor(QPalette::Text,QColor(24,30,38));
+ pale.setPalette(palePalette);
+ auto darkPalette=routing.palette();
+ darkPalette.setColor(QPalette::Text,QColor(238,226,217));
+ dark.setPalette(darkPalette);
+ bay.populateRoutingMenu(&pale);
+ bay.populateRoutingMenu(&dark);
+ const QImage paleIcon=pale.actions()[1]->icon().pixmap(18,18).toImage();
+ const QImage darkIcon=dark.actions()[1]->icon().pixmap(18,18).toImage();
+ REQUIRE(!paleIcon.isNull()&&!darkIcon.isNull());
+ REQUIRE(paleIcon!=darkIcon);
+ REQUIRE(all->icon().isNull()); // native QMenu checkmark, not hand-painted
+ auto *heading=bay.findChild<QLabel*>("aftermarket-route-heading");
+ REQUIRE(heading&&heading->styleSheet().isEmpty());
+ REQUIRE(bay.styleSheet().isEmpty());
  REQUIRE(menu->actions().size()==3);
  REQUIRE(!bay.findChild<QComboBox*>("aftermarket-monitor"));
  REQUIRE(!bay.findChild<QLabel*>("aftermarket-selected-source"));
@@ -72,11 +109,26 @@ int main(int argc,char **argv){
  REQUIRE(bay.routeCount()==3);
  REQUIRE(bay.selectedId()=="voice");
  REQUIRE(menu->actions()[2]->isChecked());
- REQUIRE(bay.visibleCableCount()==7); // Six tracks + headphone monitor
+ REQUIRE(bay.visibleCableCount()==7);
  REQUIRE(!bay.showAllWires());
- all->click();app.processEvents();
- REQUIRE(bay.visibleCableCount()==10); // + Browser/Media connections
- all->click();app.processEvents();
+ all->trigger();app.processEvents();
+ REQUIRE(all->isChecked()&&bay.showAllWires());
+ REQUIRE(bay.visibleCableCount()==10);
+ all->trigger();app.processEvents();
+ REQUIRE(!all->isChecked()&&!bay.showAllWires());
+ REQUIRE(bay.visibleCableCount()==7);
+ // The title menu is rebuilt at every opening; the checked state must
+ // come from the graph, rather than from a transient QAction.
+ bay.setShowAllWires(true);
+ QMenu rebuilt(&bay);bay.populateRoutingMenu(&rebuilt);
+ REQUIRE(rebuilt.actions()[0]->isChecked());
+ bay.setShowAllWires(false);
+ QMenu fresh(&bay);bay.populateRoutingMenu(&fresh);
+ REQUIRE(!fresh.actions()[0]->isChecked());
+ const auto queriesBefore=routeQueries;
+ reload->trigger();app.processEvents();
+ REQUIRE(routeQueries==queriesBefore+1);
+ // Rebuilding from an old menu must never flip the current wire state.
  REQUIRE(!bay.showAllWires());
  const QPoint sourceBrowser(39,43+32);
  sendMouse(canvas,QEvent::MouseButtonPress,sourceBrowser,Qt::LeftButton,Qt::LeftButton);
@@ -185,6 +237,31 @@ int main(int argc,char **argv){
  for(int y=38;y<=48;++y)for(int x=5;x<=9;++x)
      if(originalOutline.pixel(x,y)!=recoloredOutline.pixel(x,y))++themedPixels;
  REQUIRE(themedPixels>0);
+ canvas->setPalette(originalPalette);app.processEvents();
+ // The canvas supports both light and dark themes from Qt palette roles;
+ // changing the OBS theme must repaint text, node fills and active outlines.
+ auto day=originalPalette;
+ day.setColor(QPalette::Text,QColor(25,29,36));
+ day.setColor(QPalette::Button,QColor(240,242,247));
+ day.setColor(QPalette::Mid,QColor(112,116,124));
+ day.setColor(QPalette::Highlight,QColor(50,99,176));
+ canvas->setPalette(day);app.processEvents();
+ const auto dayImage=canvas->grab().toImage();
+ auto night=originalPalette;
+ night.setColor(QPalette::Text,QColor(228,229,235));
+ night.setColor(QPalette::Button,QColor(37,39,49));
+ night.setColor(QPalette::Mid,QColor(105,108,126));
+ night.setColor(QPalette::Highlight,QColor(180,124,208));
+ canvas->setPalette(night);app.processEvents();
+ const auto nightImage=canvas->grab().toImage();
+ int themePixels=0,themeBorderPixels=0;
+ for(int y=37;y<=49;++y){
+     for(int x=6;x<100;++x)
+         if(dayImage.pixel(x,y)!=nightImage.pixel(x,y))++themePixels;
+     for(int x=5;x<=9;++x)
+         if(dayImage.pixel(x,y)!=nightImage.pixel(x,y))++themeBorderPixels;
+ }
+ REQUIRE(themePixels>45&&themeBorderPixels>0);
  canvas->setPalette(originalPalette);app.processEvents();
  REQUIRE(bay.sourceSignal("voice"));
  REQUIRE(bay.sourceActivity("voice")==augment::AudioPatchbay::ActivityState::Active);

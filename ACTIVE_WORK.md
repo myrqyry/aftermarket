@@ -1994,3 +1994,63 @@ Verification:
 Boundary: The user OBS instance must restart before it can load the newly
 installed module. Activity still means measured signal in OBS, not proof of
 audible physical playback. No GitHub push/release requested.
+
+## Slice 46 — theme-aware AudioBus title-menu routing controls (2026-11-22)
+
+User requested explicit Qt/OBS theme awareness and relocation of Show all
+wires and Refresh from the AudioBus graph header into the existing three-dot
+dock title menu.
+
+Implementation:
+- Removed Show all wires QCheckBox and literal Unicode refresh QToolButton
+  from AudioPatchbay header, leaving the native Audio routes QLabel only.
+- Added AudioPatchbay::populateRoutingMenu to append native, checkable
+  Show all wires and Refresh audio routes QActions to caller-owned QMenu.
+  The check is rebuilt from actual graph state each time; toggling changes
+  only cable visibility, never OBS audio tracks or monitoring. Refresh calls
+  the authoritative OBS route query and leaves periodic refresh intact.
+  QAction callbacks guard the AudioPatchbay with QPointer for teardown.
+- Added the two actions to the existing Audio Mixer dock title's only
+  three-dot menu, only when its AudioBus routing page is visible.
+  They are absent on the original native mixer page. Existing dock actions
+  and advanced mixer controls remain intact. No second menu button, footer,
+  or graph toolbar was added.
+- The menu and check/hover/focus use native Qt widgets and palette. The
+  Refresh icon uses the current Qt QStyle BrowserReload shape tinted to the
+  current OBS QMenu Text palette role at menu creation; a system desktop icon
+  initially rendered blue under dark OBS and was corrected after visual
+  review. Existing graph sources, cables and active outlines are already
+  Qt-palette-aware.
+- Updated README and added a cropped real-OBS WebP screenshot at
+  docs/screenshots/readme/audiobus-title-routing-options.webp.
+
+Verification:
+- TDD RED: test initially failed for missing menu actions and state setter.
+  GREEN: checks no redundant header controls, expected QAction labels,
+  object names and checkability; wire toggle and menu rebuild state; actual
+  cable counts, authoritative refresh queries, unchanged OBS track and
+  monitor writers, and existing monitor context-menu behavior.
+- Theme RED: system icon produced identical pixmaps for different menu
+  palettes. GREEN: native Qt icon tint differs with light/dark text palette,
+  and light/dark QPalette changes source card/output outlines, fills and
+  captions without fixed colors.
+- Full CMake build without warnings, 24/24 serial CTests passed, diff
+  whitespace check passed.
+- Real isolated OBS 32.2.0 loaded correct sandbox .so and scene collection
+  with actual tone and silent media sources. Visual check: AudioBus header
+  has no Show all wires or Refresh control; both appear in mixer title menu;
+  clicking Show all wires adds cable paths, menu reopens with checkmark;
+  Refresh leaves routing face intact; switching to native mixer hides those
+  routing-only menu actions. The icon is palette-colored, not system blue.
+- Installed exact build SHA256
+  a4e50200700422be1bfe26517efbca83472ebeb60fb2fa76d92a49c831cac977
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so,
+  verified by bytewise comparison. Previous installed module backed up at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-audiobus-title-options.0bc93f608aa2.so.
+  User OBS PID 294527 remained running and was not restarted, and all four
+  tracked real user settings file hashes were unchanged before and after.
+
+Boundary: the routing actions are in the title menu on docked AudioBus.
+On floating/custom-title docks the pre-existing native title accessory can
+be absent; this slice did not add another title bar. No GitHub push,
+external release, or change to user scenes/audio routing requested.

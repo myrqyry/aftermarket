@@ -121,6 +121,16 @@ static bool setAudioMixerBackside(bool enabled) {
             dockTitleIcons->appendDockWindowActions(menu,safeDock);
             menu->addSeparator();
         }
+        // Routing-specific controls belong in the same native dock overflow,
+        // but only while the AudioBus face is visible. No duplicate header
+        // row, no separate floating toolbar and no source/track mutations.
+        if(dockFaces&&dockFaces->backVisible(safeDock)){
+            auto *routing=dockFaces->back(safeDock);
+            if(routing&&routing->objectName()=="aftermarket-audio-patchbay"){
+                static_cast<augment::AudioPatchbay*>(routing)->populateRoutingMenu(menu);
+                menu->addSeparator();
+            }
+        }
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);
         knobs->setChecked(frontAudio->knobs());
