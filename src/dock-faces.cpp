@@ -203,7 +203,7 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
         stack->isVisible()&&stack->width()>0&&stack->height()>0&&
         stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack);
     // A short, click-through snapshot fades away over the real new page.
-    // The original OBS mixer never gets an opacity effect or a fake widget.
+    // The original OBS mixer keeps its native widget and rendering unchanged.
     const QPixmap previous=animate?stack->grab():QPixmap{};
     stack->setCurrentWidget(destination);
     if(!previous.isNull()){
