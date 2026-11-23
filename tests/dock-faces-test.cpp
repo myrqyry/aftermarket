@@ -5,8 +5,11 @@
 #include <QDockWidget>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSlider>
+#include <QFrame>
 #include <QPointer>
 #include <QStackedWidget>
+#include <QSplitter>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QStyle>
@@ -20,6 +23,35 @@ int main(int argc,char **argv) {
  auto *a=new QDockWidget("Audio Mixer",&main);a->setObjectName("mixerDock");
  auto *native=new QWidget(a);auto *nl=new QVBoxLayout(native);
  auto *slider=new QLineEdit("gain",native);nl->addWidget(slider);
+ auto *volume=new QWidget(native);volume->setObjectName("VolumeControl");
+ auto *vl=new QVBoxLayout(volume);
+ auto *frame=new QFrame(volume);frame->setObjectName("volMeterFrame");
+ frame->setMinimumHeight(165);
+ auto *frameLayout=new QVBoxLayout(frame);
+ auto *fader=new QSlider(Qt::Vertical,frame);
+ fader->setRange(0,100);fader->setValue(55);
+ fader->setMinimumHeight(160);
+ frameLayout->addWidget(fader);
+ vl->addWidget(frame);
+ auto *mixerPages=new QStackedWidget(native);
+ mixerPages->setObjectName("stackedMixerArea");
+ auto *verticalPage=new QWidget(mixerPages);
+ verticalPage->setObjectName("vMixerScrollArea");
+ auto *vpageLayout=new QVBoxLayout(verticalPage);
+ vpageLayout->addWidget(volume);
+ auto *horizontalPage=new QWidget(mixerPages);
+ horizontalPage->setObjectName("hMixerScrollArea");
+ auto *hpageLayout=new QVBoxLayout(horizontalPage);
+ auto *horizontalSlider=new QSlider(Qt::Horizontal,horizontalPage);
+ horizontalSlider->setMinimumHeight(30);
+ hpageLayout->addWidget(horizontalSlider);
+ mixerPages->addWidget(verticalPage);
+ mixerPages->addWidget(horizontalPage);
+ nl->addWidget(mixerPages);
+ const int originalFaderMin=fader->minimumHeight();
+ const int originalFaderMax=fader->maximumHeight();
+ const int originalFrameMin=frame->minimumHeight();
+ const int originalFrameMax=frame->maximumHeight();
  a->setWidget(native);main.addDockWidget(Qt::LeftDockWidgetArea,a);
  auto *b=new QDockWidget("Scenes",&main);b->setObjectName("scenesDock");
  auto *scene=new QLabel("native scene widget",b);b->setWidget(scene);
@@ -50,6 +82,9 @@ int main(int argc,char **argv) {
   REQUIRE(faces.front(a)==native);
   REQUIRE(faces.back(a)==back);
   REQUIRE(!faces.backVisible(a));
+  auto *split=a->widget()->findChild<QSplitter*>("aftermarket-mixer-split");
+  REQUIRE(split&&split->orientation()==Qt::Vertical);
+  REQUIRE(split->widget(0)==native&&split->widget(1)==back);
   REQUIRE(a->widget()!=native&&slider->parentWidget()==native);
   REQUIRE(a->widget()->findChild<QLineEdit*>()==slider);
   auto *flip=a->findChild<QToolButton*>("aftermarket-face-flip");
@@ -65,7 +100,7 @@ int main(int argc,char **argv) {
   auto *previous=a->findChild<QToolButton*>("aftermarket-tab-previous");
   REQUIRE(previous&&previous->property("aftermarket-header-button").toBool());
   REQUIRE(previous->accessibleName().contains("Previous"));
-  auto *knobs=new augment::DockHeaderButton(augment::DockHeaderGlyph::Knobs);
+  auto *knobs=new augment::DockHeaderButton(augment::DockHeaderGlyph::More);
   knobs->setObjectName("aftermarket-front-knobs");
   knobs->setChecked(true);
   REQUIRE(knobs->property("aftermarket-header-button").toBool());
@@ -78,6 +113,20 @@ int main(int argc,char **argv) {
   REQUIRE(knobs->geometry().bottom()<a->widget()->geometry().top());
   flip->click();app.processEvents();
   REQUIRE(faces.backVisible(a)&&back->isVisible());
+  REQUIRE(fader->minimumHeight()<originalFaderMin);
+  REQUIRE(fader->maximumHeight()<=100);
+  REQUIRE(frame->maximumHeight()<=116);
+  REQUIRE(frame->minimumHeight()<originalFrameMin);
+  REQUIRE(fader->value()==55);
+  mixerPages->setCurrentWidget(horizontalPage);app.processEvents();
+  REQUIRE(fader->minimumHeight()==originalFaderMin);
+  REQUIRE(frame->minimumHeight()==originalFrameMin);
+  REQUIRE(horizontalSlider->minimumHeight()==30);
+  mixerPages->setCurrentWidget(verticalPage);app.processEvents();
+  REQUIRE(fader->maximumHeight()<=100);
+  REQUIRE(frame->maximumHeight()<=116);
+  REQUIRE(native->isVisible()); // AudioHub is BELOW the live mixer, not another face
+  REQUIRE(back->geometry().top()>native->geometry().top());
   REQUIRE(flip->isChecked());
   REQUIRE(flip->toolTip().contains("mixer",Qt::CaseInsensitive));
   const auto checkedPixels=flip->grab().toImage();
@@ -85,10 +134,13 @@ int main(int argc,char **argv) {
   alternatePalette.setColor(QPalette::Highlight,QColor(205,115,40));
   flip->setPalette(alternatePalette);app.processEvents();
   REQUIRE(checkedPixels!=flip->grab().toImage()); // icon and selection follow palette
-  REQUIRE(!knobs->isVisible());
-  REQUIRE(!native->isVisible());
+  REQUIRE(knobs->isVisible()); // Overflow stays available with AudioHub expanded
+  REQUIRE(native->isVisible());
   flip->click();app.processEvents();
   REQUIRE(!faces.backVisible(a)&&native->isVisible());
+  REQUIRE(fader->minimumHeight()==originalFaderMin);
+  REQUIRE(fader->maximumHeight()==originalFaderMax);
+  REQUIRE(frame->minimumHeight()==originalFrameMin&&frame->maximumHeight()==originalFrameMax);
   REQUIRE(!flip->isChecked());
   REQUIRE(flip->toolTip().contains("routing",Qt::CaseInsensitive));
   REQUIRE(knobs->isVisible());
@@ -117,6 +169,8 @@ int main(int argc,char **argv) {
   REQUIRE(a->titleBarWidget()==originalTitleBar);
   REQUIRE(faces.detach(a));app.processEvents();
   REQUIRE(a->widget()==native&&slider->text()=="gain");
+  REQUIRE(fader->minimumHeight()==originalFaderMin&&fader->maximumHeight()==originalFaderMax);
+  REQUIRE(frame->minimumHeight()==originalFrameMin&&frame->maximumHeight()==originalFrameMax);
   REQUIRE(!a->findChild<QToolButton*>("aftermarket-face-flip"));
   REQUIRE(!a->findChild<QWidget*>("aftermarket-native-title-actions"));
   REQUIRE(a->titleBarWidget()==originalTitleBar&&a->features()==originalFeatures);

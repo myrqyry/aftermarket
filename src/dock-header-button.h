@@ -7,7 +7,7 @@
 #include <QPaintEvent>
 
 namespace augment {
-enum class DockHeaderGlyph { Previous, Next, Flip, Knobs };
+enum class DockHeaderGlyph { Previous, Next, Flip, Knobs, More };
 
 // Only used for Aftermarket-owned dock header controls. Original OBS buttons,
 // docking behavior, stylesheet and palette remain untouched.
@@ -57,6 +57,12 @@ protected:
             painter.drawRoundedRect(QRectF(cx-6.5,cy-5.5,9.5,9.5),1.5,1.5);
             painter.drawRoundedRect(QRectF(cx-2.5,cy-2.5,9.5,9.5),1.5,1.5);
             painter.drawLine(QPointF(cx+1,cy+4.6),QPointF(cx+4.7,cy+4.6));
+            break;
+        case DockHeaderGlyph::More:
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(active?accent:foreground);
+            for(int dy=-4;dy<=4;dy+=4)
+                painter.drawEllipse(QPointF(cx,cy+dy),1.3,1.3);
             break;
         case DockHeaderGlyph::Knobs: {
             painter.drawEllipse(QPointF(cx,cy),5.5,5.5);

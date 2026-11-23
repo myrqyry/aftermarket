@@ -11,6 +11,10 @@
 #include <QLabel>
 #include <QEventLoop>
 #include <QTimer>
+#include <QMenu>
+#include <QToolBar>
+#include <QPushButton>
+#include <QAction>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 int main(int argc,char **argv){
@@ -32,6 +36,19 @@ int main(int argc,char **argv){
  auto *secondOriginal=new QSlider(Qt::Horizontal,two);secondOriginal->setValue(65);
  twoLayout->addWidget(secondOriginal);
  layout->addWidget(two);
+ auto *footer=new QToolBar(&native);layout->addWidget(footer);
+ auto *hidden=new QPushButton("0 hidden",footer);footer->addWidget(hidden);
+ auto *orientation=new QToolButton(footer);orientation->setToolTip("Swap mixer layout");
+ footer->addWidget(orientation);
+ auto *advanced=new QToolButton(footer);advanced->setText("Advanced Audio Properties");
+ footer->addWidget(advanced);
+ auto *options=new QPushButton("Options",footer);footer->addWidget(options);
+ auto *nativeOptions=new QMenu(&native);
+ nativeOptions->addAction("Show hidden sources");
+ int hiddenClicks=0,orientationClicks=0,advancedClicks=0;
+ QObject::connect(hidden,&QPushButton::clicked,[&]{++hiddenClicks;});
+ QObject::connect(orientation,&QToolButton::clicked,[&]{++orientationClicks;});
+ QObject::connect(advanced,&QToolButton::clicked,[&]{++advancedClicks;});
  QList<augment::AudioPropertyState> current={
      {"uuid-tts","Live Latent: TTS",.5,120,true},
      {"uuid-media","Media Source",.25,-80,true}
@@ -51,6 +68,29 @@ int main(int argc,char **argv){
  native.resize(410,420);native.show();app.processEvents();
  REQUIRE(ui.attach(&native));
  REQUIRE(ui.rowCount()==2);
+ REQUIRE(footer->isVisible()); // Keep native controls until a usable title overflow exists
+ auto *more=new QToolButton(&native);
+ more->setObjectName("aftermarket-mixer-more");
+ more->show();
+ REQUIRE(ui.setMenuButton(more));
+ app.processEvents();
+ REQUIRE(!footer->isVisible()); // OBS's footer moves into the title overflow
+ more->hide();app.processEvents();
+ REQUIRE(footer->isVisible()); // Floating/narrow docks cannot lose native settings
+ more->show();app.processEvents();
+ REQUIRE(!footer->isVisible());
+ QMenu nativeMenu;
+ ui.populateSettingsMenu(&nativeMenu);
+ const auto findEntry=[&](const QString &name)->QAction*{
+     for(auto *a:nativeMenu.actions())if(a->text().contains(name,Qt::CaseInsensitive))return a;
+     return nullptr;
+ };
+ REQUIRE(findEntry("hidden")&&findEntry("layout")&&findEntry("Advanced"));
+ findEntry("hidden")->trigger();
+ findEntry("layout")->trigger();
+ findEntry("Advanced")->trigger();
+ REQUIRE(hiddenClicks==1&&orientationClicks==1&&advancedClicks==1);
+ REQUIRE(findEntry("Options")); // original OBS options remain reachable
  auto *pan=one->findChild<QSlider*>("aftermarket-pan-slider");
  auto *offset=one->findChild<QSpinBox*>("aftermarket-offset-ms");
  auto *panDial=one->findChild<QDial*>("aftermarket-pan-dial");
@@ -100,6 +140,7 @@ int main(int argc,char **argv){
  REQUIRE(ui.setKnobs(false));
  REQUIRE(!ui.knobs());
  ui.detach();
+ REQUIRE(footer->isVisible());
  REQUIRE(ui.rowCount()==0);
  REQUIRE(!two->findChild<QWidget*>("aftermarket-source-adjustments"));
  REQUIRE(one->layout()->count()==2&&two->layout()->count()==2);
@@ -134,13 +175,55 @@ int main(int argc,char **argv){
  auto *visiblePan=narrow.findChild<QSlider*>("aftermarket-pan-slider");
  auto *visibleOffset=narrow.findChild<QSpinBox*>("aftermarket-offset-ms");
  REQUIRE(visiblePan&&visibleOffset);
+ auto *compactDial=narrow.findChild<QDial*>("aftermarket-pan-dial");
+ REQUIRE(compactDial);
  auto *compactAddon=narrow.findChild<QWidget*>("aftermarket-source-adjustments");
- REQUIRE(compactAddon&&compactAddon->minimumHeight()>=48);
+ REQUIRE(compactAddon&&compactAddon->minimumHeight()<=34);
+ REQUIRE(compactDial->isVisible()&&!visiblePan->isVisible()); // Narrow vertical channels use a real pan target
+ REQUIRE(visibleOffset->isVisible());
+ REQUIRE(qAbs(visiblePan->mapTo(compactAddon,QPoint(0,0)).y()-visibleOffset->mapTo(compactAddon,QPoint(0,0)).y())<=14);
  REQUIRE(visiblePan->minimumHeight()>=18);
  REQUIRE(visiblePan->height()>=14);
  REQUIRE(visibleOffset->height()>=20);
  REQUIRE(visiblePan->mapTo(&narrow,QPoint(visiblePan->width(),0)).x()<=narrow.width());
+ // Overflow in the real dock title exposes precise per-channel settings.
+ QMenu channelMenu;
+ ui.populateSettingsMenu(&channelMenu);
+ auto *channels=channelMenu.findChild<QMenu*>("aftermarket-channel-settings");
+ REQUIRE(channels&&channels->actions().size()==2);
+ auto *panEdit=channelMenu.findChild<QSpinBox*>("aftermarket-menu-pan");
+ auto *offsetEdit=channelMenu.findChild<QSpinBox*>("aftermarket-menu-offset");
+ REQUIRE(panEdit&&offsetEdit);
+ REQUIRE(panEdit->value()==44&&offsetEdit->value()==600);
+ panEdit->setValue(36);
+ REQUIRE(qAbs(current[0].balance-.36)<.001);
+ offsetEdit->setValue(150);
+ REQUIRE(current[0].offsetMs==150);
  narrowUi.detach();
+ // OBS's alternate mixer orientation can use a horizontal VolumeControl
+ // layout. Keep native gain and our inline pan/sync on the same row.
+ QWidget horizontal;
+ auto *hRoot=new QVBoxLayout(&horizontal);
+ auto *hVolume=new QWidget(&horizontal);hVolume->setObjectName("VolumeControl");
+ auto *hRow=new QHBoxLayout(hVolume);
+ auto *hName=new QToolButton(hVolume);
+ hName->setObjectName("VolumeName");hName->setText("Media Source");
+ hRow->addWidget(hName);
+ auto *hGain=new QSlider(Qt::Horizontal,hVolume);
+ hGain->setValue(63);hRow->addWidget(hGain);
+ hRoot->addWidget(hVolume);
+ horizontal.resize(530,130);horizontal.show();app.processEvents();
+ augment::FrontAudioControls hUi(tmp.filePath("horizontal.json"),[&]{return current;},{},{});
+ REQUIRE(hUi.attach(&horizontal));app.processEvents();
+ auto *hAdd=hVolume->findChild<QWidget*>("aftermarket-source-adjustments");
+ auto *hPan=hVolume->findChild<QSlider*>("aftermarket-pan-slider");
+ auto *hSync=hVolume->findChild<QSpinBox*>("aftermarket-offset-ms");
+ REQUIRE(hAdd&&hPan&&hSync);
+ REQUIRE(hAdd->isVisible()&&hPan->isVisible()&&hSync->isVisible());
+ REQUIRE(qAbs(hPan->mapTo(hAdd,QPoint(0,0)).y()-
+              hSync->mapTo(hAdd,QPoint(0,0)).y())<=14);
+ hUi.detach();app.processEvents();
+ REQUIRE(hRow->count()==2&&hGain->value()==63);
  std::cout<<"native Audio Mixer front pan/offset, knob mode and reversible lifecycle verified\n";
  return 0;
 }

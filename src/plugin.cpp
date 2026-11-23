@@ -20,6 +20,8 @@
 #include "native-audio-settings.h"
 #include "obs-signal-levels.h"
 #include <QToolButton>
+#include <QMenu>
+#include <QAction>
 #include <QDockWidget>
 #include <QMainWindow>
 #include <QMenuBar>
@@ -94,15 +96,42 @@ static bool setAudioMixerBackside(bool enabled) {
         []{if(frontendReady)obs_frontend_save();}
     );
     frontAudio->attach(dockFaces->front(dock));
-    auto *knobs=new augment::DockHeaderButton(augment::DockHeaderGlyph::Knobs);
-    knobs->setObjectName("aftermarket-front-knobs");
-    knobs->setToolTip("Show pan and sync-offset controls as knobs. Precise offset remains editable in milliseconds.");
-    knobs->setAccessibleName("Use knobs for Audio Mixer pan and sync offset");
-    knobs->setChecked(frontAudio->knobs());
-    if(dockFaces->addFrontAccessory(dock,knobs)){
-        QObject::connect(knobs,&QToolButton::toggled,frontAudio.get(),
-                         [](bool enabled){if(frontAudio)frontAudio->setKnobs(enabled);});
-    }else delete knobs;
+    // A single native-title overflow holds the presentation toggle and all
+    // advanced per-channel pan/sync editors. No second content header.
+    auto *more=new augment::DockHeaderButton(augment::DockHeaderGlyph::More);
+    more->setObjectName("aftermarket-mixer-more");
+    more->setToolTip("Audio Mixer options and channel settings");
+    more->setAccessibleName("Audio Mixer more options");
+    auto *menu=new QMenu(more);
+    menu->setObjectName("aftermarket-mixer-more-menu");
+    more->setMenu(menu);
+    more->setPopupMode(QToolButton::InstantPopup);
+    QPointer<QDockWidget> safeDock=dock;
+    QObject::connect(menu,&QMenu::aboutToShow,more,[menu,safeDock]{
+        menu->clear();
+        if(!safeDock||!dockFaces||!frontAudio)return;
+        auto *routing=menu->addAction("Show AudioHub below mixer");
+        routing->setCheckable(true);
+        routing->setChecked(dockFaces->backVisible(safeDock));
+        QObject::connect(routing,&QAction::triggered,menu,[safeDock](bool show){
+            if(safeDock&&dockFaces)dockFaces->showBack(safeDock,show);
+        });
+        auto *knobs=menu->addAction("Pan and sync as knobs");
+        knobs->setCheckable(true);
+        knobs->setChecked(frontAudio->knobs());
+        QObject::connect(knobs,&QAction::triggered,menu,[](bool enabled){
+            if(frontAudio)frontAudio->setKnobs(enabled);
+        });
+        menu->addSeparator();
+        frontAudio->populateSettingsMenu(menu);
+    });
+    if(dockFaces->addFrontAccessory(dock,more)){
+        // In floating/narrow docks the native footer returns when the title
+        // overflow hides, so no OBS button becomes unreachable.
+        frontAudio->setMenuButton(more);
+    }else delete more;
+    // AudioHub is a bottom section now, not a swapped-out mixer face.
+    dockFaces->showBack(dock,true);
     return true;
 }
 static void stopCustomUi(){

@@ -6,6 +6,8 @@
 #include <memory>
 #include <functional>
 class QWidget;
+class QMenu;
+class QToolButton;
 class QTimer;
 namespace augment {
 struct AudioPropertyState {
@@ -30,7 +32,10 @@ public:
     bool setKnobs(bool value);
     bool knobs()const;
     int rowCount()const;
+    void populateSettingsMenu(QMenu *menu);
+    bool setMenuButton(QToolButton *button);
 private:
+    bool eventFilter(QObject *watched,QEvent *event) override;
     struct State;
     std::unique_ptr<State> state;
 };

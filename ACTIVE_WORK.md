@@ -1505,3 +1505,76 @@ AudioHub pan/sync disk persistence gap remains unrelated and open.
 - Disposable Xvfb :120 and OBS were terminated after test. Working tree
   clean at feature checkpoint. The original dock title strings are
   restored on unload/emergency and Docks menu labels stay unpadded.
+
+## Slice 38 — AudioHub below the native mixer, title overflow and compact two-orientation controls (2026-11-22)
+
+User annotated a cramped real Audio Mixer screenshot: place AudioBus/AudioHub
+at the **bottom**, move the hidden-channel/footer settings into a native-title
+vertical-ellipsis menu, and refine both OBS mixer orientations with horizontally
+aligned controls. This work remains inside the existing Aftermarket project,
+`obs-ui-augment`; it does not belong to OverlayKit.
+
+Implementation:
+- DockFaces now preserves the exact original OBS AudioMixer widget as the
+  **upper** half of a vertically draggable splitter and places the existing
+  AudioPatchbay underneath, visible by default. The original title-region
+  face glyph collapses/expands the bottom panel rather than replacing the mixer.
+  The native widget and all of its signal, source and routing identities remain.
+- DockHeaderGlyph::More provides a palette-aware vertical three-dot control
+  in the real QDockWidget title. Its menu exposes AudioHub visibility, the
+  pan/sync knob presentation toggle, the native **0 hidden** channel entry,
+  mixer orientation, Advanced Audio Properties, Mixer options, and an editable
+  per-source Pan/Sync submenu. Original OBS button signals and the native
+  Options menu are reused where available; nothing invents a second mixer.
+- FrontAudioControls preserves the native footer QToolBar identity and hides
+  it only when the three-dot control is actually visible. The footer returns
+  automatically when the title button disappears (floating, cramped or
+  unsupported title geometry), and restores on detach/emergency unload.
+  Unknown toolbars are not hidden. Narrow vertical VolumeControl strips use
+  pan dial + precise milliseconds on one 30px row; wider and horizontal
+  strips use one aligned horizontal row, with the presentation toggle in the
+  overflow. Existing native faders, mutes, settings APIs and source UUIDs stay.
+- The native vertical volMeterFrame, VolumeMeter and fader height constraints
+  are **temporarily** compacted while AudioHub is open to reclaim unused
+  tall-slider space (especially when the painted fader is a small rotary).
+  Their captured original bounds restore on bottom-section collapse, switch to
+  native horizontal mixer or teardown. No gain/monitor/track/scene values change.
+  The AudioHub canvas remains scrollable when a dock is shorter than the whole
+  six-track graph. No OBS fork or external DSP bus.
+
+Verification:
+- RED tests first for missing split/overflow and native-footer delegation,
+  narrow 30px row, native vertical constraint compression/restoration; GREEN
+  regressions cover exact widget identity, native controls, title placement,
+  menu proxies, floating/narrow footer fallback, knob setting and source edits,
+  vertical/horizontal mixer reflow, mouse hit regions, and teardown.
+- Final CMake build clean (no compiler warnings), **22/22 CTests passed**,
+  git diff --check clean.
+- Real isolated OBS **32.2.0** / Colorway under separate Xvfb and disposable
+  config: initial clipping of lower patchbay was observed and corrected.
+  The resulting vertical view shows native rotary mixer, compact pan/sync
+  strip, and bottom routing nodes; the patchbay scrolls on short docks.
+  Real XTest pointer click at native title ellipsis opened the complete
+  settings popup; a separate real click triggered OBS's native horizontal
+  orientation and displayed horizontally aligned controls and bottom
+  AudioHub. Two checked-in cropped optimized WebP screenshots:
+  `docs/screenshots/readme/audiohub-bottom-menu.webp` and
+  `docs/screenshots/readme/audiohub-horizontal.webp`.
+- Local build SHA256
+  `0d63bbad9ba0050d670e4d7dfc462f63a0d4da39454492323ac125e860ddef86`
+  installed atomically at
+  `~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so`;
+  installed file byte-for-byte matches the tested build. Old binary preserved
+  unchanged at
+  `~/.local/share/aftermarket/rollback/obs-ui-augment.pre-bottom-audiohub.7ae1af78344d.so`.
+  The user's actual OBS **PID 27607** stayed running and was not restarted by
+  this installation, so it retains its previously loaded plugin until a future
+  OBS restart. All three live config files (rules.json, action-strip.json,
+  front-audio-controls.json) retained exact pre/post SHA256 hashes.
+
+Boundaries: Native OBS options-submenu *activation*, per-source change
+persisted through an actual user's OBS restart, source-add/rebuild geometry,
+other platforms/themes, and physical audio delivery were not claimed as
+end-to-end proven. The pre-existing pan/sync native disk-persistence gap
+remains separate and open. No scene/audio routing or user's current profile
+was edited, no user process restarted, and no GitHub push requested.
