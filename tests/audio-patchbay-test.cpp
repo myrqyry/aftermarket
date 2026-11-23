@@ -145,7 +145,9 @@ int main(int argc,char **argv){
  REQUIRE(iconPixels>3);
  sources[1].sourceType="browser_source";bay.refresh();
  REQUIRE(bay.selectSource("voice"));
- // Signal dots come from actual level readings, not 'source enabled'.
+ // Activity is conveyed by the SOURCE/OUTPUT outlines themselves.
+ // Neither the former right-side dot nor the interior dot may change.
+ // The signal must still come from real level readings, not OBS enabled.
  auto before=canvas->grab().toImage();
  levels.insert("voice",{true,true});
  levels.insert("browser",{true,false});
@@ -153,28 +155,35 @@ int main(int argc,char **argv){
  bay.refreshLevels();app.processEvents();
  auto after=canvas->grab().toImage();
  REQUIRE(before!=after);
- int sourceStatusPixels=0,outputStatusPixels=0,leftIconPixels=0;
+ int sourceOutlinePixels=0,outputOutlinePixels=0,oldSourceDotPixels=0,
+     oldOutputDotPixels=0,leftIconPixels=0;
  for(int y=38;y<=48;++y){
+     for(int x=5;x<=9;++x)
+         if(before.pixel(x,y)!=after.pixel(x,y))++sourceOutlinePixels;
+     for(int x=canvas->width()-41;x<=canvas->width()-37;++x)
+         if(before.pixel(x,y)!=after.pixel(x,y))++outputOutlinePixels;
      for(int x=115;x<=124;++x)
-         if(before.pixel(x,y)!=after.pixel(x,y))++sourceStatusPixels;
+         if(before.pixel(x,y)!=after.pixel(x,y))++oldSourceDotPixels;
      for(int x=canvas->width()-12;x<=canvas->width()-4;++x)
-         if(before.pixel(x,y)!=after.pixel(x,y))++outputStatusPixels;
+         if(before.pixel(x,y)!=after.pixel(x,y))++oldOutputDotPixels;
      for(int x=10;x<=20;++x)
          if(before.pixel(x,y)!=after.pixel(x,y))++leftIconPixels;
  }
- REQUIRE(sourceStatusPixels>0);
- REQUIRE(outputStatusPixels>0);
- REQUIRE(leftIconPixels==0); // activity moved right; icon remains stable
- // Activity dots must repaint from the live theme palette, not an RGB constant.
+ REQUIRE(sourceOutlinePixels>0);
+ REQUIRE(outputOutlinePixels>0);
+ REQUIRE(oldSourceDotPixels==0);
+ REQUIRE(oldOutputDotPixels==0);
+ REQUIRE(leftIconPixels==0);
+ // Active outlines must use the live theme highlight, not a fixed RGB.
  const auto originalPalette=canvas->palette();
- const auto originalDots=canvas->grab().toImage();
+ const auto originalOutline=canvas->grab().toImage();
  auto alternatePalette=originalPalette;
  alternatePalette.setColor(QPalette::Highlight,QColor(214,110,38));
  canvas->setPalette(alternatePalette);app.processEvents();
- const auto recoloredDots=canvas->grab().toImage();
+ const auto recoloredOutline=canvas->grab().toImage();
  int themedPixels=0;
- for(int y=38;y<=48;++y)for(int x=115;x<=124;++x)
-     if(originalDots.pixel(x,y)!=recoloredDots.pixel(x,y))++themedPixels;
+ for(int y=38;y<=48;++y)for(int x=5;x<=9;++x)
+     if(originalOutline.pixel(x,y)!=recoloredOutline.pixel(x,y))++themedPixels;
  REQUIRE(themedPixels>0);
  canvas->setPalette(originalPalette);app.processEvents();
  REQUIRE(bay.sourceSignal("voice"));
@@ -195,9 +204,25 @@ int main(int argc,char **argv){
  REQUIRE(bay.outputSignal(1));
  REQUIRE(!bay.outputSignal(6));
  REQUIRE(bay.outputSignal(7)); // monitoring signal
+ const auto activeBorder=canvas->grab().toImage();
  sources[0].muted=true;
  bay.refresh();
  bay.refreshLevels();
+ app.processEvents();
+ const auto mutedBorder=canvas->grab().toImage();
+ int mutedSourceOutline=0,mutedOutputOutline=0,mutedFormerDots=0;
+ for(int y=38;y<=48;++y){
+     for(int x=5;x<=9;++x)
+         if(activeBorder.pixel(x,y)!=mutedBorder.pixel(x,y))++mutedSourceOutline;
+     for(int x=canvas->width()-41;x<=canvas->width()-37;++x)
+         if(activeBorder.pixel(x,y)!=mutedBorder.pixel(x,y))++mutedOutputOutline;
+     for(int x=115;x<=124;++x)
+         if(activeBorder.pixel(x,y)!=mutedBorder.pixel(x,y))++mutedFormerDots;
+     for(int x=canvas->width()-12;x<=canvas->width()-4;++x)
+         if(activeBorder.pixel(x,y)!=mutedBorder.pixel(x,y))++mutedFormerDots;
+ }
+ REQUIRE(mutedSourceOutline>0&&mutedOutputOutline>0);
+ REQUIRE(mutedFormerDots==0);
  REQUIRE(!bay.outputSignal(1)); // browser is silent, voice is muted
  REQUIRE(bay.outputSignal(7)); // Music is independently monitored and producing signal
  REQUIRE(!bay.sourceSignal("voice"));

@@ -44,29 +44,6 @@ AudioPatchbay::ActivityState AudioPatchbay::activityForSource(const RouteSource 
     if(!src.audioActive||!src.signalKnown)return ActivityState::Unknown;
     return src.signalActive?ActivityState::Active:ActivityState::Silent;
 }
-namespace {
-void paintActivityDot(QPainter &p,const QPointF &point,
-                      AudioPatchbay::ActivityState state,
-                      const QColor &accent,const QColor &muted,const QColor &fg){
-    using State=AudioPatchbay::ActivityState;
-    const QColor subtle=paletteBlend(muted,fg,43);
-    const QColor outline=state==State::Active?accent:subtle;
-    p.save();
-    p.setPen(QPen(outline,state==State::Active?1.2:0.95));
-    p.setBrush(state==State::Active?accent:Qt::NoBrush);
-    p.drawEllipse(point,3.15,3.15);
-    if(state==State::Silent){
-        p.setPen(Qt::NoPen);
-        p.setBrush(subtle);
-        p.drawEllipse(point,1.0,1.0);
-    }else if(state==State::Muted){
-        p.setPen(QPen(subtle,1.15,Qt::SolidLine,Qt::RoundCap));
-        p.drawLine(QPointF(point.x()-2.1,point.y()+2.1),
-                   QPointF(point.x()+2.1,point.y()-2.1));
-    }
-    p.restore();
-}
-}
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
     static constexpr int monitorTarget=7;
@@ -75,7 +52,7 @@ class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int sourceLeft=5;
     static constexpr int sourceWidth=124;
     static constexpr int portX=sourceLeft+sourceWidth+4;
-    static constexpr int targetRight=13; // leave room for each output signal dot
+    static constexpr int targetRight=13; // circular output hit area, with clear outer margin
     static constexpr int targetWidth=28; // true circular hit target
     int rowStep() const {
         return qBound(minStep,(height()-58)/qMax(6,int(routes.size())),maxStep);
@@ -242,10 +219,15 @@ protected:
             const auto selectedIt=std::find_if(routes.begin(),routes.end(),
                 [this](const RouteSource &src){return src.id==selected;});
             const bool connected=selectedIt!=routes.end()&&hasConnection(*selectedIt,t);
-            // Idle destinations still need a visible circular outline in
-            // low-contrast OBS themes, without introducing fixed colors.
-            p.setPen(QPen((hoveredTarget==t||connected)?accent:paletteBlend(muted,fg,43),
-                          (hoveredTarget==t||connected)?1.15:0.95));
+            // Signal state is the output circle's OWN outline. Connected
+            // routing remains a subtle fill, never a false "active" border.
+            // The hover ring uses a neutral emphasis so a hovered/silent
+            // output cannot masquerade as one carrying measured audio.
+            const bool live=outputActivity(t)==ActivityState::Active;
+            const QColor inactive=paletteBlend(muted,fg,43);
+            const QColor hovered=paletteBlend(muted,fg,68);
+            p.setPen(QPen(live?accent:(hoveredTarget==t?hovered:inactive),
+                          live?1.85:(hoveredTarget==t?1.3:0.95)));
             p.setBrush(connected?paletteBlend(base,accent,13):base);
             p.drawEllipse(rect);
             p.setFont(bodyFont);
@@ -260,9 +242,6 @@ protected:
             }else {
                 p.drawText(rect,Qt::AlignCenter,QString::number(t));
             }
-            // Separate activity dot to the RIGHT, outside the clickable circle.
-            paintActivityDot(p,QPointF(rect.right()+7,rect.center().y()),
-                             outputActivity(t),accent,muted,fg);
             p.setFont(captionFont);
         }
         // Draw cables behind nodes. The all-wires view is intentionally
@@ -308,15 +287,25 @@ protected:
             const bool current=src.id==selected;
             const auto rect=sourceRect(i);
             const bool focused=src.id==focusedSource();
-            p.setPen(QPen(focused?accent:muted,focused?0.95:0.65));
+            // Measured source signal highlights the card perimeter,
+            // replacing the old interior status dot. Selected/hovered
+            // routes keep their fill and cable emphasis; they must not
+            // borrow the active signal outline when silent or unknown.
+            const bool live=AudioPatchbay::activityForSource(src)==ActivityState::Active;
+            const QColor inactive=paletteBlend(muted,fg,43);
+            const QColor hovered=paletteBlend(muted,fg,68);
+            p.setPen(QPen(live?accent:(focused?hovered:inactive),
+                          live?1.65:(focused?1.0:0.75)));
             p.setBrush(current?paletteBlend(base,accent,18):base);
             p.drawRoundedRect(rect,5,5);
             QFont sourceFont=bodyFont;
             sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
             p.setFont(sourceFont);
             p.setPen(fg);
-            const QString name=p.fontMetrics().elidedText(src.name,AppTextElision::currentCustomMode(),sourceWidth-44);
-            p.drawText(rect.adjusted(22,0,-17,0),Qt::AlignVCenter|Qt::AlignLeft,name);
+            const QRect textRect=rect.adjusted(22,0,-7,0);
+            const QString name=p.fontMetrics().elidedText(
+                src.name,AppTextElision::currentCustomMode(),textRect.width()-2);
+            p.drawText(textRect,Qt::AlignVCenter|Qt::AlignLeft,name);
             // Palette-derived source-type pictogram at the left of the label.
             const QRectF icon(rect.left()+6,rect.center().y()-5,10,10);
             p.setPen(QPen(caption,1.15,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
@@ -364,9 +353,6 @@ protected:
                            QPointF(icon.right()-2,icon.center().y()+3));
                 break;
             }
-            // Signal dot is on the RIGHT; keep it distinct from the cable port.
-            paintActivityDot(p,QPointF(rect.right()-9,rect.center().y()),
-                             AudioPatchbay::activityForSource(src),accent,muted,fg);
             p.setBrush(focused?accent:muted);
             p.setPen(Qt::NoPen);
             p.drawEllipse(QPointF(portX,firstY+i*rowStep()),2.3,2.3);

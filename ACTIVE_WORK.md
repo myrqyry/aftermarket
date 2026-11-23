@@ -1930,3 +1930,67 @@ Boundaries: Floating OS/WM window titlebars and third-party custom title
 bars retain their native controls; the plugin does not replace those title
 bars. Protected OBS built-in docks remain nonclosable by design. No push
 or external publication requested.
+
+## Slice 45 — replace AudioBus activity dots with live node outlines (2026-11-22)
+
+User clarified the AudioBus visual treatment: do not introduce another status
+indicator. REMOVE the current separate activity dots entirely and use the
+OUTLINE of each existing source card and output circle to show active audio.
+
+Implementation:
+- Removed the paintActivityDot renderer and both source/output dot draw calls.
+  The activityForSource / outputActivity logic, including real recent measured
+  signal, OBS enabled/muted state, Monitor Only handling and source aggregation,
+  remains unchanged and is now the single authority for node borders.
+- Measured Active source card borders and numbered/headphones output circle
+  borders draw a slightly stronger line using the active QPalette Highlight.
+  Silent, muted, disabled, unknown and stale signal states use a neutral outline
+  rather than falsely claiming activity. Tooltip descriptions retain more
+  granular signal state.
+- Selected source / hovered source / connected destination remain separate:
+  subtle selected-route background fills, hover-neutral emphasis and cables,
+  WITHOUT granting the active accent border merely because they are selected
+  or connected. Output node hit geometry, transparent corners, native source
+  routing and monitor operations are not changed.
+- Reclaimed former in-card dot space for a wider source label. The cable port
+  and registered-source-type icons remain intact. No additional widgets,
+  overlays, polling paths or settings were introduced.
+- Updated the README and replaced the outdated right-side-dot screenshot with
+  a 20 KB cropped WebP from a REAL OBS routing view:
+  docs/screenshots/readme/audiohub-activity-outlines.webp. Old screenshot
+  docs/screenshots/readme/mixer-patchbay.webp was removed from HEAD but remains
+  recoverable in Git history.
+
+Verification:
+- TDD: new visual regression initially failed on sourceOutlinePixels>0 with
+  the old dot renderer. Green regression requires source card and output circle
+  border changes from measured input, zero changes at both old dot locations,
+  source-type icon pixels untouched, and new outline recoloring when the
+  live Qt Highlight palette changes. Muting a previously active source removes
+  both the source's and eligible output's highlighted outlines without
+  changing former dot regions. Previous signal aggregation, transparent
+  circle hit testing and native drag/toggle tests remain.
+- Clean build without warnings, serial full CTest **24/24 passed**,
+  git diff --check passed.
+- Verified in real isolated OBS Studio 32.2.0 under Xvfb: copied profile
+  with actual looping tone and silence media sources. An old safe-mode.flag
+  initially disabled the UI; moved it out of ONLY the disposable profile,
+  never the real user's config. Confirmed the exact new module loaded from
+  the disposable XDG plugin path in /proc/PID/maps and that both OBS audio
+  envelope sources attached. Clicked the native AudioBus bottom switch and
+  inspected graph screenshot: Tone test has active highlighted card outline,
+  its eligible output circles have accent outlines, Silent test remains
+  neutral, and neither card nor circle has a separate activity dot.
+- Installed final compiled module SHA256
+  0bc93f608aa2fe642f943f690d014169df0060ed59b4e72ef48ab124aea2dcce
+  to ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so
+  and confirmed installed bytes exactly match build. Prior installed build
+  preserved at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-audiobus-outlines.554851c6e94a.so.
+  User OBS PID 270746 was left running and was not restarted. All four
+  tracked real user config file hashes were identical before and after
+  installation; OBS scene/audio/routing values untouched.
+
+Boundary: The user OBS instance must restart before it can load the newly
+installed module. Activity still means measured signal in OBS, not proof of
+audible physical playback. No GitHub push/release requested.
