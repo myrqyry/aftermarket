@@ -2054,3 +2054,64 @@ Boundary: the routing actions are in the title menu on docked AudioBus.
 On floating/custom-title docks the pre-existing native title accessory can
 be absent; this slice did not add another title bar. No GitHub push,
 external release, or change to user scenes/audio routing requested.
+
+## Slice 47 — audio channel widths independent of source names (2026-11-22)
+
+User asked that native Audio Mixer channels NOT grow wider merely because an
+OBS source has a long name. Keep complete OBS names, existing mixer geometry,
+and reversible native widget ownership.
+
+Implementation:
+- FrontAudioControls now recognizes native OBS 32.x VolControl widgets
+  (also retaining older VolumeControl integrations) and locates only their
+  OBSSourceLabel QLabel or older VolumeName QAbstractButton. The label gets
+  QSizePolicy::Ignored horizontally, so its text/sizeHint cannot dictate
+  channel width; its original vertical policy, font, text, tooltip, source
+  identity, events and paint remain OBS-owned.
+- A compact 68 Qt-pixel name-independent MINIMUM label allowance prevents
+  OBS's centered vertical QLabel layout from collapsing names to zero width
+  when size hints are ignored. Labels can use more room in wider layouts;
+  no fixed width is applied to the entire channel or faders. Both vertical
+  columns and horizontal rows are supported without deriving width from
+  each source's name. The existing global middle-ellipsis feature may
+  shorten displayed names; full source names remain in OBS.
+- Only known native mixer source-name widgets are affected. Each original
+  QSizePolicy and minimum width are saved using QPointer-managed entries,
+  and are restored during detach/emergency cleanup (without clobbering an
+  unrelated vertical policy change). New source labels are discovered on
+  ordinary existing refresh/poll, including name changes.
+- README now documents this explicitly with a small native OBS screenshot:
+  docs/screenshots/readme/mixer-name-independent-width.webp.
+
+Verification:
+- TDD RED: actual OBS-like VolControl + OBSSourceLabel QLabel layout
+  initially failed because names still had Preferred horizontal size
+  policy. Initial naive Ignored policy passed sizeHint but a REAL OBS
+  screenshot revealed names became invisible. Added another RED test for
+  visible label width and full rollback, then introduced constant minimum
+  readable label allowance; both regressions now pass. Older VolumeName
+  QToolButton compatibility and native-style horizontal row tests pass.
+- Real OBS Studio 32.2.0 side-by-side before/after through separate
+  disposable XDG profiles. Both scene copies contained the exact long
+  synthetic source name "A Very Long Microphone Name For Testing Channel
+  Width Independent Of This Entire Name" and the short "Tone test" source.
+  Confirmed both module versions loaded at their sandbox paths in
+  /proc/PID/maps and complete long name in OBS startup logs. Before:
+  native vertical mixer channel for long source noticeably wider than
+  short source. Final after: similarly compact channel widths, names
+  visible, long one truncated and short one readable, gain/mute/monitor and
+  per-channel pan/sync controls still present. These screenshots were
+  taken in isolated OBS; user scene and layout were never changed.
+- Final full CMake build clean/no compiler warnings, 24/24 serial CTests
+  passed, git diff --check passed.
+- Installed final binary SHA256
+  5eb75d76004c0d1c7b49fd233b3fc73ea85d25ba687246c82631195ad8d223e2
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so;
+  bytewise match verified. Previous installed binary preserved at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-name-independent-channels.a4e502007004.so.
+  User OBS PID 294527 was not restarted. All four tracked real user
+  configuration file hashes stayed identical before/after.
+
+Boundary: Native OBS needs restart to load the installed library. No
+GitHub push or release requested. Fully custom third-party mixer widgets
+are outside this size policy adapter.

@@ -240,6 +240,10 @@ widgets, menus and source list selection remain owned by OBS and its theme.**
 
 Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket → Mixer**. The native Audio Mixer and AudioHub remain **two alternate views inside the same dock**, not two vertically stacked panels. Only the **interactive AudioBus switch** has moved to a small bottom-edge control: click **AudioBus** to open the routing view, then **Audio Mixer** to return. The original OBS audio controls are preserved, and emergency recovery **Ctrl+Alt+Shift+F12** restores the native mixer without changing scene or audio routing.
 
+**Audio channel sizing:** Long OBS source names no longer enlarge mixer channels. Both vertical mixer columns and horizontal mixer rows size from their controls and available layout space, with a compact name-label allowance independent of the label text. A long name is truncated within its channel rather than expanding that channel; OBS keeps the complete source name. The original native label size policies and minimum widths are restored on detach/emergency recovery.
+
+![Native Audio Mixer with long and short source names at matching compact channel widths](docs/screenshots/readme/mixer-name-independent-width.webp)
+
 **AudioHub (alternate routing view)** is a compact source-to-output patchbay:
 
 - **Click a source node to select it**, then click a numbered destination to toggle its route or drag the source to connect. Clicking an already-connected track toggles it off; repeating a drag never disconnects it. **Show all wires** reveals every source's routing. Hovering a source or output temporarily highlights related paths without modifying state.

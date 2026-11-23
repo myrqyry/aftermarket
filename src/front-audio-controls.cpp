@@ -24,6 +24,7 @@
 #include <QSet>
 #include <QMap>
 #include <QLayout>
+#include <QSizePolicy>
 #include <QtMath>
 #include <algorithm>
 
@@ -38,8 +39,29 @@ QString sourceName(QWidget *volume){
     return {};
 }
 bool volumeControl(QWidget *widget){
-    return widget&&(widget->inherits("VolumeControl")||
+    // OBS Studio 32.x calls its native mixer widget VolControl. Retain the
+    // legacy/integration spelling for existing plugin-owned test layouts.
+    return widget&&(widget->inherits("VolControl")||
+                     widget->objectName()=="VolControl"||
+                     widget->inherits("VolumeControl")||
                      widget->objectName()=="VolumeControl");
+}
+QWidget *sourceNameLabel(QWidget *volume){
+    if(!volume)return nullptr;
+    for(auto *candidate:volume->findChildren<QWidget*>()){
+        // OBS uses OBSSourceLabel (QLabel); older integrations may use a
+        // VolumeName button. Recognize only source-name controls, not meter,
+        // balance, or sync labels that share the same channel hierarchy.
+        if(candidate->inherits("OBSSourceLabel")||
+           candidate->objectName()=="OBSSourceLabel") {
+            if(qobject_cast<QLabel*>(candidate))return candidate;
+        }
+        if(candidate->inherits("VolumeName")||
+           candidate->objectName()=="VolumeName") {
+            if(qobject_cast<QAbstractButton*>(candidate))return candidate;
+        }
+    }
+    return nullptr;
 }
 }
 struct FrontAudioControls::State {
@@ -66,6 +88,52 @@ struct FrontAudioControls::State {
     QString nativeOptionsTitle;
     bool footerWasHidden=false;
     QList<Row> rows;
+    struct NamePolicy {
+        QPointer<QWidget> label;
+        QSizePolicy original;
+        int originalMinimumWidth=0;
+        int appliedMinimumWidth=0;
+    };
+    QList<NamePolicy> namePolicies;
+    void normalizeSourceNameWidths(){
+        if(!native)return;
+        for(auto *volume:native->findChildren<QWidget*>()){
+            if(!volumeControl(volume)||volume->property("aftermarket-foreign").toBool())
+                continue;
+            auto *label=sourceNameLabel(volume);
+            if(!label)continue;
+            const auto already=std::find_if(namePolicies.cbegin(),namePolicies.cend(),
+                [label](const NamePolicy &entry){return entry.label==label;});
+            if(already!=namePolicies.cend())continue;
+            // A source's text belongs to OBS and must not become a geometry
+            // requirement. Keep a compact NAME-INDEPENDENT readable label
+            // width: IgnoreFlag alone makes Qt collapse the QLabel entirely
+            // under OBS's centered vertical channel layout.
+            constexpr int compactLabelWidth=68;
+            const auto original=label->sizePolicy();
+            const int previousMinimum=label->minimumWidth();
+            const int minimum=qMax(previousMinimum,compactLabelWidth);
+            namePolicies.append({label,original,previousMinimum,minimum});
+            auto policy=original;
+            policy.setHorizontalPolicy(QSizePolicy::Ignored);
+            label->setSizePolicy(policy);
+            if(minimum!=previousMinimum)label->setMinimumWidth(minimum);
+        }
+    }
+    void restoreSourceNameWidths(){
+        for(const auto &entry:namePolicies){
+            if(!entry.label)continue;
+            auto current=entry.label->sizePolicy();
+            // Do not clobber unrelated external changes to vertical policy.
+            if(current.horizontalPolicy()==QSizePolicy::Ignored){
+                current.setHorizontalPolicy(entry.original.horizontalPolicy());
+                entry.label->setSizePolicy(current);
+            }
+            if(entry.label->minimumWidth()==entry.appliedMinimumWidth)
+                entry.label->setMinimumWidth(entry.originalMinimumWidth);
+        }
+        namePolicies.clear();
+    }
     QTimer poll;
     bool useKnobs=false;
     bool busy=false;
@@ -231,6 +299,7 @@ bool FrontAudioControls::attach(QWidget *nativeMixer){
 }
 void FrontAudioControls::detach(){
     state->poll.stop();
+    state->restoreSourceNameWidths();
     state->restoreFooter(this);
     for(auto &row:state->rows)state->remove(row);
     state->rows.clear();
@@ -336,7 +405,9 @@ void FrontAudioControls::populateSettingsMenu(QMenu *menu){
     }
 }
 void FrontAudioControls::refresh(){
-    if(!state->native||!state->query||state->busy)return;
+    if(!state->native||state->busy)return;
+    state->normalizeSourceNameWidths();
+    if(!state->query)return;
     state->busy=true;
     const auto available=state->query();
     QMap<QString,AudioPropertyState> byName;

@@ -9,6 +9,8 @@
 #include <QTemporaryDir>
 #include <QFile>
 #include <QLabel>
+#include <QFrame>
+#include <QSizePolicy>
 #include <QEventLoop>
 #include <QTimer>
 #include <QMenu>
@@ -224,6 +226,128 @@ int main(int argc,char **argv){
               hSync->mapTo(hAdd,QPoint(0,0)).y())<=14);
  hUi.detach();app.processEvents();
  REQUIRE(hRow->count()==2&&hGain->value()==63);
- std::cout<<"native Audio Mixer front pan/offset, knob mode and reversible lifecycle verified\n";
+ // A long source name must not determine vertical mixer channel width.
+ // OBS 32.x uses VolControl + OBSSourceLabel (QLabel), while older
+ // integrations can expose VolumeControl + VolumeName (QToolButton).
+ QWidget nativeChannels;
+ auto *nativeColumns=new QHBoxLayout(&nativeChannels);
+ nativeColumns->setContentsMargins(0,0,0,0);
+ auto makeNativeColumn=[&](const QString &name){
+     auto *vol=new QFrame(&nativeChannels);
+     vol->setObjectName("VolControl");
+     vol->setMaximumWidth(110); // same OBS maximum, no fixed target width
+     auto *vl=new QVBoxLayout(vol);
+     vl->setContentsMargins(0,0,0,0);
+     auto *label=new QLabel(name,vol);
+     label->setObjectName("OBSSourceLabel");
+     vl->addWidget(label);
+     auto *meter=new QSlider(Qt::Vertical,vol);
+     meter->setFixedSize(28,112);
+     vl->addWidget(meter);
+     nativeColumns->addWidget(vol,0,Qt::AlignLeft);
+     return qMakePair(vol,label);
+ };
+ auto longChannel=makeNativeColumn("An Extremely Long Microphone Source Name That Should Never Stretch Its Channel");
+ auto shortChannel=makeNativeColumn("Mic");
+ nativeChannels.resize(320,230);
+ nativeChannels.show();app.processEvents();
+ const auto longOriginalPolicy=longChannel.second->sizePolicy();
+ const auto shortOriginalPolicy=shortChannel.second->sizePolicy();
+ const int originalLongMinimum=longChannel.second->minimumWidth();
+ const int originalShortMinimum=shortChannel.second->minimumWidth();
+ REQUIRE(longChannel.first->sizeHint().width()>shortChannel.first->sizeHint().width());
+ augment::FrontAudioControls widths(tmp.filePath("channel-widths.json"),
+     []{return QList<augment::AudioPropertyState>{};},{},{});
+ REQUIRE(widths.attach(&nativeChannels));
+ app.processEvents();
+ REQUIRE(longChannel.second->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored);
+ REQUIRE(shortChannel.second->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored);
+ REQUIRE(longChannel.second->width()>=60&&shortChannel.second->width()>=60);
+ REQUIRE(longChannel.second->minimumWidth()==shortChannel.second->minimumWidth());
+ REQUIRE(longChannel.second->minimumWidth()<=84); // compact and independent of name
+ REQUIRE(longChannel.first->sizeHint().width()==shortChannel.first->sizeHint().width());
+ const QString longExact=longChannel.second->text();
+ longChannel.second->setText(longExact+" [new descriptive suffix]");
+ widths.refresh();app.processEvents();
+ REQUIRE(longChannel.second->text()==longExact+" [new descriptive suffix]");
+ REQUIRE(longChannel.first->sizeHint().width()==shortChannel.first->sizeHint().width());
+ widths.detach();app.processEvents();
+ REQUIRE(longChannel.second->sizePolicy()==longOriginalPolicy);
+ REQUIRE(shortChannel.second->sizePolicy()==shortOriginalPolicy);
+ REQUIRE(longChannel.second->minimumWidth()==originalLongMinimum);
+ REQUIRE(shortChannel.second->minimumWidth()==originalShortMinimum);
+ REQUIRE(longChannel.first->sizeHint().width()>shortChannel.first->sizeHint().width());
+ // In a side-by-side layout native source button labels must also be
+ // width-neutral, while the real source-name strings remain unmodified.
+ QWidget legacyChannels;
+ auto *legacyColumns=new QHBoxLayout(&legacyChannels);
+ legacyColumns->setContentsMargins(0,0,0,0);
+ QToolButton *wideButton=nullptr;
+ for(const QString &name:{"A long source label that previously stretched mixer channels","Short"}){
+     auto *vol=new QWidget(&legacyChannels);
+     vol->setObjectName("VolumeControl");
+     auto *vl=new QVBoxLayout(vol);
+     vl->setContentsMargins(0,0,0,0);
+     auto *label=new QToolButton(vol);
+     label->setObjectName("VolumeName");
+     label->setText(name);
+     vl->addWidget(label);
+     auto *fader=new QSlider(Qt::Vertical,vol);
+     fader->setFixedSize(28,110);
+     vl->addWidget(fader);
+     legacyColumns->addWidget(vol,0,Qt::AlignLeft);
+     if(!wideButton)wideButton=label;
+ }
+ legacyChannels.resize(320,230);legacyChannels.show();app.processEvents();
+ augment::FrontAudioControls legacyWidth(tmp.filePath("legacy-channel-widths.json"),
+    []{return QList<augment::AudioPropertyState>{};},{},{});
+ REQUIRE(legacyWidth.attach(&legacyChannels));app.processEvents();
+ REQUIRE(wideButton->sizePolicy().horizontalPolicy()==QSizePolicy::Ignored);
+ REQUIRE(wideButton->text().startsWith("A long source label"));
+ legacyWidth.detach();app.processEvents();
+ REQUIRE(wideButton->sizePolicy().horizontalPolicy()!=QSizePolicy::Ignored);
+ // Horizontal OBS mixer layout: source-name width must not override the
+ // available gain/meter row width either. No fixed width on the entire
+ // horizontal channel, so resizing the dock still works normally.
+ QWidget horizontalNative;
+ auto *horizontalRoot=new QVBoxLayout(&horizontalNative);
+ horizontalRoot->setContentsMargins(0,0,0,0);
+ auto makeHorizontal=[&](const QString &name){
+     auto *vol=new QFrame(&horizontalNative);
+     vol->setObjectName("VolControl");
+     auto *layout=new QVBoxLayout(vol);
+     layout->setContentsMargins(0,0,0,0);
+     auto *textRow=new QHBoxLayout;
+     textRow->setContentsMargins(0,0,0,0);
+     auto *label=new QLabel(name,vol);
+     label->setObjectName("OBSSourceLabel");
+     textRow->addWidget(label);
+     textRow->addWidget(new QLabel("-10 dB",vol));
+     layout->addLayout(textRow);
+     auto *fader=new QSlider(Qt::Horizontal,vol);
+     fader->setFixedWidth(148);
+     layout->addWidget(fader);
+     horizontalRoot->addWidget(vol);
+     return qMakePair(vol,label);
+ };
+ auto horizontalLong=makeHorizontal(
+     "A long horizontally oriented OBS audio source name that must not expand its mixer row");
+ auto horizontalShort=makeHorizontal("TTS");
+ horizontalNative.resize(380,200);horizontalNative.show();app.processEvents();
+ REQUIRE(horizontalLong.first->sizeHint().width()>horizontalShort.first->sizeHint().width());
+ const auto horizontalOriginal=horizontalLong.second->sizePolicy();
+ augment::FrontAudioControls hWidths(tmp.filePath("horizontal-native-widths.json"),
+     []{return QList<augment::AudioPropertyState>{};},{},{});
+ REQUIRE(hWidths.attach(&horizontalNative));app.processEvents();
+ REQUIRE(horizontalLong.first->sizeHint().width()==horizontalShort.first->sizeHint().width());
+ REQUIRE(horizontalLong.second->width()>=60);
+ REQUIRE(horizontalLong.second->text().contains("must not expand"));
+ horizontalLong.second->setText("Updated very long horizontal source name");
+ hWidths.refresh();app.processEvents();
+ REQUIRE(horizontalLong.first->sizeHint().width()==horizontalShort.first->sizeHint().width());
+ hWidths.detach();app.processEvents();
+ REQUIRE(horizontalLong.second->sizePolicy()==horizontalOriginal);
+ REQUIRE(horizontalLong.first->sizeHint().width()>horizontalShort.first->sizeHint().width());
+ std::cout<<"native vertical and horizontal Audio Mixer channel widths are name-independent; reversible layout verified\n";
  return 0;
 }
