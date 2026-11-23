@@ -255,15 +255,34 @@ Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket →
 
 ![OBS dock titles with theme-aware icons](docs/screenshots/readme/dock-title-icons.webp)
 
-**Three-dot menus on native dock titles:** Every native-titled OBS or plugin dock gets a theme-colored vertical ellipsis. Its **first action** is **Collapse**, changing to **Expand** when the dock is rolled up; it uses the existing Aftermarket Panels action, preserves the original widget and restores its dimensions on expansion. Tabbed or otherwise non-collapsible native docks show a disabled action instead of altering native ownership. Floating docks retain their window manager title, so Aftermarket does not overlay its title buttons. Newly created plugin docks are discovered automatically. The Audio Mixer keeps its more detailed menu, with the same Collapse/Expand action **above** its existing mixer-only entries, and no second ellipsis. The original dock title, close/float buttons, native Docks menu names and menu interactions stay under OBS ownership. There is no new dock or floating toolbar.
+**Three-dot menus on native dock titles:** Every native-titled OBS or plugin
+dock gets a theme-colored vertical ellipsis. **Collapse / Expand**, **Pop out**
+and **Close** live together in that menu instead of giving Pop out and Close
+separate icons in the header. Collapse/Expand still uses the existing Panels
+operation and preserves the original dock content. Pop out invokes the dock's
+native setFloating(true) action and Close invokes its native close() lifecycle,
+without replacing OBS dock identities, toggle actions or the dock's title bar.
+These entries have theme-native icons and honor the original Qt feature flags.
+OBS deliberately marks its five built-in docks as **not closable**: their Close
+entry stays disabled rather than allowing an unsupported action. OBS's
+**Lock Docks** also disables the corresponding actions.
+
+While a native dock header has a usable Aftermarket overflow, its separate
+native Pop out and Close buttons are hidden and the horizontal title space
+reclaimed. If the dock is floating, uses a custom/vertical title bar, is
+hidden, or has insufficient room for the overflow, its original Qt window
+features/buttons are restored. Emergency restore and plugin unloading likewise
+restore them. The Audio Mixer uses this **same dock action group** above its
+existing mixer-specific menu items (with no duplicate ellipsis). There is no
+extra dock or floating toolbar.
 
 ![Overflow buttons on OBS native docks, including a shortened Scene Transitions title](docs/screenshots/readme/dock-all-overflows.webp)
 
-![Scenes dock three-dot menu: Collapse](docs/screenshots/readme/dock-collapse-menu.webp)
+![Native Scenes dock overflow with Collapse, Pop out and Close](docs/screenshots/readme/dock-window-actions.webp)
 
 ![Scenes after Collapse; native source contents remain intact](docs/screenshots/readme/dock-collapsed.webp)
 
-![Audio Mixer retains its options under the first Collapse action](docs/screenshots/readme/dock-mixer-overflow.webp)
+![Audio Mixer overflow with Pop out and Close above mixer-specific options](docs/screenshots/readme/mixer-dock-window-actions.webp)
 
 **App-wide long-text truncation:** Choose **OBS Settings → Aftermarket → Appearance → Long text → At end / In middle**. The same preference controls truncation in dock titles, native Qt source/scene lists and other item views, tabs, non-editable dropdowns, pushbuttons, checkboxes/radio buttons, ordinary non-wrapping display labels, and Aftermarket's custom AudioHub source labels and menu selection summaries. Middle truncation preserves both ends (for example, Scene…itions) and applies to newly created windows and plugin docks. Existing installations default to End, which **leaves other OBS widget types' existing presentation untouched**. Turning middle mode off restores previous Qt view/tab preferences and full label text. The choice is saved in plugin_config/obs-ui-augment/dock-title-settings.ini.
 
@@ -277,7 +296,7 @@ The presentation layer does **not** rewrite OBS source/model names, editable tex
 
 ![The Scene Transitions dock with a middle ellipsis](docs/screenshots/readme/dock-title-middle.webp)
 
-**Native mixer title and bottom control:** After **Collapse/Expand**, the **vertical three-dot button in the genuine OBS dock title** opens the pan/sync presentation setting and the original **hidden sources, mixer orientation, Advanced Audio Properties and Mixer options** actions, plus a **Channel settings** submenu with per-source native Pan and Sync editors. The old OBS footer is hidden only when the header menu is actually available; floating or cramped docks restore it, so controls remain accessible. The interactive **AudioBus** button lives by itself at the dock's bottom edge and switches between mixer and routing pages, never stacking the entire routing graph below OBS. Dock icons, native titles, native undock controls, and drag behavior remain untouched.
+**Native mixer title and bottom control:** After **Collapse/Expand**, **Pop out**, and **Close**, the **vertical three-dot button in the genuine OBS dock title** opens the pan/sync presentation setting and the original **hidden sources, mixer orientation, Advanced Audio Properties and Mixer options** actions, plus a **Channel settings** submenu with per-source native Pan and Sync editors. The old OBS footer is hidden only when the header menu is actually available; floating or cramped docks restore it, so controls remain accessible. The interactive **AudioBus** button lives by itself at the dock's bottom edge and switches between mixer and routing pages, never stacking the entire routing graph below OBS. Dock icons, native titles and drag behavior remain native; undock and close actions are now consolidated into the header overflow when available.
 
 ![Mixer with only the AudioBus switch at the bottom](docs/screenshots/readme/audiohub-bottom-switch.webp)
 

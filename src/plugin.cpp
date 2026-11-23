@@ -117,6 +117,10 @@ static bool setAudioMixerBackside(bool enabled) {
             panels->addCollapseAction(menu,safeDock);
             menu->addSeparator();
         }
+        if(dockTitleIcons){
+            dockTitleIcons->appendDockWindowActions(menu,safeDock);
+            menu->addSeparator();
+        }
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);
         knobs->setChecked(frontAudio->knobs());

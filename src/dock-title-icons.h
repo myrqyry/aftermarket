@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QHash>
+#include <QDockWidget>
 #include <memory>
 #include <QPointer>
 #include <QString>
@@ -34,6 +35,9 @@ public:
     QToolButton *moreButton(QDockWidget *dock) const;
     Qt::TextElideMode ellipsisMode() const;
     bool setEllipsisMode(Qt::TextElideMode mode);
+    // Shared by ordinary dock overflows and the mixer's specialized overflow.
+    // These are the original QDockWidget operations, not surrogate dock state.
+    void appendDockWindowActions(QMenu *menu,QDockWidget *dock);
 private:
     bool eventFilter(QObject *watched,QEvent *event) override;
     void scheduleRefresh();
@@ -46,10 +50,15 @@ private:
     QHash<QDockWidget*,QPointer<QWidget>> icons_;
     QHash<QDockWidget*,QPointer<QToolButton>> moreButtons_;
     QHash<QDockWidget*,QString> originalTitles_;
+    QHash<QDockWidget*,QDockWidget::DockWidgetFeatures> originalDockFeatures_;
     QHash<QDockWidget*,QString> displayedTitles_;
     QHash<QDockWidget*,QString> originalActionLabels_;
     bool adjustingTitle_=false;
+    bool adjustingFeatures_=false;
     bool scheduled_=false;
     void restoreTitle(QDockWidget *dock);
+    QDockWidget::DockWidgetFeatures actualDockFeatures(QDockWidget *dock) const;
+    void suppressNativeButtons(QDockWidget *dock);
+    void restoreNativeButtons(QDockWidget *dock);
 };
 }

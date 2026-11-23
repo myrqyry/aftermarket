@@ -145,6 +145,7 @@ DockTitleIcons::~DockTitleIcons(){
         if(auto *dock=it.key()){
             dock->removeEventFilter(this);
             restoreTitle(dock);
+            restoreNativeButtons(dock);
         }
         if(it.value())delete it.value().data();
     }
@@ -174,6 +175,73 @@ void DockTitleIcons::restoreTitle(QDockWidget *dock){
         if(originalActionLabels_.contains(dock))
             action->setText(originalActionLabels_.value(dock));
     }
+}
+QDockWidget::DockWidgetFeatures DockTitleIcons::actualDockFeatures(QDockWidget *dock) const {
+    return originalDockFeatures_.value(dock,dock?dock->features():
+                                             QDockWidget::NoDockWidgetFeatures);
+}
+void DockTitleIcons::suppressNativeButtons(QDockWidget *dock){
+    if(!dock||dock->isFloating()||dock->titleBarWidget())return;
+    constexpr auto managed=QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable;
+    const auto before=dock->features();
+    if(!(before&managed))return;
+    if(!originalDockFeatures_.contains(dock))
+        originalDockFeatures_.insert(dock,before);
+    const QScopedValueRollback<bool> guard(adjustingFeatures_,true);
+    dock->setFeatures(before & ~managed);
+}
+void DockTitleIcons::restoreNativeButtons(QDockWidget *dock){
+    if(!dock)return;
+    auto it=originalDockFeatures_.find(dock);
+    if(it==originalDockFeatures_.end())return;
+    const auto original=it.value();
+    originalDockFeatures_.erase(it);
+    const QScopedValueRollback<bool> guard(adjustingFeatures_,true);
+    // Keep externally changed non-window features (movable/vertical title),
+    // but restore the native float/close capabilities we temporarily hid.
+    constexpr auto managed=QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetFloatable;
+    const auto restored=(dock->features() & ~managed) | (original & managed);
+    if(dock->features()!=restored)dock->setFeatures(restored);
+}
+void DockTitleIcons::appendDockWindowActions(QMenu *menu,QDockWidget *dock){
+    if(!menu||!dock)return;
+    const auto native=actualDockFeatures(dock);
+    auto *popout=menu->addAction(dock->style()->standardIcon(QStyle::SP_TitleBarNormalButton),
+                                 "Pop out");
+    popout->setObjectName("aftermarket-dock-popout-action");
+    popout->setEnabled(!dock->isFloating() &&
+                        bool(native&QDockWidget::DockWidgetFloatable));
+    auto *close=menu->addAction(dock->style()->standardIcon(QStyle::SP_DockWidgetCloseButton),
+                                "Close");
+    close->setObjectName("aftermarket-dock-close-action");
+    // OBS deliberately makes its five built-in docks non-closable.
+    // Do not silently override their native feature flags.
+    close->setEnabled(bool(native&QDockWidget::DockWidgetClosable));
+    QPointer<DockTitleIcons> owner=this;
+    QPointer<QDockWidget> target=dock;
+    QObject::connect(popout,&QAction::triggered,menu,[owner,target]{
+        // Delay until Qt finishes dispatching the action from a QMenu that
+        // may be inside the widget being detached.
+        if(!owner)return;
+        QTimer::singleShot(0,owner,[owner,target]{
+            if(!owner||!target||target->isFloating()||
+               !(owner->actualDockFeatures(target)&QDockWidget::DockWidgetFloatable))return;
+            owner->restoreNativeButtons(target);
+            target->setFloating(true);
+            owner->scheduleRefresh();
+        });
+    });
+    QObject::connect(close,&QAction::triggered,menu,[owner,target]{
+        if(!owner)return;
+        QTimer::singleShot(0,owner,[owner,target]{
+            if(!owner||!target)return;
+            if(!(owner->actualDockFeatures(target)&
+                 QDockWidget::DockWidgetClosable))return;
+            owner->restoreNativeButtons(target);
+            target->close(); // native closeEvent / visibilityChanged lifecycle
+            owner->scheduleRefresh();
+        });
+    });
 }
 QWidget *DockTitleIcons::glyph(QDockWidget *dock)const{
     return icons_.value(dock);
@@ -225,6 +293,8 @@ void DockTitleIcons::refresh(){
                 auto *unavailable=menu->addAction("Collapse");
                 unavailable->setEnabled(false);
             }
+            menu->addSeparator();
+            owner->appendDockWindowActions(menu,safe);
         });
         moreButtons_.insert(dock,more);
         auto *icon=new TitleGlyph(kind,dock);
@@ -237,8 +307,28 @@ void DockTitleIcons::refresh(){
             // usable title geometry; replay placement once layout settles.
             QTimer::singleShot(90,this,[this]{refresh();});
             dock->installEventFilter(this);
+            connect(dock,&QDockWidget::topLevelChanged,this,
+                    [this](bool){scheduleRefresh();});
+            connect(dock,&QDockWidget::featuresChanged,this,
+                    [this,dock](QDockWidget::DockWidgetFeatures features){
+                if(adjustingFeatures_)return;
+                auto it=originalDockFeatures_.find(dock);
+                if(it!=originalDockFeatures_.end()){
+                    // Preserve changes made to nonmanaged flags by OBS and
+                    // other plugins while our buttons are hidden.
+                    constexpr auto managed=QDockWidget::DockWidgetClosable |
+                                           QDockWidget::DockWidgetFloatable;
+                    if(features==QDockWidget::NoDockWidgetFeatures||
+                       (features&managed))
+                        it.value()=features; // OBS Lock Docks / unlock
+                    else
+                        it.value()=(it.value()&managed)|(features&~managed);
+                }
+                scheduleRefresh();
+            });
             connect(dock,&QObject::destroyed,this,[this,dock]{
                 icons_.remove(dock);
+                originalDockFeatures_.remove(dock);
                 moreButtons_.remove(dock);
                 originalTitles_.remove(dock);
                 originalActionLabels_.remove(dock);
@@ -296,6 +386,8 @@ bool DockTitleIcons::eventFilter(QObject *watched,QEvent *event){
                 scheduleRefresh();break;
             default:break;
             }
+            if(event->type()==QEvent::Show||event->type()==QEvent::Hide)
+                scheduleRefresh();
         }
     }
     return QObject::eventFilter(watched,event);
@@ -306,6 +398,7 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
         if(icon)icon->hide();
         if(more)more->hide();
         restoreTitle(dock);
+        restoreNativeButtons(dock);
     };
     if(!dock||!icon||!dock->isVisible()||dock->isFloating()||
        dock->titleBarWidget()||
@@ -314,6 +407,9 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
     }
     const int titleHeight=dock->widget()->geometry().top();
     if(titleHeight<16||titleHeight>48){conceal();return;}
+    // Expand the native title's text area by suppressing ONLY the two Qt
+    // window buttons; a working Aftermarket overflow will provide both.
+    suppressNativeButtons(dock);
     QStyleOptionDockWidget option;
     option.initFrom(dock);
     option.title=originalTitle(dock);
@@ -370,5 +466,9 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
         more->move(x,qMax(0,(titleHeight-more->height())/2));
         more->show();more->raise();
     }else more->hide();
+    if(!more->isVisible()&&!specialized){
+        // A dock without an accessible menu must retain native buttons.
+        conceal();
+    }
 }
 }

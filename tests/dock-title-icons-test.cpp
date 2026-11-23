@@ -16,6 +16,7 @@
 #include <QEventLoop>
 #include <QTimer>
 #include <QMouseEvent>
+#include <QPointer>
 #include <QImage>
 #include <iostream>
 #define REQUIRE(x) do {if(!(x)){std::cerr<<"FAILED "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
@@ -56,6 +57,10 @@ int main(int argc,char **argv){
     main.addDockWidget(spec.area,dock);
     docks.append({dock,spec.title,dock->titleBarWidget()});
  }
+ // OBS deliberately removes DockWidgetClosable from its built-in
+ // docks; the overflow must honor this rather than granting close access.
+ docks[0].dock->setFeatures(QDockWidget::DockWidgetMovable |
+                            QDockWidget::DockWidgetFloatable);
  main.resize(1350,720);main.show();app.processEvents();
  QTemporaryDir tmp;
  REQUIRE(tmp.isValid());
@@ -84,12 +89,20 @@ int main(int argc,char **argv){
       REQUIRE(more->isVisible());
       REQUIRE(more->geometry().bottom()<dock->widget()->geometry().top());
       REQUIRE(more->menu()!=nullptr);
+      // Docked native float/close chrome must be moved into the working
+      // three-dot overflow, not left as a second set of header buttons.
+      REQUIRE(!(dock->features() & QDockWidget::DockWidgetFloatable));
+      REQUIRE(!(dock->features() & QDockWidget::DockWidgetClosable));
+      REQUIRE(dock->features() & QDockWidget::DockWidgetMovable);
       more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
       app.processEvents();
       REQUIRE(!more->menu()->actions().isEmpty());
       auto *first=more->menu()->actions().first();
       REQUIRE(first->text()=="Collapse");
       REQUIRE(first->isEnabled()==panels.canCollapse(dock));
+      REQUIRE(more->menu()->actions().size()==4);
+      REQUIRE(more->menu()->actions()[2]->text()=="Pop out");
+      REQUIRE(more->menu()->actions()[3]->isEnabled()==(dock!=docks[0].dock));
       more->menu()->hide();app.processEvents();
       REQUIRE(glyph->geometry().bottom()<dock->widget()->geometry().top());
       QStyleOptionDockWidget option;option.initFrom(dock);
@@ -170,6 +183,8 @@ int main(int argc,char **argv){
    REQUIRE(icons.glyph(custom));
    icons.refresh();app.processEvents(); // after Qt has assigned native dock geometry
    REQUIRE(icons.moreButton(custom)&&icons.moreButton(custom)->isVisible());
+   REQUIRE(!(custom->features() & QDockWidget::DockWidgetFloatable));
+   REQUIRE(!(custom->features() & QDockWidget::DockWidgetClosable));
    REQUIRE(icons.decoratedCount()==6);
    const auto genericGlyph=icons.glyph(custom)->grab().toImage();
    custom->setWindowTitle("Twitch Chat");
@@ -190,7 +205,7 @@ int main(int argc,char **argv){
    auto *more=icons.moreButton(custom);
    more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
    app.processEvents();
-   REQUIRE(more->menu()->actions().size()==1); // only dock-scoped Collapse
+   REQUIRE(more->menu()->actions().size()==4); // local Collapse, Pop out, Close
    REQUIRE(more->menu()->actions().first()->text()=="Collapse");
    more->menu()->hide();app.processEvents();
    REQUIRE(icons.setEllipsisMode(Qt::ElideMiddle));
@@ -209,24 +224,88 @@ int main(int argc,char **argv){
    icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());
    // Floating titlebar is owned by the window manager.
-   custom->setFloating(true);icons.refresh();app.processEvents();
+   // Invoke the REAL menu Pop out action instead of setting floating on
+   // the test dock. Native WM window controls return while detached.
+   more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
+   app.processEvents();
+   more->menu()->actions()[2]->trigger();app.processEvents();
+   REQUIRE(custom->isFloating());
+   REQUIRE(custom->features() & QDockWidget::DockWidgetFloatable);
+   REQUIRE(custom->features() & QDockWidget::DockWidgetClosable);
+   icons.refresh();app.processEvents();
    REQUIRE(!icons.glyph(custom)->isVisible());
    REQUIRE(!icons.moreButton(custom)->isVisible());
    REQUIRE(!icons.titleIndented(custom));
    custom->setFloating(false);icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());
+   REQUIRE(!(custom->features() & QDockWidget::DockWidgetFloatable));
+   REQUIRE(!(custom->features() & QDockWidget::DockWidgetClosable));
+   // OBS Lock Docks deliberately disables all native window features.
+   // The overflow must stop offering either window operation when locked.
+   custom->setFeatures(QDockWidget::NoDockWidgetFeatures);
+   icons.refresh();app.processEvents();
+   QMenu locked;
+   icons.appendDockWindowActions(&locked,custom);
+   REQUIRE(!locked.actions()[0]->isEnabled());
+   REQUIRE(!locked.actions()[1]->isEnabled());
+   custom->setFeatures(QDockWidget::DockWidgetMovable |
+                       QDockWidget::DockWidgetClosable |
+                       QDockWidget::DockWidgetFloatable);
+   icons.refresh();app.processEvents();
+   QMenu unlocked;
+   icons.appendDockWindowActions(&unlocked,custom);
+   REQUIRE(unlocked.actions()[0]->isEnabled());
+   REQUIRE(unlocked.actions()[1]->isEnabled());
+
    // Custom titlebar is respected rather than painted over.
    auto *customBar=new QWidget(custom);
    custom->setTitleBarWidget(customBar);icons.refresh();app.processEvents();
    REQUIRE(!icons.glyph(custom)->isVisible());
    REQUIRE(!icons.moreButton(custom)->isVisible());
    REQUIRE(!icons.titleIndented(custom));
+   REQUIRE(custom->features() & QDockWidget::DockWidgetFloatable);
+   REQUIRE(custom->features() & QDockWidget::DockWidgetClosable);
    custom->setTitleBarWidget(nullptr);
    delete customBar;
    icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());
+   // Absent native capabilities must never become enabled by the menu.
+   auto *restricted=new QDockWidget("Restricted",&main);
+   restricted->setObjectName("restrictedPluginDock");
+   restricted->setFeatures(QDockWidget::DockWidgetMovable);
+   restricted->setWidget(new QLabel("Restricted",restricted));
+   main.addDockWidget(Qt::BottomDockWidgetArea,restricted);
+   icons.refresh();app.processEvents();
+   // The helper is also called by the specialized mixer overflow; the
+   // native feature flags remain authoritative even if the dock is too
+   // narrow for the menu button on this synthetic stacked layout.
+   QMenu restrictedMenu;
+   icons.appendDockWindowActions(&restrictedMenu,restricted);
+   REQUIRE(restrictedMenu.actions().size()==2);
+   REQUIRE(!restrictedMenu.actions()[0]->isEnabled());
+   REQUIRE(!restrictedMenu.actions()[1]->isEnabled());
+   REQUIRE(restricted->features()==QDockWidget::DockWidgetMovable);
+   // Close through menu uses the dock's native close() lifecycle.
+   auto *closable=new QDockWidget("Closable plugin",&main);
+   closable->setObjectName("closablePluginDock");
+   closable->setWidget(new QLabel("Goodbye",closable));
+   main.addDockWidget(Qt::BottomDockWidgetArea,closable);
+   icons.refresh();app.processEvents();
+   QMenu closeMenu;
+   icons.appendDockWindowActions(&closeMenu,closable);
+   REQUIRE(closeMenu.actions().size()==2);
+   REQUIRE(closeMenu.actions()[1]->isEnabled());
+   closeMenu.actions()[1]->trigger();app.processEvents();
+   REQUIRE(!closable->isVisible());
+   REQUIRE(closable->features() & QDockWidget::DockWidgetClosable);
+   REQUIRE(closable->features() & QDockWidget::DockWidgetFloatable);
    REQUIRE(faces.detach(mixer));
    REQUIRE(mixer->titleBarWidget()==docks[2].nativeTitle);
+   // Qt/OBS explicitly disallow closing built-in protected docks.
+   sceneMore->menu()->popup(sceneMore->mapToGlobal(QPoint(0,sceneMore->height())));
+   app.processEvents();
+   REQUIRE(!sceneMore->menu()->actions()[3]->isEnabled());
+   sceneMore->menu()->hide();app.processEvents();
  }
  app.processEvents();
  REQUIRE(QSettings(settingsPath,QSettings::IniFormat).value("title/ellipsis").toString()=="middle");
@@ -249,6 +328,9 @@ int main(int argc,char **argv){
    REQUIRE(!entry.dock->findChild<QToolButton*>("aftermarket-dock-more",Qt::FindDirectChildrenOnly));
    REQUIRE(entry.dock->windowTitle()==entry.title);
    REQUIRE(entry.dock->toggleViewAction()->text()==entry.title);
+   REQUIRE(entry.dock->features() & QDockWidget::DockWidgetFloatable);
+   REQUIRE(bool(entry.dock->features() & QDockWidget::DockWidgetClosable)==
+           (entry.dock!=docks[0].dock));
  }
  std::cout<<"native OBS dock title icons verified\n";
  return 0;

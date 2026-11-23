@@ -1864,3 +1864,69 @@ Boundaries:
   moved; the native sidebar contains normal global preferences now.
 - Actual running user OBS must restart to load the newly installed module.
   No changes to scenes/audio routing or GitHub publication requested.
+
+## Slice 44 — Pop out and Close moved into dock three-dot menus (2026-11-22)
+
+Requested outcome: Every ordinary native-titled dock overflow should contain
+the native window controls, so floating/close buttons do not crowd the header;
+the specialized Audio Mixer overflow must remain a single menu.
+
+Implementation:
+- DockTitleIcons now hides the separate Qt title-bar Pop out and Close
+  buttons only while a docked, horizontal native title has a usable
+  Aftermarket three-dot overflow. This is done by temporarily masking
+  QDockWidgetFloatable and QDockWidgetClosable, leaving DockWidgetMovable and
+  all source/control widgets alone. This also recovers horizontal title width.
+- The ordinary menu now contains Collapse/Expand, a separator, Pop out
+  (native setFloating(true)) and Close (native close()). Both have native
+  Qt-style icons. The specialized Audio Mixer menu uses the same shared
+  menu-actions helper before its existing knobs/hidden-channel/advanced
+  options, without creating a second ellipsis button.
+- Each action is deferred until QMenu dispatch returns and uses QPointer
+  guards to avoid a dangling QObject if a dock is destroyed mid-action.
+  Before floating/closing, the dock's original Qt feature flags are restored.
+  Original Qt controls are also restored for a floating, hidden, custom-
+  titled, vertical-titled, or overflow-inaccessible dock, and on adapter
+  destruction/emergency restore. Unrelated feature changes (e.g. vertical
+  title/movable) are carried through; a real OBS Lock Docks (all flags off)
+  is honored instead of re-enabling the window buttons. Dynamic plugin docks
+  are discovered by the existing manager.
+- Native OBS protected core docks intentionally omit DockWidgetClosable in
+  OBSBasic_Docks.cpp; the Close action is disabled for them. Their normal
+  Pop out remains available when OBS allows it. Explicitly restricted
+  third-party dock features are also honored: this is not a new capability
+  granting unrestricted closing or floating.
+- README updated with two short optimized WebP captures from real OBS 32.2
+  / Colorway: dock-window-actions.webp and mixer-dock-window-actions.webp.
+  Previous statements claiming the separate native buttons were untouched
+  were corrected.
+
+Verification:
+- TDD red before implementation: Qt dock-title regression expected native
+  float/close flags suppressed and a working overflow and failed at the
+  unsuppressed floatability assertion.
+- Green test verifies five native docks, action labels/enablement, Collapse/
+  Expand surviving, generic third-party dock creation, a real Pop out
+  action on a dock followed by native floating features restored, redock
+  re-suppression, custom title restoration, Qt Lock Docks disabling actions,
+  explicitly restricted dock, real Close action on a closable plugin dock,
+  native Qt features and exact full title/Docks-action names on teardown.
+- Real isolated OBS 32.2 / Colorway runtime loaded matching new module
+  from a disposable XDG profile; screenshots verified the Scenes and
+  Audio Mixer menus show Pop out and Close with original controls removed
+  from dock headers. XTest clicked the Scenes Pop out entry and OBS stayed
+  alive; the dock detached and its native floating title handling returned.
+- Full CMake build clean, serial CTest **24/24 passed**, no compiler warnings,
+  git diff --check clean.
+- Installed exact built .so with SHA256
+  554851c6e94a41a87e521e866283f3a0588d77387cb5b8b4454d6a775208d679
+  to ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Previous known-good binary preserved at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-dock-overflow.2516150b0d90.so.
+  OBS was not running at install time; no user process restarted or modified.
+  Four monitored user config files had identical pre/post checksums.
+
+Boundaries: Floating OS/WM window titlebars and third-party custom title
+bars retain their native controls; the plugin does not replace those title
+bars. Protected OBS built-in docks remain nonclosable by design. No push
+or external publication requested.
