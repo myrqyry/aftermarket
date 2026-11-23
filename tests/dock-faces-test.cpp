@@ -12,6 +12,10 @@
 #include <QVBoxLayout>
 #include <QStyle>
 #include <QStyleOptionDockWidget>
+#include <QPropertyAnimation>
+#include <QGraphicsOpacityEffect>
+#include <QEventLoop>
+#include <QTimer>
 #include <iostream>
 #define REQUIRE(x) do {if(!(x)){std::cerr<<"FAILED "<<__LINE__<<": "<<#x<<"\\n";return 1;}}while(false)
 
@@ -28,7 +32,8 @@ int main(int argc,char **argv) {
  a->setMinimumWidth(250);
  main.resize(920,720);main.show();a->raise();app.processEvents();
  {
-  augment::DockFaces faces;
+  bool motionOn=false;
+  augment::DockFaces faces(nullptr,[&]{return motionOn;});
   auto *back=new QLabel("Audio routes");back->setWindowTitle("Routing");
   QStyleOptionDockWidget opt;
   opt.initFrom(a);
@@ -96,6 +101,30 @@ int main(int argc,char **argv) {
   REQUIRE(flip->text()=="AudioBus");
   REQUIRE(flip->toolTip().contains("routing",Qt::CaseInsensitive));
   REQUIRE(knobs->isVisible());
+  // Global Motion opt-in adds a click-through visual overlay; it must NOT
+  // alter OBS native widget effects, state or ownership.
+  motionOn=true;
+  flip->click();app.processEvents();
+  REQUIRE(faces.backVisible(a)&&back->isVisible());
+  auto *fade=stack->findChild<QWidget*>("aftermarket-view-fade");
+  REQUIRE(fade&&fade->isVisible());
+  REQUIRE(fade->testAttribute(Qt::WA_TransparentForMouseEvents));
+  REQUIRE(fade->graphicsEffect()!=nullptr);
+  REQUIRE(native->graphicsEffect()==nullptr&&back->graphicsEffect()==nullptr);
+  REQUIRE(fade->findChild<QPropertyAnimation*>("aftermarket-view-fade-motion"));
+  flip->click();app.processEvents(); // rapid reversal
+  REQUIRE(!faces.backVisible(a)&&native->isVisible());
+  REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-fade").size()==1);
+  QEventLoop fadeLoop;
+  QTimer::singleShot(250,&fadeLoop,&QEventLoop::quit);
+  fadeLoop.exec();app.processEvents();
+  REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-fade").isEmpty());
+  motionOn=false; // reduced-motion mode: no visual overlay
+  flip->click();app.processEvents();
+  REQUIRE(faces.backVisible(a)&&back->isVisible());
+  REQUIRE(!stack->findChild<QWidget*>("aftermarket-view-fade"));
+  flip->click();app.processEvents();
+  REQUIRE(!faces.backVisible(a)&&native->isVisible());
   auto *next=a->findChild<QToolButton*>("aftermarket-tab-next");
   REQUIRE(next&&next->isVisible());
   next->click();app.processEvents();

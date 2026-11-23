@@ -476,7 +476,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->status->setWordWrap(true);ui->status->setTextFormat(Qt::PlainText);
     toolbar->addWidget(ui->pick);toolbar->addStretch();
     ui->motion=new QCheckBox("Motion",this);ui->motion->setObjectName("augment-motion");
-    ui->motion->setToolTip("Enable motion globally. Uncheck for reduced motion. Menu motion applies on next popup; gradient motion updates immediately.");
+    ui->motion->setToolTip("Enable menu artwork, dock collapse and AudioBus transitions. Turn off for immediate UI changes and reduced motion; gradient animation updates immediately.");
     ui->motion->setChecked(controller.motionEnabled());
     ui->compactMenus=new QCheckBox("Compact menus",this);ui->compactMenus->setObjectName("augment-compact-menus");
     ui->compactMenus->setToolTip("Tighten long menus into visible columns. Only explicitly selected actions enter More actions. Reopen a menu to apply.");
@@ -940,7 +940,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     connect(ui->motion,&QCheckBox::toggled,this,[this](bool enabled){
         QString error;
         if(ui->controller.setMotionEnabled(enabled,&error))
-            ui->status->setText(enabled?"Motion enabled. Reopen a menu to see it.":"Motion disabled. Reopen menus for static icons.");
+            ui->status->setText(enabled?"Motion enabled for menus, dock collapse and AudioBus.":"Motion disabled: UI changes are immediate.");
         else {
             const QSignalBlocker blocker(ui->motion);
             ui->motion->setChecked(ui->controller.motionEnabled());

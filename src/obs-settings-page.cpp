@@ -164,7 +164,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
              controller_->compactMenusEnabled());
     checkbox("hamburger","Compact top menu bar",menus.second,menus.first,
              controller_->hamburgerMenuBarEnabled());
-    checkbox("motion","Menu and interface animation",menus.second,menus.first,
+    checkbox("motion","Interface animations (menus, docks, AudioBus)",menus.second,menus.first,
              controller_->motionEnabled());
     checkbox("selections","Show selected submenu choices",menus.second,menus.first,
              controller_->showSubmenuSelections());

@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <memory>
+#include <functional>
 class QDockWidget;
 class QMenu;
 class QAction;
@@ -9,7 +10,7 @@ class QWidget;
 namespace augment {
 class Panels final : public QObject {
 public:
-    explicit Panels(QObject *parent=nullptr);
+    explicit Panels(QObject *parent=nullptr,std::function<bool()> motionEnabled={});
     ~Panels() override;
     bool canCollapse(QDockWidget *) const;
     bool collapsed(QDockWidget *) const;
@@ -33,7 +34,11 @@ protected:
 private:
     struct State;
     std::unique_ptr<State> state;
-    bool expand(QDockWidget *);
+    bool expand(QDockWidget *,bool animate=true);
+    void stopHeightMotion(QDockWidget *);
+    void restoreExpandedBounds(QDockWidget *);
+    void startHeightMotion(QDockWidget *,int start,int finish,
+                           std::function<void()> completed);
     void updatePreviewLayout();
     void restoreStudioControlStrip();
 };

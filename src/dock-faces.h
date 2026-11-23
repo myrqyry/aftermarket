@@ -1,13 +1,14 @@
 #pragma once
 #include <QObject>
 #include <memory>
+#include <functional>
 class QDockWidget;
 class QWidget;
 namespace augment {
 // Reversible two-page mixer: bottom AudioBus control switches native mixer/routing.
 class DockFaces final : public QObject {
 public:
-    explicit DockFaces(QObject *parent=nullptr);
+    explicit DockFaces(QObject *parent=nullptr,std::function<bool()> motionEnabled={});
     ~DockFaces() override;
     bool attach(QDockWidget *dock,QWidget *back);
     bool detach(QDockWidget *dock);

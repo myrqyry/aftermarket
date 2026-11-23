@@ -2350,3 +2350,72 @@ Verification:
   ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-single-colored-outlines.ea5984764cc9.so.
   User OBS was not running at install. Four tracked user config files
   unchanged. No GitHub push or unrelated changes.
+
+## Slice 52 — native dock and AudioBus UI animations (2026-11-23)
+
+Goal: Animate Aftermarket's existing UI collapse/expand and view transitions
+without replacing OBS native widgets, repurposing OBS scene transitions,
+adding global paint hacks, or changing saved scenes/audio routing.
+
+Implementation:
+- Reused the existing global motion preference in rules.json, exposed at
+  OBS Settings → Aftermarket → Menus and Tools → UI Augment Inspector. Wired
+  it as a live callback into Panels and DockFaces, so Motion off retains the
+  immediate behavior and Motion on applies to future UI interactions.
+- Panels: 165-ms InOutCubic height animation for the existing native
+  QDockWidget collapse/expand path. The original content and dock remain
+  OBS-owned. To prevent QMainWindow from snapping directly to the endpoint
+  when content is hidden, pin both minimumHeight and maximumHeight to the
+  intermediate animated height and request native resizeDocks each frame.
+  Track and restore original min/max heights and width on normal expand,
+  interrupted expansion, dock closure, emergency restore and plugin cleanup.
+  Existing restrictions for floating/tabbed docks remain. Use Qt animation
+  style hint SH_Widget_Animate and the global Motion preference.
+- DockFaces: 155-ms OutCubic crossfade between real Audio Mixer and
+  AudioBus pages, using a temporary click-through, nonfocusable QLabel
+  screenshot of the outgoing page over the newly selected true widget.
+  Neither OBS mixer nor routing widgets receive an opacity effect or are
+  cloned/replaced. Overlay self-deletes at finish and is cleared on rapid
+  reversal or detach. Motion off skips overlay and switches immediately.
+- Updated the native global Motion checkbox caption, Inspector tooltip and
+  status messages; README now distinguishes UI animations from actual
+  OBS streaming/video scene-transition effects and includes a genuine OBS
+  3-frame collapse + 3-frame AudioBus crossfade image at
+  docs/screenshots/readme/ui-motion-docks-and-audiobus.webp.
+
+Verification:
+- TDD RED: focused tests initially failed on constructors missing Motion
+  callback; introduced implementation, then found a further RED on actual
+  dock geometry (animated maximumHeight while Qt still snapped on hide).
+  Fixed by pinning min/max to animated height, confirmed native intermediate
+  geometry in Qt test and real OBS screenshots. A RED emergency-restore test
+  caught pending expand bounds remaining constrained; repaired with saved
+  original constraints and cleanup. Regression now exercises reverse
+  mid-motion, reduced Motion mode, exact restored bounds, and native dock
+  deletion while a collapse animation is in flight.
+- DockFaces focused regression verifies an overlay and QPropertyAnimation
+  only when Motion is enabled, unchanged real OBS QWidget effects and
+  identities, click-through behavior, rapid reversal cancellation, cleanup
+  after 250 ms, and direct switching with Motion off.
+- Real isolated OBS Studio 32.2.0 in Xvfb with sandbox-only Motion enabled,
+  exact module loaded at the sandbox profile plugin path, actual media
+  sources and routing page. Captured fade-start/mid/end showing native
+  mixer giving way to AudioBus; captured pinned-0/20/50/90 frame series
+  showing Scenes native dock gradually shrinking and neighboring docks
+  naturally repositioning rather than snapping. No relevant OBS log errors.
+  Screenshot montage uses these captured frames, not simulated UI.
+- Full CMake build with no compiler warnings; 24/24 serial CTests passed,
+  git diff --check clean. Compiled SHA256
+  8b4d920fb2d0da3ed431afee433b4a34cf3a865d810fa31bafe6a783352dc136.
+- Installed binary byte-for-byte to
+  ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so,
+  with rollback of prior installed module at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-ui-motion.84271c6c7191.so.
+  User OBS was not running during installation; all four monitored user
+  config file hashes stayed identical before/after.
+
+Boundary: no animations of actual OBS scene transitions, stream actions,
+or arbitrary third-party widgets; this slice covers native-supported dock
+collapse/expand and the current two-page Audio Mixer/AudioBus switch.
+No GitHub push or release requested. Motion is already on in user's saved
+rules.json, so these UI transitions become visible next OBS launch.

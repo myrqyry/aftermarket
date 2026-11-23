@@ -572,10 +572,11 @@ may need to be opened before capturing their full list.
 
 ## Motion
 
-Open **Tools → UI Augment Inspector** and enable **Motion** in the toolbar.
-This applies the default soft effect to matched icons the next time a menu opens.
-Motion is off by default, so existing configurations retain their static appearance.
-For individual actions, pick a preset and duration in the inspector and save the rule.
+Enable **Motion** in **OBS → Settings → Aftermarket → Menus** or from
+**Tools → UI Augment Inspector**. The same global control governs menu artwork,
+dock collapse/expand, AudioBus page switching, and existing reactive gradients.
+Motion is off by default, preserving the native immediate behavior until enabled.
+For individual menu artwork rules, pick a preset and duration in the inspector.
 
 - **soft**: fade/slide entrance, modest icon growth on hover.
 - **pop**: fade/slide with a more pronounced scale transition.
@@ -583,7 +584,24 @@ For individual actions, pick a preset and duration in the inspector and save the
 - **none**: static icon even when global motion is enabled.
 
 The duration is 60–600 ms (default 160 ms); a capped 9 ms stagger separates successive entrances.
-Uncheck Motion for reduced motion. The master switch persists in the rules file; it is applied when a menu opens.
+Uncheck Motion for reduced motion. The master switch persists in the rules file;
+new UI transitions follow its latest value immediately.
+
+**Native dock collapsing and page switching:** When Motion is enabled, using
+a dock's **⋮ → Collapse / Expand** (or middle-clicking its native title) eases
+the real QDockWidget height over **165 ms**, with its original min/max size
+constraints restored after expansion. Tabbed, floating and custom-title
+docks remain governed by the existing native restrictions. Switching between
+**Audio Mixer and AudioBus** uses a **155 ms crossfade** of a click-through
+temporary snapshot; the original native OBS mixer and routing widgets
+are not duplicated, replaced or assigned an opacity effect. Reversing
+quickly cancels the earlier animation; emergency restoration leaves no
+temporary height constraint. Both are instantaneous with Motion off.
+
+These are **OBS interface animations**, not OBS's video scene-transition
+effects. Aftermarket never invokes or replaces a streaming transition.
+
+![Native Qt dock collapse frames and AudioBus view crossfade in real isolated OBS](docs/screenshots/readme/ui-motion-docks-and-audiobus.webp)
 
 ```json
 {

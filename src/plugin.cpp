@@ -186,12 +186,16 @@ static bool startCustomUi(){
         []{return frontendReady&&nativeActions?nativeActions->snapshot():augment::StatusSnapshot{};},
         []{return frontendReady&&nativeActions?nativeActions->enumerateHotkeys():QList<augment::HotkeyChoice>{};},
         [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);});
-    panels=std::make_unique<augment::Panels>();
+    // Global Motion already controls decorative animation. Use the same
+    // current setting for native dock height and AudioBus page transitions.
+    // Motion off preserves all original immediate UI behavior.
+    auto uiMotion=[]{return controller&&controller->motionEnabled();};
+    panels=std::make_unique<augment::Panels>(nullptr,uiMotion);
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         dockTitleIcons=std::make_unique<augment::DockTitleIcons>(
             main,panels.get(),QDir(QFileInfo(stripConfigPath).absolutePath())
                                .filePath("dock-title-settings.ini"));
-    dockFaces=std::make_unique<augment::DockFaces>();
+    dockFaces=std::make_unique<augment::DockFaces>(nullptr,uiMotion);
     mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
     transforms=std::make_unique<augment::ObsTransformStyle>(
         static_cast<QWidget*>(obs_frontend_get_main_window()),

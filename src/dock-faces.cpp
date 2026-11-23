@@ -16,6 +16,11 @@
 #include <QStyleOptionDockWidget>
 #include <QEvent>
 #include <QFontMetrics>
+#include <QGraphicsOpacityEffect>
+#include <QPropertyAnimation>
+#include <QGuiApplication>
+#include <QLabel>
+#include <functional>
 
 namespace augment {
 namespace {
@@ -43,11 +48,16 @@ struct DockFaces::State {
         QPointer<QStackedWidget> stack;
         QPointer<QToolButton> flip,prev,next;
         QPointer<QWidget> accessory;
+        QPointer<QLabel> fade;
         bool wasHidden=false;
     };
     QHash<QDockWidget*,Entry> entries;
+    std::function<bool()> motionEnabled;
 };
-DockFaces::DockFaces(QObject *p):QObject(p),state(new State){}
+DockFaces::DockFaces(QObject *p,std::function<bool()> motionEnabled)
+    :QObject(p),state(new State) {
+    state->motionEnabled=std::move(motionEnabled);
+}
 DockFaces::~DockFaces() {
     const auto docks=state->entries.keys();
     for(auto *dock:docks)detach(dock);
@@ -151,6 +161,7 @@ bool DockFaces::addFrontAccessory(QDockWidget *dock,QWidget *accessory){
 bool DockFaces::detach(QDockWidget *dock) {
     auto it=state->entries.find(dock);
     if(it==state->entries.end())return false;
+    if(it->fade)delete it->fade.data();
     const State::Entry e=it.value();
     state->entries.erase(it);
     if(e.dock)e.dock->removeEventFilter(this);
@@ -182,7 +193,49 @@ bool DockFaces::backVisible(QDockWidget *dock)const {
 bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     auto it=state->entries.find(dock);
     if(it==state->entries.end()||!it->stack||!it->native||!it->alternate)return false;
-    it->stack->setCurrentWidget(visible?it->alternate.data():it->native.data());
+    auto *stack=it->stack.data();
+    auto *destination=visible?it->alternate.data():it->native.data();
+    if(stack->currentWidget()==destination)return true;
+    // Clear an interrupted transition rather than stacking screenshots.
+    if(it->fade)delete it->fade.data();
+    it->fade=nullptr;
+    const bool animate=state->motionEnabled&&state->motionEnabled()&&
+        stack->isVisible()&&stack->width()>0&&stack->height()>0&&
+        stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack);
+    // A short, click-through snapshot fades away over the real new page.
+    // The original OBS mixer never gets an opacity effect or a fake widget.
+    const QPixmap previous=animate?stack->grab():QPixmap{};
+    stack->setCurrentWidget(destination);
+    if(!previous.isNull()){
+        auto *overlay=new QLabel(stack);
+        overlay->setObjectName("aftermarket-view-fade");
+        overlay->setAttribute(Qt::WA_TransparentForMouseEvents);
+        overlay->setFocusPolicy(Qt::NoFocus);
+        overlay->setPixmap(previous);
+        overlay->setScaledContents(true);
+        overlay->setGeometry(stack->rect());
+        auto *opacity=new QGraphicsOpacityEffect(overlay);
+        overlay->setGraphicsEffect(opacity);
+        overlay->show();
+        overlay->raise();
+        auto *animation=new QPropertyAnimation(opacity,"opacity",overlay);
+        animation->setObjectName("aftermarket-view-fade-motion");
+        animation->setDuration(155);
+        animation->setStartValue(1.0);
+        animation->setEndValue(0.0);
+        animation->setEasingCurve(QEasingCurve::OutCubic);
+        QPointer<QLabel> safe=overlay;
+        QPointer<QDockWidget> target=dock;
+        connect(animation,&QPropertyAnimation::finished,this,[this,target,safe]{
+            if(target){
+                auto it=state->entries.find(target);
+                if(it!=state->entries.end()&&it->fade==safe)it->fade=nullptr;
+            }
+            if(safe)safe->deleteLater();
+        });
+        it->fade=overlay;
+        animation->start();
+    }
     // The native dock title already renders the real name.
     positionTitleButtons(dock);
     if(it->flip){
