@@ -17,6 +17,9 @@ public:
                       Preview, Chat, Browser, Generic };
     static Kind classify(const QString &objectName,const QString &title);
     static int glyphSizeForRoom(int freePixels);
+    static constexpr int titleTextInset(){return 20;}
+    bool titleIndented(QDockWidget *dock) const;
+    QString originalTitle(QDockWidget *dock) const;
     explicit DockTitleIcons(QMainWindow *window,QObject *parent=nullptr);
     ~DockTitleIcons() override;
     void refresh();
@@ -28,6 +31,11 @@ private:
     void place(QDockWidget *dock,QWidget *icon);
     QPointer<QMainWindow> window_;
     QHash<QDockWidget*,QPointer<QWidget>> icons_;
+    QHash<QDockWidget*,QString> originalTitles_;
+    QHash<QDockWidget*,QString> displayedTitles_;
+    QHash<QDockWidget*,QString> originalActionLabels_;
+    bool adjustingTitle_=false;
     bool scheduled_=false;
+    void restoreTitle(QDockWidget *dock);
 };
 }

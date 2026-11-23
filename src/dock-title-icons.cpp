@@ -5,6 +5,9 @@
 #include <QEvent>
 #include <QTimer>
 #include <QStyle>
+#include <QAction>
+#include <QScopedValueRollback>
+#include <QApplication>
 #include <QStyleOptionDockWidget>
 #include <QPainter>
 #include <QPainterPath>
@@ -125,12 +128,37 @@ DockTitleIcons::DockTitleIcons(QMainWindow *window,QObject *parent)
 DockTitleIcons::~DockTitleIcons(){
     if(window_)window_->removeEventFilter(this);
     for(auto it=icons_.begin();it!=icons_.end();++it){
-        if(it.key())it.key()->removeEventFilter(this);
+        if(auto *dock=it.key()){
+            dock->removeEventFilter(this);
+            restoreTitle(dock);
+        }
         if(it.value())delete it.value().data();
     }
     icons_.clear();
+    originalTitles_.clear();
+    originalActionLabels_.clear();
+    displayedTitles_.clear();
 }
 int DockTitleIcons::decoratedCount()const{return icons_.size();}
+bool DockTitleIcons::titleIndented(QDockWidget *dock) const{
+    return dock&&displayedTitles_.contains(dock)&&
+           dock->windowTitle()==displayedTitles_.value(dock);
+}
+QString DockTitleIcons::originalTitle(QDockWidget *dock)const{
+    return originalTitles_.value(dock,dock?dock->windowTitle():QString{});
+}
+void DockTitleIcons::restoreTitle(QDockWidget *dock){
+    if(!dock)return;
+    if(titleIndented(dock)){
+        QScopedValueRollback<bool> updating(adjustingTitle_,true);
+        dock->setWindowTitle(originalTitles_.value(dock));
+    }
+    displayedTitles_.remove(dock);
+    if(auto *action=dock->toggleViewAction()){
+        if(originalActionLabels_.contains(dock))
+            action->setText(originalActionLabels_.value(dock));
+    }
+}
 QWidget *DockTitleIcons::glyph(QDockWidget *dock)const{
     return icons_.value(dock);
 }
@@ -139,7 +167,7 @@ void DockTitleIcons::refresh(){
     const auto docks=window_->findChildren<QDockWidget*>();
     for(auto *dock:docks){
         if(!dock)continue;
-        const auto kind=classify(dock->objectName(),dock->windowTitle());
+        const auto kind=classify(dock->objectName(),originalTitle(dock));
         if(icons_.contains(dock)&&icons_.value(dock)){
             static_cast<TitleGlyph*>(icons_.value(dock).data())->setKind(kind);
             continue;
@@ -147,10 +175,15 @@ void DockTitleIcons::refresh(){
         auto *icon=new TitleGlyph(kind,dock);
         const bool registered=icons_.contains(dock);
         icons_.insert(dock,icon);
+        originalTitles_.insert(dock,dock->windowTitle());
+        originalActionLabels_.insert(dock,dock->toggleViewAction()->text());
         if(!registered){
             dock->installEventFilter(this);
             connect(dock,&QObject::destroyed,this,[this,dock]{
-                icons_.remove(dock); // never dereference a destroyed dock
+                icons_.remove(dock);
+                originalTitles_.remove(dock);
+                originalActionLabels_.remove(dock);
+                displayedTitles_.remove(dock); // never dereference destroyed dock
             });
         }
     }
@@ -189,6 +222,17 @@ bool DockTitleIcons::eventFilter(QObject *watched,QEvent *event){
             case QEvent::PaletteChange:
             case QEvent::FontChange:
             case QEvent::WindowTitleChange:
+                if(!adjustingTitle_&&
+                   (!displayedTitles_.contains(dock)||
+                    dock->windowTitle()!=displayedTitles_.value(dock))){
+                    // A genuine OBS/plugin rename supersedes the previous
+                    // decorative title; never discard it on teardown.
+                    originalTitles_[dock]=dock->windowTitle();
+                    originalActionLabels_[dock]=dock->windowTitle();
+                    displayedTitles_.remove(dock);
+                    scheduleRefresh();
+                }
+                break;
             case QEvent::LayoutRequest:
                 scheduleRefresh();break;
             default:break;
@@ -198,7 +242,10 @@ bool DockTitleIcons::eventFilter(QObject *watched,QEvent *event){
     return QObject::eventFilter(watched,event);
 }
 void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
-    const auto conceal=[icon]{icon->hide();};
+    const auto conceal=[this,dock,icon]{
+        icon->hide();
+        restoreTitle(dock);
+    };
     if(!dock->isVisible()||dock->isFloating()||dock->titleBarWidget()||
        (dock->features()&QDockWidget::DockWidgetVerticalTitleBar)||!dock->widget()){
         conceal();return;
@@ -207,22 +254,41 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
     if(titleHeight<16||titleHeight>48){conceal();return;}
     QStyleOptionDockWidget option;
     option.initFrom(dock);
-    option.title=dock->windowTitle();
+    option.title=originalTitle(dock);
     option.closable=dock->features()&QDockWidget::DockWidgetClosable;
     option.floatable=dock->features()&QDockWidget::DockWidgetFloatable;
     option.movable=dock->features()&QDockWidget::DockWidgetMovable;
     option.verticalTitleBar=false;
-    const QRect text=dock->style()->subElementRect(QStyle::SE_DockWidgetTitleBarText,&option,dock);
+    const QRect text=dock->style()->subElementRect(
+        QStyle::SE_DockWidgetTitleBarText,&option,dock);
     if(!text.isValid()){conceal();return;}
-    const int titleEnd=text.left()+QFontMetrics(dock->font())
-        .horizontalAdvance(dock->windowTitle());
-    const int size=glyphSizeForRoom(text.right()-titleEnd);
-    // Use a miniature 10px symbol when long native labels leave limited
-    // room. Hide if even that would intersect Qt's float/close hit area.
+    const QFontMetrics metrics(dock->font());
+    const QString title=originalTitle(dock);
+    const int titleWidth=metrics.horizontalAdvance(title);
+    const int room=text.right()-text.left()-titleWidth;
+    const int size=glyphSizeForRoom(room);
     if(!size){conceal();return;}
+    // The Colorway/QSS native painter ignores QStyleOption text offsets:
+    // apply a reversible *display-only* leading spacer to its exact title.
+    // Keep the original action label for the OBS Docks menu.
+    const int required=size==14?titleTextInset():14;
+    QString spacer;
+    while(metrics.horizontalAdvance(spacer)<required)
+        spacer+=QLatin1Char(' ');
+    const int actual=metrics.horizontalAdvance(spacer);
+    if(actual+titleWidth+3>text.width()){conceal();return;}
+    const QString displayed=spacer+title;
+    if(dock->windowTitle()!=displayed){
+        QScopedValueRollback<bool> updating(adjustingTitle_,true);
+        dock->setWindowTitle(displayed);
+    }
+    displayedTitles_[dock]=displayed;
+    if(auto *action=dock->toggleViewAction()){
+        if(originalActionLabels_.contains(dock))
+            action->setText(originalActionLabels_.value(dock));
+    }
     if(icon->width()!=size)icon->setFixedSize(size,size);
-    const int x=titleEnd+(size==14?4:2);
-    icon->move(x,qMax(0,(titleHeight-icon->height())/2));
+    icon->move(text.left()+2,qMax(0,(titleHeight-icon->height())/2));
     icon->show();icon->raise();
 }
 }

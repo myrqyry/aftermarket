@@ -227,9 +227,8 @@ void DockFaces::positionTitleButtons(QDockWidget *dock){
     // Reserve the real dock text and Qt's native undock/close hit area.
     int titleRight=text.left()+QFontMetrics(dock->font())
         .horizontalAdvance(dock->windowTitle())+9;
-    if(auto *icon=dock->findChild<QWidget*>("aftermarket-dock-title-icon",
-                                            Qt::FindDirectChildrenOnly))
-        if(icon->isVisible())titleRight=qMax(titleRight,icon->geometry().right()+5);
+    // The native Qt title painter already includes the temporary leading
+    // display spacing for a left-hand icon; never double-count it here.
     const int usable=text.right()-titleRight;
     constexpr int spacing=2;
     const bool showFlip=usable>=flip->width();
