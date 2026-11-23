@@ -1486,3 +1486,22 @@ User OBS process PID 3638459 was not touched during isolated tests.
 No frontend native menu, dock objectName, saved layout, scene, stream,
 source audio, or program settings were edited. No push. Prior separate
 AudioHub pan/sync disk persistence gap remains unrelated and open.
+
+### Slice 37 — verified local installation (2026-11-22)
+
+- Feature commit: ad3a0f2. Full build and **22/22 CTest PASS**,
+  no compiler warnings. The exact tested binary SHA256
+  7ae1af78344da322cb181f5d0a65f30255bd0c6170776f7ed06d54bc9ccd7516
+  was loaded in isolated OBS 32.2.0/Colorway and installed via the
+  repository's atomic scripts/install.sh. Installed and built bytes match.
+- Prior installed SHA256
+  886fc1295e87c1ca32cec87ed47b01ba684a136855482c9ccff1706ebb318d14
+  retained byte-for-byte at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-left-title-icons.886fc1295e87.so.
+- User's live OBS process PID **3638459** remained unchanged and was not
+  interrupted; it still holds the previously loaded plugin until the
+  user voluntarily restarts. User rules.json, action-strip.json and
+  front-audio-controls.json SHA256 all unchanged. No git push.
+- Disposable Xvfb :120 and OBS were terminated after test. Working tree
+  clean at feature checkpoint. The original dock title strings are
+  restored on unload/emergency and Docks menu labels stay unpadded.
