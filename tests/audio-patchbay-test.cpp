@@ -66,7 +66,7 @@ int main(int argc,char **argv){
  auto *all=routing.actions()[0];
  auto *reload=routing.actions()[1];
  REQUIRE(all->objectName()=="aftermarket-show-all-wires");
- REQUIRE(all->text()=="Show all wires"&&all->isCheckable()&&!all->isChecked());
+ REQUIRE(all->text()=="Show all wires"&&all->isCheckable()&&all->isChecked());
  REQUIRE(reload->objectName()=="aftermarket-refresh-audio-routes");
  REQUIRE(reload->text()=="Refresh audio routes"&&!reload->isCheckable());
  REQUIRE(!reload->icon().isNull()); // Qt theme / QStyle, not a Unicode refresh glyph
@@ -109,14 +109,43 @@ int main(int argc,char **argv){
  REQUIRE(bay.routeCount()==3);
  REQUIRE(bay.selectedId()=="voice");
  REQUIRE(menu->actions()[2]->isChecked());
- REQUIRE(bay.visibleCableCount()==7);
- REQUIRE(!bay.showAllWires());
- all->trigger();app.processEvents();
- REQUIRE(all->isChecked()&&bay.showAllWires());
+ // All connections are visible immediately, including unselected sources.
  REQUIRE(bay.visibleCableCount()==10);
+ REQUIRE(bay.showAllWires());
+ // Hovering an output must not collapse all-wires to that single target.
+ const QPoint firstOutput(canvas->width()-26,43);
+ sendMouse(canvas,QEvent::MouseMove,firstOutput,Qt::NoButton,Qt::NoButton);
+ REQUIRE(bay.visibleCableCount()==10);
+ sendMouse(canvas,QEvent::MouseMove,QPoint(canvas->width()/2,24),Qt::NoButton,Qt::NoButton);
+ REQUIRE(bay.visibleCableCount()==10);
+ // Selection must not hide unrelated connections when all-wires is on.
+ const auto selectedStart=canvas->grab().toImage();
+ const QColor initialSelectedBorder=selectedStart.pixelColor(5,43);
+ const QColor initialBrowserBorder=selectedStart.pixelColor(5,75);
+ REQUIRE(bay.selectSource("browser"));
+ app.processEvents();
+ REQUIRE(bay.visibleCableCount()==10);
+ const auto selectedBrowser=canvas->grab().toImage();
+ REQUIRE(selectedBrowser.pixelColor(5,43)!=initialSelectedBorder);
+ REQUIRE(selectedBrowser.pixelColor(5,75)!=initialBrowserBorder);
+ REQUIRE(bay.selectSource("voice"));
+ app.processEvents();
+ REQUIRE(canvas->grab().toImage().pixelColor(5,43)==initialSelectedBorder);
+ // Selected outline is theme-aware and different from the signal border.
+ auto initialPalette=canvas->palette();
+ auto selectedPalette=initialPalette;
+ selectedPalette.setColor(QPalette::Link,QColor(32,200,140));
+ canvas->setPalette(selectedPalette);app.processEvents();
+ REQUIRE(canvas->grab().toImage().pixelColor(5,43)!=initialSelectedBorder);
+ REQUIRE(canvas->grab().toImage().pixelColor(5,75)==initialBrowserBorder);
+ canvas->setPalette(initialPalette);app.processEvents();
+ // Explicitly turning wires off restores focused-only display.
  all->trigger();app.processEvents();
  REQUIRE(!all->isChecked()&&!bay.showAllWires());
  REQUIRE(bay.visibleCableCount()==7);
+ all->trigger();app.processEvents();
+ REQUIRE(all->isChecked()&&bay.showAllWires());
+ REQUIRE(bay.visibleCableCount()==10);
  // The title menu is rebuilt at every opening; the checked state must
  // come from the graph, rather than from a transient QAction.
  bay.setShowAllWires(true);
@@ -207,6 +236,10 @@ int main(int argc,char **argv){
  bay.refreshLevels();app.processEvents();
  auto after=canvas->grab().toImage();
  REQUIRE(before!=after);
+ // The selected source keeps its distinct outer stroke; active signal adds
+ // an inner highlight, without turning selection into an activity claim.
+ REQUIRE(after.pixelColor(5,43)==before.pixelColor(5,43));
+ REQUIRE(after.pixelColor(8,43)!=before.pixelColor(8,43));
  int sourceOutlinePixels=0,outputOutlinePixels=0,oldSourceDotPixels=0,
      oldOutputDotPixels=0,leftIconPixels=0;
  for(int y=38;y<=48;++y){

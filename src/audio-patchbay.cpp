@@ -74,7 +74,9 @@ class AudioPatchbay::Canvas final : public QWidget {
             target>=1&&target<=6&&(src.tracks&(1u<<(target-1)));
     }
     bool visibleWire(const RouteSource &src,int target) const {
-        if(hoveredTarget>0&&!dragging)
+        // A hover may narrow the focused-only view, but must not silently
+        // hide unrelated wires when Show all wires is enabled.
+        if(!showAll&&hoveredTarget>0&&!dragging)
             return target==hoveredTarget&&hasConnection(src,target);
         return (showAll||src.id==focusedSource())&&hasConnection(src,target);
     }
@@ -123,7 +125,7 @@ class AudioPatchbay::Canvas final : public QWidget {
 public:
     QVector<RouteSource> routes;
     QString selected;
-    bool showAll=false;
+    bool showAll=true;
     static bool sourceLive(const RouteSource &src){
         return AudioPatchbay::activityForSource(src)==ActivityState::Active;
     }
@@ -244,10 +246,9 @@ protected:
             }
             p.setFont(captionFont);
         }
-        // Draw cables behind nodes. The all-wires view is intentionally
-        // optional to avoid overwhelming small docks with unrelated routes.
-        // In all-wires mode draw other sources first, selected wires last,
-        // so the focused route stays legible. Colors still come from Qt.
+        // Show all routes by default, with focused cables painted last.
+        // The menu can still switch to a focused-only view. Colors come
+        // from Qt; hover never silently disables all-wires visibility.
         for(int pass=0;pass<2;++pass)
             for(int i=0;i<routes.size();++i){
                 const auto &src=routes.at(i);
@@ -287,17 +288,26 @@ protected:
             const bool current=src.id==selected;
             const auto rect=sourceRect(i);
             const bool focused=src.id==focusedSource();
-            // Measured source signal highlights the card perimeter,
-            // replacing the old interior status dot. Selected/hovered
-            // routes keep their fill and cable emphasis; they must not
-            // borrow the active signal outline when silent or unknown.
+            // Selection is a separate, persistent state from measured
+            // activity: use the theme's Link color for its outer outline,
+            // and the theme Highlight for live signal. A selected/live node
+            // retains both (inner activity stroke). Neither hover nor a
+            // connected route can make a silent node look active.
             const bool live=AudioPatchbay::activityForSource(src)==ActivityState::Active;
+            QColor selection=palette().color(QPalette::Link);
+            if(selection==accent||selection==base)
+                selection=paletteBlend(accent,fg,50);
             const QColor inactive=paletteBlend(muted,fg,43);
             const QColor hovered=paletteBlend(muted,fg,68);
-            p.setPen(QPen(live?accent:(focused?hovered:inactive),
-                          live?1.65:(focused?1.0:0.75)));
+            const QColor border=current?selection:(live?accent:(focused?hovered:inactive));
+            p.setPen(QPen(border,current?1.8:(live?1.65:(focused?1.0:0.75))));
             p.setBrush(current?paletteBlend(base,accent,18):base);
             p.drawRoundedRect(rect,5,5);
+            if(current&&live){
+                p.setPen(QPen(accent,1.15));
+                p.setBrush(Qt::NoBrush);
+                p.drawRoundedRect(rect.adjusted(3,3,-3,-3),3,3);
+            }
             QFont sourceFont=bodyFont;
             sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
             p.setFont(sourceFont);

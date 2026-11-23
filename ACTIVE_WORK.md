@@ -2255,3 +2255,55 @@ Boundaries and remaining architecture audit:
   future adapters require concrete user value and real runtime tests.
 - User OBS needs restart to load installed library. No GitHub push or release
   requested. No scene/audio data was touched.
+
+## Slice 50 — independent selected AudioBus outline; all wires on by default (2026-11-23)
+
+User requested two focused changes to the existing AudioBus canvas:
+1. Selected audio source nodes must retain a distinct outline, not just a
+   filled background, even when their measured audio is not active.
+2. Show all wires must be enabled when the routing view first opens.
+
+Implementation:
+- The selected source uses the current Qt QPalette::Link color for its
+  outer border, with a palette-derived fallback if it matches the signal
+  Highlight or node background. The existing measured Active signal keeps
+  the Qt QPalette::Highlight color. A selected+active node has both:
+  selection outer perimeter, live signal inner line. Unselected active
+  sources retain their signal-color perimeter, and inactive unselected
+  nodes remain subdued. No dots or hardcoded colors were introduced.
+  The selected route's subtle fill, source icon, ports and cables remain.
+- Canvas::showAll defaults true; each new AudioBus view immediately draws
+  all connected source/target wires, and the native dock menu Show all
+  wires QAction opens checked. The option remains reversible at runtime.
+  Hovering a destination no longer filters unrelated wires while all-wires
+  is enabled; focused-only hover behavior remains in the off mode.
+  No change to OBS routing, monitoring, or source names/settings.
+
+Verification:
+- TDD red: initial default-check assertion failed with pre-change code;
+  green test covers default all-wire cable count (10 for fixture), native
+  checked menu state, hover keeping all 10 cables, selection changes
+  retaining all wires, toggling to focused-only (7 cables), and full
+  rebuild of a fresh QAction reflecting the current graph state.
+- Focused Qt image tests verify selection outer pixels change on selection,
+  unselected nodes stay subdued, Link palette color changes selected
+  border only, live audio adds an inner activity stroke without losing
+  selected border, and prior mute/live/theme/output signal tests still pass.
+- Actual OBS Studio 32.2.0 isolated Xvfb profile using two media sources
+  (Tone test and Silent test), with exact compiled module loaded at its
+  sandbox path. Screenshots show selected Silent test node outlined and
+  wires from both sources visible at startup, while the Audio Mixer dock
+  title menu opens with Show all wires checked. README routing screenshots
+  updated to this new behavior.
+- Full build with no warnings, serial CTest **24/24 passed**,
+  git diff --check clean.
+- Installed byte-exact module SHA256
+  ea5984764cc9fb8d6ca27fd1095d5e02df76fff9e9628542929a699e02ba0857
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Backed up previous binary to
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-selected-outline-all-wires.dd67f6ce0eb6.so.
+  Real user OBS PID 405867 was not restarted; four tracked user settings
+  files were byte-identical before and after installation.
+
+Boundary: existing live OBS needs restarting for the installed module to
+load. No remote push, release, source routing or audio data mutation.
