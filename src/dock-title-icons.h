@@ -6,9 +6,11 @@
 class QMainWindow;
 class QDockWidget;
 class QWidget;
+class QToolButton;
 class QEvent;
 
 namespace augment {
+class Panels;
 // Passive, reversible decoration of *native* OBS dock title bars.
 // Does not replace the titleBarWidget, title text, native buttons, or hit areas.
 class DockTitleIcons final : public QObject {
@@ -20,17 +22,20 @@ public:
     static constexpr int titleTextInset(){return 20;}
     bool titleIndented(QDockWidget *dock) const;
     QString originalTitle(QDockWidget *dock) const;
-    explicit DockTitleIcons(QMainWindow *window,QObject *parent=nullptr);
+    explicit DockTitleIcons(QMainWindow *window,Panels *panels=nullptr,QObject *parent=nullptr);
     ~DockTitleIcons() override;
     void refresh();
     int decoratedCount() const;
     QWidget *glyph(QDockWidget *dock) const;
+    QToolButton *moreButton(QDockWidget *dock) const;
 private:
     bool eventFilter(QObject *watched,QEvent *event) override;
     void scheduleRefresh();
     void place(QDockWidget *dock,QWidget *icon);
     QPointer<QMainWindow> window_;
+    QPointer<Panels> panels_;
     QHash<QDockWidget*,QPointer<QWidget>> icons_;
+    QHash<QDockWidget*,QPointer<QToolButton>> moreButtons_;
     QHash<QDockWidget*,QString> originalTitles_;
     QHash<QDockWidget*,QString> displayedTitles_;
     QHash<QDockWidget*,QString> originalActionLabels_;

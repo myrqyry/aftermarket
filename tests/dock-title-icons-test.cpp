@@ -1,10 +1,13 @@
 #include "dock-title-icons.h"
 #include "dock-faces.h"
+#include "panels.h"
+#include "dock-header-button.h"
 #include <QApplication>
 #include <QMainWindow>
 #include <QDockWidget>
 #include <QLabel>
 #include <QToolButton>
+#include <QMenu>
 #include <QStyleOptionDockWidget>
 #include <QStyle>
 #include <QFontMetrics>
@@ -53,7 +56,8 @@ int main(int argc,char **argv){
  }
  main.resize(1350,720);main.show();app.processEvents();
  {
-   augment::DockTitleIcons icons(&main);
+   augment::Panels panels;
+   augment::DockTitleIcons icons(&main,&panels);
    icons.refresh();app.processEvents();
    REQUIRE(icons.decoratedCount()==5);
    QList<QImage> pictures;
@@ -69,6 +73,19 @@ int main(int argc,char **argv){
       REQUIRE(dock->windowTitle().trimmed()==entry.title);
       REQUIRE(dock->toggleViewAction()->text()==entry.title);
       REQUIRE(dock->titleBarWidget()==entry.nativeTitle);
+      auto *more=icons.moreButton(dock);
+      REQUIRE(more&&more->parentWidget()==dock);
+      REQUIRE(more->objectName()=="aftermarket-dock-more");
+      REQUIRE(more->isVisible());
+      REQUIRE(more->geometry().bottom()<dock->widget()->geometry().top());
+      REQUIRE(more->menu()!=nullptr);
+      more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
+      app.processEvents();
+      REQUIRE(!more->menu()->actions().isEmpty());
+      auto *first=more->menu()->actions().first();
+      REQUIRE(first->text()=="Collapse");
+      REQUIRE(first->isEnabled()==panels.canCollapse(dock));
+      more->menu()->hide();app.processEvents();
       REQUIRE(glyph->geometry().bottom()<dock->widget()->geometry().top());
       QStyleOptionDockWidget option;option.initFrom(dock);
       option.title=dock->windowTitle();
@@ -86,6 +103,21 @@ int main(int argc,char **argv){
       REQUIRE(dock->toggleViewAction()->text()==entry.title);
       pictures.append(glyph->grab().toImage());
    }
+   // Real menu action uses the existing Panels implementation, not a fake state.
+   auto *scenes=docks[0].dock;
+   auto *sceneMore=icons.moreButton(scenes);
+   main.splitDockWidget(scenes,docks[1].dock,Qt::Vertical);app.processEvents();
+   icons.refresh();app.processEvents();
+   REQUIRE(panels.canCollapse(scenes));
+   sceneMore->menu()->popup(sceneMore->mapToGlobal(QPoint(0,sceneMore->height())));app.processEvents();
+   sceneMore->menu()->actions().first()->trigger();app.processEvents();
+   REQUIRE(panels.collapsed(scenes)&&scenes->widget()->isHidden());
+   sceneMore->menu()->hide();app.processEvents();
+   sceneMore->menu()->popup(sceneMore->mapToGlobal(QPoint(0,sceneMore->height())));app.processEvents();
+   REQUIRE(sceneMore->menu()->actions().first()->text()=="Expand");
+   sceneMore->menu()->actions().first()->trigger();app.processEvents();
+   REQUIRE(!panels.collapsed(scenes)&&scenes->widget()->isVisible());
+   sceneMore->menu()->hide();app.processEvents();
    REQUIRE(pictures[0]!=pictures[1]);
    REQUIRE(pictures[1]!=pictures[2]);
    for(const auto &entry:docks){
@@ -104,6 +136,16 @@ int main(int argc,char **argv){
    REQUIRE(toggle&&glyph&&toggle->isVisible());
    REQUIRE(toggle->mapTo(mixer,QPoint(0,0)).y()>=mixer->widget()->geometry().top());
    REQUIRE(!mixer->findChild<QToolButton*>("aftermarket-face-flip"));
+   auto *mixerMore=icons.moreButton(mixer);
+   REQUIRE(mixerMore&&mixerMore->isVisible());
+   auto *specialized=new augment::DockHeaderButton(augment::DockHeaderGlyph::More,mixer);
+   specialized->setObjectName("aftermarket-mixer-more");
+   specialized->move(mixerMore->pos());specialized->show();
+   icons.refresh();app.processEvents();
+   REQUIRE(!mixerMore->isVisible()); // only one ellipsis in the native mixer
+   specialized->hide();icons.refresh();app.processEvents();
+   REQUIRE(mixerMore->isVisible());
+   delete specialized;
    // Theme-derived glyph color, not a hardcoded SVG stroke.
    auto before=glyph->grab().toImage();
    auto palette=glyph->palette();
@@ -121,6 +163,8 @@ int main(int argc,char **argv){
    // Watch the dock tree: newly added plugin docks are discovered automatically.
    app.processEvents();
    REQUIRE(icons.glyph(custom));
+   icons.refresh();app.processEvents(); // after Qt has assigned native dock geometry
+   REQUIRE(icons.moreButton(custom)&&icons.moreButton(custom)->isVisible());
    REQUIRE(icons.decoratedCount()==6);
    const auto genericGlyph=icons.glyph(custom)->grab().toImage();
    custom->setWindowTitle("Twitch Chat");
@@ -132,14 +176,18 @@ int main(int argc,char **argv){
    // Long titles never obscure native text or native float/close buttons.
    custom->setWindowTitle(QString(200,'W'));
    icons.refresh();app.processEvents();
-   REQUIRE(!icons.glyph(custom)->isVisible());
-   REQUIRE(!icons.titleIndented(custom));
+   REQUIRE(!icons.glyph(custom)->isVisible()); // long labels favor menu over icon
+   REQUIRE(icons.moreButton(custom)->isVisible());
+   REQUIRE(icons.originalTitle(custom)==QString(200,'W'));
+   REQUIRE(custom->windowTitle().size()<200); // reversible visual elision
+   REQUIRE(custom->toggleViewAction()->text()==QString(200,'W'));
    custom->setWindowTitle("Plugin");
    icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());
    // Floating titlebar is owned by the window manager.
    custom->setFloating(true);icons.refresh();app.processEvents();
    REQUIRE(!icons.glyph(custom)->isVisible());
+   REQUIRE(!icons.moreButton(custom)->isVisible());
    REQUIRE(!icons.titleIndented(custom));
    custom->setFloating(false);icons.refresh();app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());
@@ -147,6 +195,7 @@ int main(int argc,char **argv){
    auto *customBar=new QWidget(custom);
    custom->setTitleBarWidget(customBar);icons.refresh();app.processEvents();
    REQUIRE(!icons.glyph(custom)->isVisible());
+   REQUIRE(!icons.moreButton(custom)->isVisible());
    REQUIRE(!icons.titleIndented(custom));
    custom->setTitleBarWidget(nullptr);
    delete customBar;
@@ -158,6 +207,7 @@ int main(int argc,char **argv){
  app.processEvents();
  for(const auto &entry:docks){
    REQUIRE(!entry.dock->findChild<QWidget*>("aftermarket-dock-title-icon",Qt::FindDirectChildrenOnly));
+   REQUIRE(!entry.dock->findChild<QToolButton*>("aftermarket-dock-more",Qt::FindDirectChildrenOnly));
    REQUIRE(entry.dock->windowTitle()==entry.title);
    REQUIRE(entry.dock->toggleViewAction()->text()==entry.title);
  }

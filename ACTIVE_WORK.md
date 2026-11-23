@@ -1634,3 +1634,51 @@ Verification:
 Remaining: a subsequent restart of the user's live OBS is needed to see this
 installed binary in that running process; isolated tests are not evidence of
 the user's active audio delivery or on-disk pan/sync source persistence.
+
+## Slice 40 — global dock three-dot menus and Collapse/Expand first (2026-11-22)
+
+User asked for the three-dot overflow on every OBS dock with Collapse/Expand to
+start. The corrected Slice 39 bottom AudioBus switch and exclusive mixer/AudioHub
+faces remain unchanged. The superseded split-panel version was considered
+visually acceptable but not requested back in this slice.
+
+Implementation:
+- Extended existing DockTitleIcons to install a theme-aware more button on
+  native-titled OBS and newly added plugin docks. One deferred update covers
+  native Qt layout assignment after the plugin dock is created.
+- The first menu item uses existing Panels canCollapse/collapsed/toggle to
+  Collapse or Expand. Unsupported native/tabbed layout disables that item;
+  floating, vertical and custom title bars retain native ownership and are
+  not overlaid.
+- The mixer keeps its richer audio-specific overflow with the same collapse
+  action first, without introducing a second three-dot icon. A generic
+  fallback appears if the specialized mixer icon is unavailable.
+- Narrow headers elide only the visible title text to leave the menu a click
+  target, preserving exact dock name in OBS Docks menu, source widget
+  identity, native float/close buttons and reversible title restoration.
+- README has new optimized screenshots; Panels UI explains the title menu.
+
+Verification:
+- New tests first failed for missing generic menus and action. Updated tests
+  cover dock discovery, menu position, action state/trigger/restore, native
+  source widget identity, floating/tabbed/custom-title fallback, long-title
+  elision and single mixer overflow.
+- Clean compiled module; full serial Qt CTest 22/22 pass; diff check clean.
+  One earlier parallel run encountered an intermittent existing OBS routing
+  teardown segfault, but the focused test and serial suite passed. It was not
+  fixed or claimed resolved.
+- Real isolated OBS 32.2.0 under Xvfb: Scenes, Sources, Audio Mixer,
+  Scene Transitions and Controls displayed menus. Clicked Scenes Collapse,
+  observed native contents hidden and Sources move up, then clicked Expand
+  and observed exact native contents return. Clicked mixer title overflow;
+  Collapse appeared first, followed by existing pan/sync, hidden, orientation,
+  advanced-audio and per-channel options. Native AudioBus bottom switch intact.
+- Installed local build with SHA256
+  ea8daeb442a234924820670b63c0e14b622b58968205ce7e3103df6dd3430adb
+  bytewise identical to installed module. Previous installed module backed up
+  at ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-global-overflow.370d4baf126d.so.
+  User OBS was not running; config hashes before and after installation matched.
+  No external push, repo release or user scene/audio/routing modification.
+
+Open: custom/floating title bars deliberately retain their own controls.
+Verification was in isolated OBS, not a subsequent personal-profile session.

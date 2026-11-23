@@ -2,6 +2,8 @@
 #include <QObject>
 #include <memory>
 class QDockWidget;
+class QMenu;
+class QAction;
 class QMainWindow;
 class QWidget;
 namespace augment {
@@ -12,6 +14,8 @@ public:
     bool canCollapse(QDockWidget *) const;
     bool collapsed(QDockWidget *) const;
     bool toggle(QDockWidget *);
+    // One shared native action for title menus and the mixer overflow.
+    QAction *addCollapseAction(QMenu *menu,QDockWidget *dock);
     void restoreAll();
     enum class StudioViewMode {Auto,Both,Program,Preview};
     bool setStudioViewMode(QMainWindow *,StudioViewMode);

@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QMenu>
 #include <QVBoxLayout>
 #include <QListWidget>
 #include <QPointer>
@@ -26,7 +27,19 @@ int main(int argc,char **argv) {
  main.resize(640,480);main.show();app.processEvents();
  augment::Panels panels;
  const int height=a->height(),max=a->maximumHeight(),min=a->minimumHeight(),width=a->width(),minWidth=a->minimumWidth();
- REQUIRE(panels.canCollapse(a));REQUIRE(panels.toggle(a));app.processEvents();
+ REQUIRE(panels.canCollapse(a));
+ QMenu stateMenu;
+ auto *collapse=panels.addCollapseAction(&stateMenu,a);
+ REQUIRE(collapse==stateMenu.actions().first());
+ REQUIRE(collapse->text()=="Collapse"&&collapse->isEnabled());
+ collapse->trigger();app.processEvents();
+ REQUIRE(panels.collapsed(a));
+ stateMenu.clear();
+ auto *expand=panels.addCollapseAction(&stateMenu,a);
+ REQUIRE(expand->text()=="Expand"&&expand->isEnabled());
+ expand->trigger();app.processEvents();
+ REQUIRE(!panels.collapsed(a));
+ REQUIRE(panels.toggle(a));app.processEvents();
  REQUIRE(panels.collapsed(a)&&body->isHidden()&&!a->isHidden());
  REQUIRE(a->height()<height/2); REQUIRE(a->width()>=width);
  REQUIRE(panels.toggle(a));app.processEvents();
@@ -38,6 +51,11 @@ int main(int argc,char **argv) {
  REQUIRE(panels.collapsed(a));
  panels.restoreAll();app.processEvents();REQUIRE(!body->isHidden()&&!panels.collapsed(a));
  main.tabifyDockWidget(a,b);app.processEvents();REQUIRE(!panels.canCollapse(a));
+ stateMenu.clear();
+ auto *unavailable=panels.addCollapseAction(&stateMenu,a);
+ REQUIRE(unavailable->text()=="Collapse"&&!unavailable->isEnabled());
+ unavailable->trigger();app.processEvents();
+ REQUIRE(!panels.collapsed(a));
  main.removeDockWidget(b);b->hide();app.processEvents();
  REQUIRE(panels.canCollapse(a));REQUIRE(panels.toggle(a));a->hide();app.processEvents();
  REQUIRE(!panels.collapsed(a)&&!body->isHidden());

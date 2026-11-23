@@ -18,6 +18,8 @@
 #include <QSizePolicy>
 #include <QFrame>
 #include <QToolButton>
+#include <QMenu>
+#include <QAction>
 #include <QButtonGroup>
 #include <QFont>
 #include "visual-polish.h"
@@ -462,6 +464,19 @@ bool Panels::canCollapse(QDockWidget *dock)const {
         main->dockWidgetArea(dock)!=Qt::NoDockWidgetArea&&main->tabifiedDockWidgets(dock).isEmpty()&&
         headerHeight(dock)>=8&&headerHeight(dock)<dock->height()-4;
 }
+QAction *Panels::addCollapseAction(QMenu *menu,QDockWidget *dock) {
+    if(!menu)return nullptr;
+    const bool isCollapsed=collapsed(dock);
+    auto *action=menu->addAction(isCollapsed?"Expand":"Collapse");
+    action->setObjectName("aftermarket-collapse-action");
+    action->setEnabled(canCollapse(dock));
+    QPointer<Panels> owner=this;
+    QPointer<QDockWidget> target=dock;
+    connect(action,&QAction::triggered,menu,[owner,target]{
+        if(owner&&target)owner->toggle(target);
+    });
+    return action;
+}
 bool Panels::toggle(QDockWidget *dock) {
     if(collapsed(dock))return expand(dock);
     if(!canCollapse(dock))return false;
@@ -539,7 +554,7 @@ bool Panels::eventFilter(QObject *o,QEvent *event) {
 QWidget *Panels::createPage(QMainWindow *main,QWidget *parent) {
     auto *dlg=new QWidget(parent);
     auto *layout=new QVBoxLayout(dlg);
-    auto *hint=new QLabel("Middle-click a dock title to collapse or expand it. Or select a panel here. Floating and tabbed docks are left alone.",dlg);
+    auto *hint=new QLabel("Use a dock title’s three-dot menu or middle-click its title to collapse/expand. You can also choose a panel here. Floating and tabbed docks are left alone.",dlg);
     hint->setWordWrap(true);layout->addWidget(hint);
     auto *previewRow=new QHBoxLayout;
     auto *previewToggle=new QPushButton("Make preview dockable",dlg);

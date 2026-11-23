@@ -69,6 +69,7 @@ static bool setAudioMixerBackside(bool enabled) {
     if(!enabled) {
         frontAudio.reset(); // remove only our controls before restoring OBS front
         if(dockFaces->front(dock))dockFaces->detach(dock);
+        if(dockTitleIcons)dockTitleIcons->refresh();
         return true;
     }
     if(dockFaces->front(dock))return true;
@@ -110,6 +111,10 @@ static bool setAudioMixerBackside(bool enabled) {
     QObject::connect(menu,&QMenu::aboutToShow,more,[menu,safeDock]{
         menu->clear();
         if(!safeDock||!dockFaces||!frontAudio)return;
+        if(panels){
+            panels->addCollapseAction(menu,safeDock);
+            menu->addSeparator();
+        }
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);
         knobs->setChecked(frontAudio->knobs());
@@ -123,6 +128,7 @@ static bool setAudioMixerBackside(bool enabled) {
         // In floating/narrow docks the native footer returns when the title
         // overflow hides, so no OBS button becomes unreachable.
         frontAudio->setMenuButton(more);
+        if(dockTitleIcons)dockTitleIcons->refresh();
     }else delete more;
     // The small AudioBus button at the bottom switches between the two pages.
     // Do not stack the entire routing canvas under OBS's native mixer.
@@ -163,11 +169,11 @@ static bool startCustomUi(){
         []{return frontendReady&&nativeActions?nativeActions->snapshot():augment::StatusSnapshot{};},
         []{return frontendReady&&nativeActions?nativeActions->enumerateHotkeys():QList<augment::HotkeyChoice>{};},
         [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);});
+    panels=std::make_unique<augment::Panels>();
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
-        dockTitleIcons=std::make_unique<augment::DockTitleIcons>(main);
+        dockTitleIcons=std::make_unique<augment::DockTitleIcons>(main,panels.get());
     dockFaces=std::make_unique<augment::DockFaces>();
     mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
-    panels=std::make_unique<augment::Panels>();
     transforms=std::make_unique<augment::ObsTransformStyle>(
         static_cast<QWidget*>(obs_frontend_get_main_window()),
         []{return controller&&controller->modernTransformFrame();});
