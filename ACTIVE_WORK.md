@@ -2307,3 +2307,46 @@ Verification:
 
 Boundary: existing live OBS needs restarting for the installed module to
 load. No remote push, release, source routing or audio data mutation.
+
+## Slice 51 — one clearly distinct outline color for selection vs audio activity (2026-11-23)
+
+Correction: the preceding AudioBus slice drew both an outer selected border
+and an inner active ring on selected+active sources, and the Colorway theme
+resolved Link and Highlight to visually similar shades of blue. The user
+wanted only two clearly different outline colors, not layered decorations.
+
+Implementation:
+- Each source still has exactly ONE outline. Selected wins and uses
+  QPalette::Link (blue in current OBS theme). Unselected sources with a
+  measured active signal use an activity color; outputs with live routed
+  audio use that same color. Inactive unselected sources/outputs stay neutral.
+- A small palette-aware helper keeps the normal QPalette::Highlight color
+  when its hue is already sufficiently distinct from Link. When Link and
+  Highlight resolve to nearly the same hue, derive a contrasting active
+  hue from Link by rotating the hue; retain theme-derived brightness/alpha.
+  In Colorway this is blue for selection and green for audio activity.
+- Removed the separate inner active ring on selected+active sources.
+  The selected border remains stable regardless of measured signal. Did
+  not alter cable visibility, target routes, status readings, or Show all
+  wires default (still on). No separate dots or new UI elements.
+
+Verification:
+- TDD RED: updated test rejects the inner stroke, requires stable selected
+  source pixels after its signal becomes active, verifies mute does not
+  alter selected border, verifies unselected activity changes its outline,
+  and requires a minimum hue separation of 65 degrees, not just a change
+  of luminance between two blues. GREEN after one-outline change and hue
+  contrast fallback. Existing Qt palette and routing tests still pass.
+- Real isolated OBS 32.2.0 with Tone test and Silent test, compiled module
+  confirmed loaded at the sandbox path. Selected Silent test outline RGB
+  (68,100,199) is blue; active Tone test outline RGB (68,158,39)
+  is green; active Track 1 circle uses green. Screenshot refreshed at
+  docs/screenshots/readme/audiohub-activity-outlines.webp.
+- Full build clean (no warnings), 24/24 serial CTests pass,
+  git diff --check clean. Byte-identical module installed with SHA256
+  84271c6c7191d06def6b29ce5750f0b458a9b2b9ab258992acb794b6c909d92a
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Old installed .so backed up to
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-single-colored-outlines.ea5984764cc9.so.
+  User OBS was not running at install. Four tracked user config files
+  unchanged. No GitHub push or unrelated changes.

@@ -236,15 +236,27 @@ int main(int argc,char **argv){
  bay.refreshLevels();app.processEvents();
  auto after=canvas->grab().toImage();
  REQUIRE(before!=after);
- // The selected source keeps its distinct outer stroke; active signal adds
- // an inner highlight, without turning selection into an activity claim.
- REQUIRE(after.pixelColor(5,43)==before.pixelColor(5,43));
- REQUIRE(after.pixelColor(8,43)!=before.pixelColor(8,43));
+ // One outline per node: selected uses selection color, unselected
+ // active uses signal color. A selected+active source must NOT gain an
+ // inner/second border or change its selected outline when signal starts.
+ const QRect selectedNode(5,30,124,26);
+ REQUIRE(after.copy(selectedNode)==before.copy(selectedNode));
+ const auto selectedColor=after.pixelColor(5,43);
+ const auto activeColor=after.pixelColor(5,107);
+ REQUIRE(selectedColor!=activeColor);
+ // Different *hues*, not two slightly different blues in Colorway.
+ const int selectedHue=selectedColor.hsvHue();
+ const int activeHue=activeColor.hsvHue();
+ REQUIRE(selectedHue>=0&&activeHue>=0);
+ const int hueDifference=qAbs(selectedHue-activeHue);
+ REQUIRE(qMin(hueDifference,360-hueDifference)>=65);
  int sourceOutlinePixels=0,outputOutlinePixels=0,oldSourceDotPixels=0,
      oldOutputDotPixels=0,leftIconPixels=0;
  for(int y=38;y<=48;++y){
+     // Unselected Music has real signal: it gets the activity-color
+     // OUTLINE; selected Voice keeps its selection color.
      for(int x=5;x<=9;++x)
-         if(before.pixel(x,y)!=after.pixel(x,y))++sourceOutlinePixels;
+         if(before.pixel(x,y+64)!=after.pixel(x,y+64))++sourceOutlinePixels;
      for(int x=canvas->width()-41;x<=canvas->width()-37;++x)
          if(before.pixel(x,y)!=after.pixel(x,y))++outputOutlinePixels;
      for(int x=115;x<=124;++x)
@@ -322,6 +334,7 @@ int main(int argc,char **argv){
  const auto mutedBorder=canvas->grab().toImage();
  int mutedSourceOutline=0,mutedOutputOutline=0,mutedFormerDots=0;
  for(int y=38;y<=48;++y){
+     // Muted Voice stays selected: its single selection outline is stable.
      for(int x=5;x<=9;++x)
          if(activeBorder.pixel(x,y)!=mutedBorder.pixel(x,y))++mutedSourceOutline;
      for(int x=canvas->width()-41;x<=canvas->width()-37;++x)
@@ -331,7 +344,7 @@ int main(int argc,char **argv){
      for(int x=canvas->width()-12;x<=canvas->width()-4;++x)
          if(activeBorder.pixel(x,y)!=mutedBorder.pixel(x,y))++mutedFormerDots;
  }
- REQUIRE(mutedSourceOutline>0&&mutedOutputOutline>0);
+ REQUIRE(mutedSourceOutline==0&&mutedOutputOutline>0);
  REQUIRE(mutedFormerDots==0);
  REQUIRE(!bay.outputSignal(1)); // browser is silent, voice is muted
  REQUIRE(bay.outputSignal(7)); // Music is independently monitored and producing signal

@@ -44,6 +44,25 @@ AudioPatchbay::ActivityState AudioPatchbay::activityForSource(const RouteSource 
     if(!src.audioActive||!src.signalKnown)return ActivityState::Unknown;
     return src.signalActive?ActivityState::Active:ActivityState::Silent;
 }
+namespace {
+QColor activeOutlineColor(const QPalette &theme){
+    QColor active=theme.color(QPalette::Highlight);
+    const QColor selected=theme.color(QPalette::Link);
+    const int selectedHue=selected.hsvHue();
+    const int activeHue=active.hsvHue();
+    // Themes can define Link and Highlight as nearly identical blues.
+    // Preserve their roles, but derive a contrasting active hue if so:
+    // in Colorway this makes selected blue and activity green. Keep the
+    // theme's brightness/alpha instead of hardcoding a green RGB.
+    const int difference=qAbs(selectedHue-activeHue);
+    if(selectedHue<0||activeHue<0||qMin(difference,360-difference)<65){
+        const int hue=selectedHue>=0?(selectedHue+240)%360:125;
+        active.setHsv(hue,qMax(150,active.hsvSaturation()),
+                      qMax(155,active.value()),active.alpha());
+    }
+    return active;
+}
+}
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
     static constexpr int monitorTarget=7;
@@ -202,6 +221,7 @@ protected:
         p.setRenderHint(QPainter::Antialiasing);
         const auto fg=palette().color(QPalette::Text);
         const auto accent=palette().color(QPalette::Highlight);
+        const auto activeColor=activeOutlineColor(palette());
         const auto muted=palette().color(QPalette::Mid);
         const auto caption=paletteBlend(muted,fg,60); // readable on dark and light themes
         const auto base=palette().color(QPalette::Button);
@@ -228,7 +248,7 @@ protected:
             const bool live=outputActivity(t)==ActivityState::Active;
             const QColor inactive=paletteBlend(muted,fg,43);
             const QColor hovered=paletteBlend(muted,fg,68);
-            p.setPen(QPen(live?accent:(hoveredTarget==t?hovered:inactive),
+            p.setPen(QPen(live?activeColor:(hoveredTarget==t?hovered:inactive),
                           live?1.85:(hoveredTarget==t?1.3:0.95)));
             p.setBrush(connected?paletteBlend(base,accent,13):base);
             p.drawEllipse(rect);
@@ -288,26 +308,19 @@ protected:
             const bool current=src.id==selected;
             const auto rect=sourceRect(i);
             const bool focused=src.id==focusedSource();
-            // Selection is a separate, persistent state from measured
-            // activity: use the theme's Link color for its outer outline,
-            // and the theme Highlight for live signal. A selected/live node
-            // retains both (inner activity stroke). Neither hover nor a
-            // connected route can make a silent node look active.
+            // One outline per node, with distinct theme-derived colors:
+            // selected uses Link; unselected active uses Highlight.
+            // Selection takes precedence if both states apply.
             const bool live=AudioPatchbay::activityForSource(src)==ActivityState::Active;
             QColor selection=palette().color(QPalette::Link);
             if(selection==accent||selection==base)
                 selection=paletteBlend(accent,fg,50);
             const QColor inactive=paletteBlend(muted,fg,43);
             const QColor hovered=paletteBlend(muted,fg,68);
-            const QColor border=current?selection:(live?accent:(focused?hovered:inactive));
+            const QColor border=current?selection:(live?activeColor:(focused?hovered:inactive));
             p.setPen(QPen(border,current?1.8:(live?1.65:(focused?1.0:0.75))));
             p.setBrush(current?paletteBlend(base,accent,18):base);
             p.drawRoundedRect(rect,5,5);
-            if(current&&live){
-                p.setPen(QPen(accent,1.15));
-                p.setBrush(Qt::NoBrush);
-                p.drawRoundedRect(rect.adjusted(3,3,-3,-3),3,3);
-            }
             QFont sourceFont=bodyFont;
             sourceFont.setWeight(current?QFont::Medium:QFont::Normal);
             p.setFont(sourceFont);
