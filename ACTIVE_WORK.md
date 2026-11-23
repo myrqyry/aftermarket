@@ -1414,3 +1414,20 @@ The feature is default-on as requested while Aftermarket UI is active,
 and its entire decorator is removed on emergency stop/unload.
 No independent user toggle or per-dock customization was added, and
 no upstream push is implied.
+
+### Slice 36 — verified local deployment (2026-11-22)
+
+- Feature commit: 89905a0; all **22/22 CTest** passed after the adaptive
+  14/10px title icon adjustment; no compiler warnings on final build.
+- Verified exact SHA256 886fc1295e87c1ca32cec87ed47b01ba684a136855482c9ccff1706ebb318d14
+  loaded in isolated OBS 32.2.0, with native Audio Mixer title and face
+  switch still working. Installed this exact binary by repository's atomic
+  scripts/install.sh.
+- Previous installed binary SHA256
+  41920d1b9165bc5546f524952a79a74dd96abe1b1fced7c50cb7649ffdbded20
+  preserved byte-for-byte at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-dock-title-icons.41920d1b9165.so.
+- All three user config file hashes were identical before/after installation:
+  rules.json, action-strip.json, front-audio-controls.json. No user OBS
+  process was running during this install; none was started or stopped.
+  Disposable OBS and Xvfb :119 terminated after verification. No push.
