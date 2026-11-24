@@ -126,6 +126,8 @@ bool ActionStrip::validItem(const StripItem &i) {
     if(i.type=="spacer"||i.type=="separator")return i.target.isEmpty();
     if(i.type=="dock")return !i.target.isEmpty();
     if(i.type=="search")return i.target=="quick-find";
+    if(i.type=="cue")return QRegularExpression(
+        "^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$").match(i.target).hasMatch();
     if(i.type=="layout")return QRegularExpression(
         "^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$").match(i.target).hasMatch();
     if(i.type=="hotkey")return i.target.startsWith("hotkey:v1:")&&i.target.size()>11;
@@ -134,10 +136,11 @@ bool ActionStrip::validItem(const StripItem &i) {
     return false;
 }
 ActionStrip::ActionStrip(QString file,StatusProvider status,HotkeyList hotkeys,HotkeyTrigger trigger,
-                         QObject *parent,LayoutList layouts,LayoutApply applyLayout,SearchOpen search)
+                         QObject *parent,LayoutList layouts,LayoutApply applyLayout,
+                         SearchOpen search,CueList cues,CueApply applyCue)
     :QObject(parent),path_(std::move(file)),status_(std::move(status)),hotkeys_(std::move(hotkeys)),
      trigger_(std::move(trigger)),layouts_(std::move(layouts)),applyLayout_(std::move(applyLayout)),
-     search_(std::move(search)) {load();}
+     search_(std::move(search)),cues_(std::move(cues)),applyCue_(std::move(applyCue)) {load();}
 ActionStrip::~ActionStrip(){
     closeEditor();
     shutdown_=true;
@@ -287,6 +290,13 @@ bool ActionStrip::trigger(const QString &id){
             if(!search_)return false;
             search_();return true;
         }
+        if(item.type=="cue"){
+            if(!cues_||!applyCue_)return false;
+            const auto items=cues_();
+            if(!std::any_of(items.begin(),items.end(),
+                [&](const CueChoiceStrip &cue){return cue.id==item.target;}))return false;
+            return applyCue_(item.target);
+        }
         if(item.type=="hotkey")return trigger_&&trigger_(item.target);
         if(item.type=="layout"){
             if(!applyLayout_||!layouts_)return false;
@@ -313,6 +323,10 @@ QString ActionStrip::itemText(const QString &id) const {
     for(const auto &i:items_)if(i.id==id){
         if(i.type=="status")return printStatus(i,latest_);
         if(i.type=="dock")return dockLabel(i,bar_);
+        if(i.type=="cue"&&i.label.trimmed().isEmpty()){
+            if(cues_)for(const auto &c:cues_())if(c.id==i.target)return c.name;
+            return "Cue unavailable";
+        }
         if(i.type=="layout"&&i.label.trimmed().isEmpty()&&layouts_)
             for(const auto &c:layouts_())if(c.id==i.target)return c.name;
         return typeLabel(i);
@@ -354,6 +368,13 @@ void ActionStrip::refresh(){
                 QStringLiteral("Dock unavailable: ")+item.target;
             b->setToolTip(action);
             b->setAccessibleName(action);
+        }
+        if(item.type=="cue"){
+            bool found=false;
+            if(cues_)for(const auto &c:cues_())if(c.id==item.target){found=true;break;}
+            b->setEnabled(found&&bool(applyCue_));
+            b->setToolTip(found?"Run cue: "+label:"Saved cue missing: "+item.target);
+            b->setAccessibleName(b->toolTip());
         }
         if(item.type=="layout"){
             bool found=false;
@@ -500,6 +521,13 @@ void ActionStrip::updateOverflow(){
                 action->setEnabled(bool(search_));
                 action->setToolTip(search_?"Find OBS sources, scenes and filters":
                     "Source search unavailable");
+            }
+            if(it!=items_.end()&&it->type=="cue"){
+                bool found=false;
+                if(cues_)for(const auto &c:cues_())if(c.id==it->target){found=true;break;}
+                action->setEnabled(found&&bool(applyCue_));
+                action->setToolTip(found?"Run cue: "+itemText(id):
+                    "Saved cue missing: "+it->target);
             }
             if(it!=items_.end()&&it->type=="layout"){
                 bool found=false;
@@ -651,6 +679,19 @@ QString ActionStrip::chooseLayout(QWidget *parent)const{
         "Saved dock layout",choices,0,false,&accepted);
     return accepted?ids.value(chosen):QString{};
 }
+QString ActionStrip::chooseCue(QWidget *parent) const{
+    if(!cues_)return {};
+    QStringList names;QMap<QString,QString> byName;
+    for(const auto &cue:cues_()){
+        const auto label=cue.name+" ["+cue.id+"]";
+        names.append(label);byName[label]=cue.id;
+    }
+    if(names.isEmpty())return {};
+    bool accepted=false;
+    const auto selected=QInputDialog::getItem(parent,"Add Cue Deck action",
+        "Saved cue",names,0,false,&accepted);
+    return accepted?byName.value(selected):QString{};
+}
 bool ActionStrip::addFromEditor(const QString &type,QWidget *parent){
     StripItem item;item.id=QUuid::createUuid().toString(QUuid::WithoutBraces);
     item.type=type;
@@ -674,6 +715,9 @@ bool ActionStrip::addFromEditor(const QString &type,QWidget *parent){
         if(item.target.isEmpty())return false;
     }else if(type=="search"){
         item.target="quick-find";
+    }else if(type=="cue"){
+        item.target=chooseCue(parent);
+        if(item.target.isEmpty())return false;
     }
     return addItem(item);
 }
@@ -720,7 +764,7 @@ void ActionStrip::showEditor(QWidget *parent,QMenuBar *menuBar){
     connect(add,&QPushButton::clicked,&dialog,[this,add,&dialog,rebuildList](){
         QMenu types(add);
         QMap<QAction*,QString> choices;
-        for(const auto &name:{"status","hotkey","dock","layout","search","separator","spacer"})
+        for(const auto &name:{"status","hotkey","dock","layout","cue","search","separator","spacer"})
             choices[types.addAction(QString::fromLatin1(name))]=QString::fromLatin1(name);
         if(auto *chosen=types.exec(add->mapToGlobal(QPoint(0,add->height())))){
             if(addFromEditor(choices.value(chosen),&dialog))rebuildList();

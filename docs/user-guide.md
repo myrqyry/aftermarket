@@ -315,6 +315,49 @@ dock late, and stops retrying on emergency recovery. It does not copy Timeline's
 
 ## Sources and navigation
 
+### Cue Deck
+
+**Tools → Aftermarket: Cue Deck…** opens a temporary, theme-aware cue manager.
+Cues are named ordered action sequences—not new OBS scenes or copies of any
+third-party animation engine. Use **New cue**, enter a name, then add steps:
+
+- **+ Layout:** pick a saved Aftermarket dock layout.
+- **+ Hotkey:** pick a registered **native OBS or plugin hotkey** by group
+  and readable name. This can include Exeldro Move's per-source start/hold
+  actions *when OBS has registered them*.
+- **+ Wait:** insert a delay (1–30,000 ms) between actions.
+- Move steps **Up**, **Down**, or **Remove** to arrange the sequence.
+
+Use **Run cue** to dispatch the sequence; **Stop** cancels pending steps but
+does not undo actions already sent to OBS. Running a cue is an explicit
+on-air-capable action. A hotkey may start/stop a stream or trigger a scene
+transition, depending on its own OBS/plugin behavior. A completed cue means
+all supported actions were **dispatched**, *not* that a third-party animation
+or scene transition finished.
+
+Cues store stable native layout IDs and OBS hotkey owner identities rather
+than mutable names. Missing plugins, removed source hotkeys, deleted layouts,
+and ambiguous identities fail preflight before any action executes. If an
+action disappears **during** a sequence, dispatch stops at that step; earlier
+steps are not rolled back. Cue definitions remain stored so temporarily
+unavailable plugins do not erase your work.
+
+To add one-click playback, use **Tools → Aftermarket: Action Strip… → Add…
+→ cue**, select the saved cue, and enable the Action Strip if necessary.
+Renaming a cue updates its button caption; deleting it disables that button.
+
+Cue definitions are atomically written to
+`~/.config/obs-studio/plugin_config/obs-ui-augment/cue-deck.json`.
+Up to 32 cues, each up to 48 steps, are supported; total waits per cue are
+limited to 120 seconds. Existing scene, filter, and plugin configurations are
+never rewritten by creating or editing a cue.
+
+This first implementation uses existing plugin hotkeys for interoperability;
+it does not add vendor-specific Exeldro parameter editing, visual animation
+previews, completion callbacks, or a general WebSocket macro adapter. Those
+need explicit compatibility and runtime testing before being described as
+available.
+
 ### Embedded Add Source picker
 
 Aftermarket presents OBS 32.2's native Add Source workflow in a compact panel

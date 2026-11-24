@@ -24,6 +24,9 @@ struct HotkeyChoice {
 struct LayoutChoice {
     QString id,name;
 };
+struct CueChoiceStrip {
+    QString id,name;
+};
 struct StatusSnapshot {
     bool recording=false,streaming=false;
     double fps=0,cpu=0,streamKbps=0,recordKbps=0;
@@ -38,9 +41,12 @@ public:
     using LayoutList=std::function<QList<LayoutChoice>()>;
     using LayoutApply=std::function<bool(const QString &)>;
     using SearchOpen=std::function<void()>;
+    using CueList=std::function<QList<CueChoiceStrip>()>;
+    using CueApply=std::function<bool(const QString &)>;
     explicit ActionStrip(QString configFile,StatusProvider status={},HotkeyList hotkeys={},
                          HotkeyTrigger trigger={},QObject *parent=nullptr,
-                         LayoutList layouts={},LayoutApply applyLayout={},SearchOpen search={});
+                         LayoutList layouts={},LayoutApply applyLayout={},SearchOpen search={},
+                         CueList cues={},CueApply applyCue={});
     ~ActionStrip() override;
     bool load();
     bool save() const;
@@ -76,6 +82,8 @@ private:
     LayoutList layouts_;
     LayoutApply applyLayout_;
     SearchOpen search_;
+    CueList cues_;
+    CueApply applyCue_;
     StatusSnapshot latest_;
     QList<HotkeyChoice> cachedHotkeys_;
     qint64 lastHotkeyPoll_=0;
@@ -90,6 +98,7 @@ private:
     QString chooseHotkey(QWidget *parent) const;
     QString chooseDock(QWidget *parent) const;
     QString chooseLayout(QWidget *parent) const;
+    QString chooseCue(QWidget *parent) const;
     bool addFromEditor(const QString &type,QWidget *parent);
 };
 }

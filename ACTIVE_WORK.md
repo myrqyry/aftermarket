@@ -2859,3 +2859,45 @@ adds distinct value; no forced migration, no automatic replacement of effects.
 Preserve user-selected provider and semantics of cues, discover capabilities
 before claiming support, and don't confuse triggered with completed.
 This is a DESIGN DECISION only; no Cue Deck runtime or Move adapter implemented.
+
+
+## Cue Deck — first working native slice (2026-11-23)
+
+- Scoped implementation: named ordered cues of Aftermarket native dock-layout
+  snapshots, stable OBS/native/plugin hotkey identities, and explicit waits.
+  No forced replacement of Exeldro Move or other existing OBS plugins.
+  Tools menu manager supports new/edit/delete/run/stop, add/reorder/remove
+  layout/hotkey/wait steps, and readable action grouping. Native Action Strip
+  cue button follows stable cue ID, updates caption on rename, disables when
+  cue deleted; overflow preserves availability.
+- Versioned atomic separate cue-deck.json config. Caps 32 cues, 48 steps,
+  30 seconds per wait and 120 seconds cumulative wait. Invalid/corrupt loads
+  do not replace current parsed cues. All actions preflight against live
+  layout and hotkey choices before any dispatch. Runtime failure halts the
+  remaining sequence; cancel stops pending timers without claiming undo.
+  No cue runs automatically at OBS startup. Dispatch status deliberately
+  distinguishes action invocation from effect completion.
+- Qt RED/GREEN regression: new cue-deck-test and cue-strip-test cover
+  persistence, malformed config recovery, name uniqueness, invalid step
+  types/durations, missing dependencies/preflight no partial execution,
+  ordered actions, wait, single flight, cancel, dispatch failure, manager
+  widget availability, stable action-strip target and disabled stale button.
+  Existing action-strip and dock-layout tests stayed green. Full build and
+  32/32 CTests passed.
+- Isolated real OBS 32.2 GUI test (no user scene collection): opened Tools
+  Cue Deck, authored a cue in actual nested dialogs, picked a registered
+  test-plugin frontend hotkey, persisted cue-deck.json, clicked Run and
+  verified routed hotkey callback and exact dispatch-only status; exited OBS
+  with code 0. Log /tmp/aftermarket-cue-obs-gui3-20261123/obs.log.
+- Exeldro Move 3.2.1 was loaded in a separate isolated real OBS GUI session;
+  created and attached an actual move_source_filter to a disposable source.
+  In one run its source-scoped Start/Hold hotkeys registered; in others
+  they were not present until source properties/ticks. This slice therefore
+  supports Move by its *actually registered* native hotkeys and does NOT
+  claim automatic Move-filter discovery or direct start/finish integration.
+  Source test sessions exited 0. Specific Move completion has not been
+  measured. Deeper Move integration should be implemented only once stable
+  trigger semantics are verified against this installed version.
+- Pending: install/checkpoint exact final GUI-tested binary and preserve
+  any unrelated plugin.cpp comment changes separately. Do not push merely
+  because locally committed.

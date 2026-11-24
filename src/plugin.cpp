@@ -11,6 +11,7 @@
 #include "action-strip.h"
 #include "quick-find.h"
 #include "dock-layouts.h"
+#include "cue-deck.h"
 #include "native-action-bridge.h"
 #include "dock-attach-retry.h"
 #include "emergency-recovery.h"
@@ -45,13 +46,14 @@ static std::unique_ptr<augment::ObsAudio> audio;
 static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
 static QPointer<augment::QuickFind> quickFind;
-static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, findAction, emergencyAction, resumeAction;
+static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, findAction, cuesAction, emergencyAction, resumeAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::MenuBarCompact> compactBar;
 static std::unique_ptr<augment::ActionStrip> actionStrip;
 static std::unique_ptr<augment::DockLayouts> dockLayouts;
+static std::unique_ptr<augment::CueDeck> cueDeck;
 static std::unique_ptr<augment::NativeActionBridge> nativeActions;
 static std::unique_ptr<augment::DockAttachRetry> mixerRetry;
 static QString stripConfigPath;
@@ -94,6 +96,13 @@ static void quickFindHotkeyState(obs_data_t *data,bool saving,void *){
         auto *bindings=obs_data_get_array(data,key);
         if(bindings){obs_hotkey_load(quickFindHotkey,bindings);obs_data_array_release(bindings);}
     }
+}
+static void showCueDeck(){
+    if(!uiActive||!frontendReady||!cueDeck)return;
+    auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+    if(!main)return;
+    auto *dialog=cueDeck->createManager(main);
+    dialog->show();dialog->raise();dialog->activateWindow();
 }
 static bool setHamburgerMenuBar(bool enabled) {
     if(!compactBar)return false;
@@ -196,6 +205,7 @@ static void stopCustomUi(){
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
     delete quickFind.data();
+    if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
     nativeSettings.reset(); // remove only plugin page from any open native Settings
     sourcePicker.reset(); // existing native source dialogs finish normally
     if(panels)panels->restoreAll();
@@ -215,6 +225,7 @@ static void stopCustomUi(){
     if(stripAction)stripAction->setEnabled(false);
     if(layoutsAction)layoutsAction->setEnabled(false);
     if(findAction)findAction->setEnabled(false);
+    if(cuesAction)cuesAction->setEnabled(false);
     if(emergencyAction)emergencyAction->setEnabled(false);
     if(resumeAction)resumeAction->setVisible(true);
 }
@@ -241,7 +252,15 @@ static bool startCustomUi(){
         [](const QString &id){
             return frontendReady&&dockLayouts&&dockLayouts->restore(id);
         },
-        []{showQuickFind();});
+        []{showQuickFind();},
+        []{
+            QList<augment::CueChoiceStrip> choices;
+            if(frontendReady&&cueDeck)
+                for(const auto &cue:cueDeck->cues())
+                    choices.append({cue.id,cue.name});
+            return choices;
+        },
+        [](const QString &id){return frontendReady&&cueDeck&&cueDeck->run(id);});
     // Global Motion already controls decorative animation. Use the same
     // current setting for native dock height and AudioBus page transitions.
     // Motion off preserves all original immediate UI behavior.
@@ -309,6 +328,7 @@ static bool startCustomUi(){
     if(stripAction)stripAction->setEnabled(true);
     if(layoutsAction)layoutsAction->setEnabled(frontendReady);
     if(findAction)findAction->setEnabled(frontendReady);
+    if(cuesAction)cuesAction->setEnabled(frontendReady);
     if(emergencyAction)emergencyAction->setEnabled(true);
     if(resumeAction)resumeAction->setVisible(false);
     return true;
@@ -322,6 +342,8 @@ static void cleanupUi(){
     delete stripAction.data();
     delete layoutsAction.data();
     delete findAction.data();
+    delete cuesAction.data();
+    cueDeck.reset();
     dockLayouts.reset();
     delete toolsAction.data();
 }
@@ -331,6 +353,7 @@ static void frontendEvent(enum obs_frontend_event event, void *) {
         frontendReady=true;
         if(uiActive&&layoutsAction)layoutsAction->setEnabled(true);
         if(uiActive&&findAction)findAction->setEnabled(true);
+        if(uiActive&&cuesAction)cuesAction->setEnabled(true);
         if(actionStrip)actionStrip->refresh();
         if(uiActive&&controller&&controller->mixerBacksideEnabled()&&mixerRetry)
             mixerRetry->start();
@@ -359,6 +382,24 @@ MODULE_EXPORT bool obs_module_load(void) {
     dockLayouts=std::make_unique<augment::DockLayouts>(
         QDir(folder).filePath("dock-layouts.json"),mainWindow);
     nativeActions=std::make_unique<augment::NativeActionBridge>();
+    cueDeck=std::make_unique<augment::CueDeck>(
+        QDir(folder).filePath("cue-deck.json"),
+        []{
+            QList<augment::CueChoice> list;
+            if(frontendReady&&dockLayouts)
+                for(const auto &layout:dockLayouts->snapshots())
+                    list.append({layout.id,layout.name,"Dock layouts"});
+            return list;
+        },
+        [](const QString &id){return frontendReady&&dockLayouts&&dockLayouts->restore(id);},
+        []{
+            QList<augment::CueChoice> list;
+            if(frontendReady&&nativeActions)
+                for(const auto &key:nativeActions->enumerateHotkeys())
+                    list.append({key.binding,key.label,key.group});
+            return list;
+        },
+        [](const QString &id){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(id);});
     quickFindHotkey=obs_hotkey_register_frontend("aftermarket.quick_find",
         "Aftermarket: Quick Find sources and filters",quickFindHotkeyCallback,nullptr);
     obs_frontend_add_save_callback(quickFindHotkeyState,nullptr);
@@ -425,6 +466,12 @@ MODULE_EXPORT bool obs_module_load(void) {
         // The tools menu can still be closing when this signal arrives.
         QTimer::singleShot(0,[]{showQuickFind();});
     });
+    cuesAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
+        "Aftermarket: Cue Deck…"));
+    blog(LOG_INFO,"[ui-augment] AFTERMARKET_CUE_DECK_20261123 registered=%d",cuesAction?1:0);
+    if(cuesAction)QObject::connect(cuesAction.data(),&QAction::triggered,controller,[]{
+        QTimer::singleShot(0,[]{showCueDeck();});
+    });
     emergencyAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Emergency restore (Ctrl+Alt+Shift+F12)"));
     if(emergencyAction)QObject::connect(emergencyAction.data(),&QAction::triggered,controller,[]{
@@ -447,6 +494,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         if(stripAction)stripAction->setEnabled(false);
         if(layoutsAction)layoutsAction->setEnabled(false);
         if(findAction)findAction->setEnabled(false);
+        if(cuesAction)cuesAction->setEnabled(false);
         if(emergencyAction)emergencyAction->setEnabled(false);
         if(resumeAction)resumeAction->setVisible(true);
         blog(LOG_WARNING,"[ui-augment] safe-mode.flag detected; Aftermarket UI disabled");

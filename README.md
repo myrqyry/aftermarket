@@ -81,6 +81,18 @@ of being clipped. The optional hamburger menu frees additional space.
 [Workspace guide](docs/user-guide.md#workspace-and-dock-controls) ·
 [Dock layouts reference](docs/dock-layouts.md)
 
+### Cue Deck
+
+Use **Tools → Aftermarket: Cue Deck…** to create named sequences of saved
+dock-layout changes, native OBS or plugin hotkeys, and timed waits. Reorder
+steps, run or stop a cue, and optionally pin it to the Action Strip.
+Existing plugin hotkeys—including Exeldro Move actions when registered by
+OBS—can be used without replacing their effects. Cue Deck checks for missing
+actions before running, and runs only when you explicitly invoke a cue. Hotkey
+actions themselves can change what's on air.
+
+[See Cue Deck instructions](docs/user-guide.md#cue-deck)
+
 ## Sources and navigation
 
 ### Compact Add Source
