@@ -123,14 +123,17 @@ bool ActionStrip::validItem(const StripItem &i) {
     if(i.id.isEmpty()||i.id.size()>128||i.label.size()>160||i.target.size()>2048)return false;
     if(i.type=="spacer"||i.type=="separator")return i.target.isEmpty();
     if(i.type=="dock")return !i.target.isEmpty();
+    if(i.type=="layout")return QRegularExpression(
+        "^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$").match(i.target).hasMatch();
     if(i.type=="hotkey")return i.target.startsWith("hotkey:v1:")&&i.target.size()>11;
     if(i.type=="status")return QStringList{"recording","streaming","fps","cpu","dropped",
         "lagged","record-time","stream-time","stream-bitrate","record-bitrate"}.contains(i.target);
     return false;
 }
-ActionStrip::ActionStrip(QString file,StatusProvider status,HotkeyList hotkeys,HotkeyTrigger trigger,QObject *parent)
+ActionStrip::ActionStrip(QString file,StatusProvider status,HotkeyList hotkeys,HotkeyTrigger trigger,
+                         QObject *parent,LayoutList layouts,LayoutApply applyLayout)
     :QObject(parent),path_(std::move(file)),status_(std::move(status)),hotkeys_(std::move(hotkeys)),
-     trigger_(std::move(trigger)) {load();}
+     trigger_(std::move(trigger)),layouts_(std::move(layouts)),applyLayout_(std::move(applyLayout)) {load();}
 ActionStrip::~ActionStrip(){
     closeEditor();
     shutdown_=true;
@@ -277,6 +280,15 @@ bool ActionStrip::moveItem(const QString &id,int index){
 bool ActionStrip::trigger(const QString &id){
     for(const auto &item:items_)if(item.id==id){
         if(item.type=="hotkey")return trigger_&&trigger_(item.target);
+        if(item.type=="layout"){
+            if(!applyLayout_||!layouts_)return false;
+            const auto choices=layouts_();
+            if(!std::any_of(choices.begin(),choices.end(),
+                [&](const auto &c){return c.id==item.target;}))return false;
+            const bool ok=applyLayout_(item.target);
+            refresh();
+            return ok;
+        }
         if(item.type=="dock"&&bar_){
             auto *main=qobject_cast<QMainWindow*>(bar_->parentWidget());
             if(!main)return false;
@@ -293,6 +305,8 @@ QString ActionStrip::itemText(const QString &id) const {
     for(const auto &i:items_)if(i.id==id){
         if(i.type=="status")return printStatus(i,latest_);
         if(i.type=="dock")return dockLabel(i,bar_);
+        if(i.type=="layout"&&i.label.trimmed().isEmpty()&&layouts_)
+            for(const auto &c:layouts_())if(c.id==i.target)return c.name;
         return typeLabel(i);
     }
     return {};
@@ -327,6 +341,14 @@ void ActionStrip::refresh(){
                 QStringLiteral("Dock unavailable: ")+item.target;
             b->setToolTip(action);
             b->setAccessibleName(action);
+        }
+        if(item.type=="layout"){
+            bool found=false;
+            if(layouts_)for(const auto &c:layouts_())if(c.id==item.target){found=true;break;}
+            b->setEnabled(found);
+            b->setToolTip(found?"Switch to dock layout: "+label:
+                "Saved dock layout missing: "+item.target);
+            b->setAccessibleName(b->toolTip());
         }
         if(item.type=="hotkey"){
             bool found=false;
@@ -461,6 +483,13 @@ void ActionStrip::updateOverflow(){
             action->setText(itemText(id));
             const auto it=std::find_if(items_.begin(),items_.end(),
                 [&id](const StripItem &item){return item.id==id;});
+            if(it!=items_.end()&&it->type=="layout"){
+                bool found=false;
+                if(layouts_)for(const auto &c:layouts_())if(c.id==it->target){found=true;break;}
+                action->setEnabled(found);
+                action->setToolTip(found?"Switch to dock layout: "+itemText(id):
+                    "Saved dock layout missing: "+it->target);
+            }
             if(it!=items_.end()&&it->type=="dock"){
                 auto *dock=dockFor(bar_,*it);
                 action->setEnabled(dock);
@@ -591,6 +620,19 @@ QString ActionStrip::chooseDock(QWidget *parent)const{
         "Native OBS dock",labels,0,false,&accepted);
     return accepted?identities.value(chosen):QString{};
 }
+QString ActionStrip::chooseLayout(QWidget *parent)const{
+    if(!layouts_)return {};
+    QStringList choices;QMap<QString,QString> ids;
+    for(const auto &layout:layouts_()){
+        const QString label=layout.name+" ["+layout.id+"]";
+        choices.append(label);ids.insert(label,layout.id);
+    }
+    if(choices.isEmpty())return {};
+    bool accepted=false;
+    const auto chosen=QInputDialog::getItem(parent,"Add dock layout macro",
+        "Saved dock layout",choices,0,false,&accepted);
+    return accepted?ids.value(chosen):QString{};
+}
 bool ActionStrip::addFromEditor(const QString &type,QWidget *parent){
     StripItem item;item.id=QUuid::createUuid().toString(QUuid::WithoutBraces);
     item.type=type;
@@ -608,6 +650,9 @@ bool ActionStrip::addFromEditor(const QString &type,QWidget *parent){
             if(h.binding==item.target){item.label=h.label;break;}
     }else if(type=="dock"){
         item.target=chooseDock(parent);
+        if(item.target.isEmpty())return false;
+    }else if(type=="layout"){
+        item.target=chooseLayout(parent);
         if(item.target.isEmpty())return false;
     }
     return addItem(item);
@@ -628,7 +673,7 @@ void ActionStrip::showEditor(QWidget *parent,QMenuBar *menuBar){
     auto rebuildList=[this,list](){
         list->clear();
         for(const auto &item:items_){
-            const auto text=item.type=="dock"?dockLabel(item,bar_):typeLabel(item);
+            const auto text=itemText(item.id);
             auto *row=new QListWidgetItem(text+"    ("+item.type+")",list);
             row->setData(Qt::UserRole,item.id);
         }
@@ -655,7 +700,7 @@ void ActionStrip::showEditor(QWidget *parent,QMenuBar *menuBar){
     connect(add,&QPushButton::clicked,&dialog,[this,add,&dialog,rebuildList](){
         QMenu types(add);
         QMap<QAction*,QString> choices;
-        for(const auto &name:{"status","hotkey","dock","separator","spacer"})
+        for(const auto &name:{"status","hotkey","dock","layout","separator","spacer"})
             choices[types.addAction(QString::fromLatin1(name))]=QString::fromLatin1(name);
         if(auto *chosen=types.exec(add->mapToGlobal(QPoint(0,add->height())))){
             if(addFromEditor(choices.value(chosen),&dialog))rebuildList();

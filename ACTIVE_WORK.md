@@ -2634,3 +2634,23 @@ Boundaries: only docks already managed by DockFaces get the flip (currently
 the Audio Mixer/AudioBus backside). No new global widget interception or
 animation engine, no forced motion, no remote push requested. Other in-flight
 dock-layout files are outside this change.
+
+## Named dock-layout macros — 2026-11-23
+
+- Native Qt DockLayouts implementation with versioned, integrity-checked JSON, stable snapshot IDs, required native dock IDs, QSaveFile persistence, explicit saves only, one-level Undo and missing-dock refusal.
+- Tools menu entry and dialog for Save, Switch, Undo, Rename, Update and Delete. Action Strip now has a layout action type, enabled by stable identity, disabled if its saved layout disappears.
+- Tests: TDD red/green for absent dock-layout header and for missing Action Strip integration. Qt tests exercise real QMainWindow saves and restores, case-insensitive duplicate names, corrupt file handling, missing docks and Undo. 26/26 full CTest passed. Isolated OBS 32.2 loaded the new plugin and registered the new Tools layout action with marker AFTERMARKET_LAYOUT_TOOLS_20261123.
+- Preexisting/concurrent changes to README.md, dock-faces.cpp, dock-faces-test.cpp, and dock animation screenshot are not part of this change. Stage only focused layout feature files. No live OBS config touched, no push.
+
+### Real OBS layout GUI regression (2026-11-23)
+
+- Isolated OBS 32.2.0 Xvfb instance with temporary HOME and temporary native
+  probe plugin loaded exact build/obs-ui-augment.so. Tools action found and
+  enabled. Native Aftermarket manager opened; Save current created OBS Layout
+  E2E; mixerDock was moved to a different QMainWindow dock area; Switch to
+  layout restored the original area; Undo returned mixerDock to the moved area.
+- Probe log at /tmp/aftermarket-layout-obs-e2e-20261123/obs.log:
+  AFTERMARKET_REAL_GUI_TOOLS_ACTION=PASS,
+  AFTERMARKET_REAL_GUI_SAVED_NAME=OBS Layout E2E,
+  AFTERMARKET_REAL_GUI_SAVE_SWITCH_UNDO=PASS.
+  OBS exited 0. No real user OBS config, dock state or profile touched.

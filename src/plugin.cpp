@@ -8,6 +8,7 @@
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
+#include "dock-layouts.h"
 #include "native-action-bridge.h"
 #include "dock-attach-retry.h"
 #include "emergency-recovery.h"
@@ -40,12 +41,13 @@ static augment::Controller *controller = nullptr;
 static std::unique_ptr<augment::ObsAudio> audio;
 static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
-static QPointer<QAction> toolsAction, panelsAction, stripAction, emergencyAction, resumeAction;
+static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, emergencyAction, resumeAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::MenuBarCompact> compactBar;
 static std::unique_ptr<augment::ActionStrip> actionStrip;
+static std::unique_ptr<augment::DockLayouts> dockLayouts;
 static std::unique_ptr<augment::NativeActionBridge> nativeActions;
 static std::unique_ptr<augment::DockAttachRetry> mixerRetry;
 static QString stripConfigPath;
@@ -171,6 +173,7 @@ static void stopCustomUi(){
     if(toolsAction)toolsAction->setEnabled(false);
     if(panelsAction)panelsAction->setEnabled(false);
     if(stripAction)stripAction->setEnabled(false);
+    if(layoutsAction)layoutsAction->setEnabled(false);
     if(emergencyAction)emergencyAction->setEnabled(false);
     if(resumeAction)resumeAction->setVisible(true);
 }
@@ -185,7 +188,18 @@ static bool startCustomUi(){
     actionStrip=std::make_unique<augment::ActionStrip>(stripConfigPath,
         []{return frontendReady&&nativeActions?nativeActions->snapshot():augment::StatusSnapshot{};},
         []{return frontendReady&&nativeActions?nativeActions->enumerateHotkeys():QList<augment::HotkeyChoice>{};},
-        [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);});
+        [](const QString &binding){return frontendReady&&nativeActions&&nativeActions->triggerHotkey(binding);},
+        nullptr,
+        []{
+            QList<augment::LayoutChoice> result;
+            if(frontendReady&&dockLayouts)
+                for(const auto &layout:dockLayouts->snapshots())
+                    result.append({layout.id,layout.name});
+            return result;
+        },
+        [](const QString &id){
+            return frontendReady&&dockLayouts&&dockLayouts->restore(id);
+        });
     // Global Motion already controls decorative animation. Use the same
     // current setting for native dock height and AudioBus page transitions.
     // Motion off preserves all original immediate UI behavior.
@@ -241,6 +255,7 @@ static bool startCustomUi(){
     if(toolsAction)toolsAction->setEnabled(true);
     if(panelsAction)panelsAction->setEnabled(true);
     if(stripAction)stripAction->setEnabled(true);
+    if(layoutsAction)layoutsAction->setEnabled(frontendReady);
     if(emergencyAction)emergencyAction->setEnabled(true);
     if(resumeAction)resumeAction->setVisible(false);
     return true;
@@ -252,12 +267,16 @@ static void cleanupUi(){
     delete emergencyAction.data();
     delete panelsAction.data();
     delete stripAction.data();
+    delete layoutsAction.data();
+    dockLayouts.reset();
     delete toolsAction.data();
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
     if(nativeActions&&event!=OBS_FRONTEND_EVENT_EXIT)nativeActions->onFrontendEvent(event);
     if(event==OBS_FRONTEND_EVENT_FINISHED_LOADING){
         frontendReady=true;
+        if(uiActive&&layoutsAction)layoutsAction->setEnabled(true);
+        if(actionStrip)actionStrip->refresh();
         if(uiActive&&controller&&controller->mixerBacksideEnabled()&&mixerRetry)
             mixerRetry->start();
     }
@@ -280,6 +299,10 @@ MODULE_EXPORT bool obs_module_load(void) {
     const QString folder=QFileInfo(file).absolutePath();
     QDir().mkpath(folder);
     stripConfigPath=QDir(folder).filePath("action-strip.json");
+    auto *mainWindow=qobject_cast<QMainWindow*>(
+        static_cast<QWidget*>(obs_frontend_get_main_window()));
+    dockLayouts=std::make_unique<augment::DockLayouts>(
+        QDir(folder).filePath("dock-layouts.json"),mainWindow);
     nativeActions=std::make_unique<augment::NativeActionBridge>();
     auto *main=static_cast<QWidget*>(obs_frontend_get_main_window());
     emergency=std::make_unique<augment::EmergencyRecovery>(
@@ -323,6 +346,20 @@ MODULE_EXPORT bool obs_module_load(void) {
             if(actionStrip)actionStrip->showEditor(main,main->menuBar());
         });
     });
+    layoutsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
+        "Aftermarket: Dock Layouts…"));
+    blog(LOG_INFO,"[ui-augment] AFTERMARKET_LAYOUT_TOOLS_20261123 registered=%d",layoutsAction?1:0);
+    if(layoutsAction)QObject::connect(layoutsAction.data(),&QAction::triggered,controller,[]{
+        auto *main=qobject_cast<QMainWindow*>(
+            static_cast<QWidget*>(obs_frontend_get_main_window()));
+        if(!main||!frontendReady)return;
+        // Wait until the native Tools popup closes before opening a modal UI.
+        QPointer<QMainWindow> safeMain=main;
+        QTimer::singleShot(0,[safeMain]{
+            if(safeMain&&dockLayouts&&uiActive)dockLayouts->showManager(safeMain);
+            if(actionStrip)actionStrip->refresh();
+        });
+    });
     emergencyAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Emergency restore (Ctrl+Alt+Shift+F12)"));
     if(emergencyAction)QObject::connect(emergencyAction.data(),&QAction::triggered,controller,[]{
@@ -343,6 +380,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         if(toolsAction)toolsAction->setEnabled(false);
         if(panelsAction)panelsAction->setEnabled(false);
         if(stripAction)stripAction->setEnabled(false);
+        if(layoutsAction)layoutsAction->setEnabled(false);
         if(emergencyAction)emergencyAction->setEnabled(false);
         if(resumeAction)resumeAction->setVisible(true);
         blog(LOG_WARNING,"[ui-augment] safe-mode.flag detected; Aftermarket UI disabled");
