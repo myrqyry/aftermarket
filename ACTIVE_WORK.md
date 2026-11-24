@@ -2763,3 +2763,26 @@ no reimplementation of scene/undo/source creation, no global dialog changes.
   OBS exited 0. Verified log:
   /tmp/aftermarket-quick-find-hotkey-isolated-20261123/obs.log.
 - No changes to user's real OBS scene collection, no new dock, no push.
+
+### Local installation verified — 2026-11-23
+
+- User's Linux Mint Aftermarket user plugin updated via atomic scripts/install.sh;
+  installed path ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Installed SHA-256 matches the exact source build exercised by an isolated
+  real OBS 32.2 GUI test, including Tools Find Sources, source/URL/filter/scene
+  lookup, scene jump, keyboard hotkey routed callback, fixture cleanup and
+  normal process exit:
+  9343fc50d5e3e8e51a256a356ba831cef1df3843c6217a4347ec7f802e1f4437.
+- Preserved previous installed module at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-quick-find.1409118e24fc47b1.so.
+  Verified byte-for-byte backup and destination match. OBS was not running
+  during the swap. No scene collection, layout, rules, streaming settings or
+  saved hotkey bindings changed.
+- Original post-feature regression suite passed 30/30. A later post-commit
+  rerun exposed an intermittent preexisting Panels test (assertion at
+  tests/panels-test.cpp:78, dock height after only 65 ms): three identical
+  direct reruns passed twice and failed once. Search-focused tests and real
+  OBS GUI passed. No unrelated dock animation changes made in this task.
+- src/plugin.cpp carries a separate, unrelated in-progress SourcePicker
+  comment difference after the feature commit; left it unstaged intentionally.
+  No push performed.
