@@ -10,105 +10,115 @@
 #include <QVBoxLayout>
 #include <QTimer>
 #include <QTemporaryDir>
-#include <QFile>
-#include <QDebug>
 #include <QLabel>
 #include <QToolButton>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QTabBar>
 #include <iostream>
 #define CHECK(expr) do {if(!(expr)){std::cerr<<"FAILED "<<__LINE__<<": "<<#expr<<"\n";return 1;}}while(false)
-static void fill(QDialog &dlg,bool complete){
-  dlg.setObjectName("OBSBasicSourceSelect");
-  auto *layout=new QVBoxLayout(&dlg);
-  auto *list=new QListWidget(&dlg);
-  list->setObjectName("sourceTypeList");
-  list->setMinimumHeight(460);
-  list->addItems({"Browser","Image","Media Source","Video Capture Device (V4L2)"});
-  layout->addWidget(list);
-  if(complete){
-    auto *scroll=new QScrollArea(&dlg);
-    scroll->setObjectName("existingScrollArea");
-    scroll->setWidget(new QWidget);
-    layout->addWidget(scroll);
-    auto *visible=new QCheckBox("Make source visible",&dlg);
-    visible->setObjectName("sourceVisible");
-    layout->addWidget(visible);
-    auto *add=new QPushButton("Add existing",&dlg);
-    add->setObjectName("addExistingButton");
-    layout->addWidget(add);
-    QObject::connect(add,&QPushButton::clicked,&dlg,&QDialog::accept);
+#define EXPECT(expr) do {if(!(expr)){std::cerr<<"FAILED callback "<<__LINE__<<": "<<#expr<<"\n";valid=false;}}while(false)
+struct Native {
+ QDialog dialog;
+ QListWidget *types;
+ QWidget *cards;
+ QPushButton *create,*add;
+ QCheckBox *visible;
+ int created=0,added=0;
+ QString createdType,addedName;
+ Native(QMainWindow *parent):dialog(parent){
+  dialog.setObjectName("OBSBasicSourceSelect");
+  auto *root=new QVBoxLayout(&dialog);
+  auto *inner=new QWidget(&dialog);inner->setObjectName("dialogInner");root->addWidget(inner);
+  auto *layout=new QVBoxLayout(inner);
+  types=new QListWidget(inner);types->setObjectName("sourceTypeList");
+  types->setMinimumHeight(460);
+  for(const auto &pair: {qMakePair(QString("Recently Created"),QString("_recent")),qMakePair(QString("Browser"),QString("browser_source")),qMakePair(QString("Image"),QString("image_source")),qMakePair(QString("Scene"),QString("scene"))}){
+   auto *item=new QListWidgetItem(pair.first,types);item->setData(Qt::UserRole+1,pair.second);
   }
-}
+  types->setCurrentRow(0);layout->addWidget(types);
+  auto *scroll=new QScrollArea(inner);scroll->setObjectName("existingScrollArea");
+  cards=new QWidget;cards->setObjectName("existingListFrame");new QVBoxLayout(cards);
+  scroll->setWidget(cards);layout->addWidget(scroll);
+  create=new QPushButton("Create",inner);create->setObjectName("createNewSource");layout->addWidget(create);
+  visible=new QCheckBox("Make source visible",inner);visible->setObjectName("sourceVisible");layout->addWidget(visible);
+  add=new QPushButton("Add existing",inner);add->setObjectName("addExistingButton");layout->addWidget(add);add->setEnabled(false);
+  QObject::connect(types,&QListWidget::currentItemChanged,&dialog,[this]{populate();});
+  QObject::connect(create,&QPushButton::clicked,&dialog,[this]{++created;createdType=types->currentItem()->data(Qt::UserRole+1).toString();dialog.accept();});
+  QObject::connect(add,&QPushButton::clicked,&dialog,[this]{
+   for(auto *button:cards->findChildren<QPushButton*>())if(button->isChecked())addedName=button->accessibleName();
+   ++added;dialog.accept();
+  });
+  populate();
+ }
+ void populate(){
+  while(auto *item=cards->layout()->takeAt(0)){delete item->widget();delete item;}
+  const auto type=types->currentItem()->data(Qt::UserRole+1).toString();
+  const QStringList names=type=="image_source"?QStringList{"Logo","Backdrop"}:type=="scene"?QStringList{"Intro scene"}:QStringList{"Chat","Logo","Backdrop"};
+  add->setEnabled(false);
+  for(auto &name:names){
+   auto *button=new QPushButton(cards);button->setAccessibleName(name);
+   button->setCheckable(true);button->setMinimumSize(300,180);
+   auto *label=new QLabel(name,button);label->setObjectName("name");
+   cards->layout()->addWidget(button);
+   QObject::connect(button,&QPushButton::clicked,&dialog,[this,button](bool checked){
+    for(auto *other:cards->findChildren<QPushButton*>())if(other!=button)other->setChecked(false);
+    add->setEnabled(checked);
+   });
+  }
+ }
+};
 int main(int argc,char **argv){
- QApplication app(argc,argv);
- QTemporaryDir temp;
- QMainWindow main;
- main.resize(1200,820);
- main.setCentralWidget(new QLabel("Native OBS main content"));
- auto *sources=new QDockWidget("Sources",&main);
- sources->setObjectName("sourcesDock");
- sources->setWidget(new QListWidget);
- main.addDockWidget(Qt::LeftDockWidgetArea,sources);
- main.show();app.processEvents();
+ QApplication app(argc,argv);QTemporaryDir temp;
+ QMainWindow main;main.resize(680,440);main.setCentralWidget(new QLabel("Preview"));
+ auto *sources=new QDockWidget("Sources",&main);sources->setObjectName("sourcesDock");sources->setWidget(new QListWidget);
+ main.addDockWidget(Qt::LeftDockWidgetArea,sources);main.show();app.processEvents();
  augment::SourcePicker picker(&main,temp.filePath("source-picker.ini"));
  CHECK(picker.enabled());
  {
-  QDialog dialog(&main);fill(dialog,true);
-  dialog.setWindowTitle("Add Source");
-  bool inspected=false,valid=true;
-  #define CHECK_CB(expr) do {if(!(expr)){std::cerr<<"FAILED CALLBACK "<<__LINE__<<": "<<#expr<<"\n";valid=false;}}while(false)
-  QTimer::singleShot(30,[&]{
-    inspected=true;
-    auto *list=dialog.findChild<QListWidget*>("sourceTypeList");
-    CHECK_CB(list->minimumHeight()<=280);
-    CHECK_CB(dialog.parentWidget()==&main);
-    CHECK_CB(!dialog.isWindow());
-    CHECK_CB(dialog.width()<=820 && dialog.height()<=560);
-    CHECK_CB(main.rect().contains(dialog.geometry()));
-    CHECK_CB(dialog.isVisible());
-    CHECK_CB(dialog.isModal());
-    CHECK_CB(list->item(3)->toolTip()=="Video Capture Device (V4L2)");
-    auto *heading=dialog.findChild<QWidget*>("aftermarket-source-picker-heading");
-    auto *close=dialog.findChild<QToolButton*>("aftermarket-source-picker-close");
-    CHECK_CB(heading&&close&&close->isVisible());
-    CHECK_CB(close->accessibleName()=="Close Add Source");
-    dialog.findChild<QPushButton*>("addExistingButton")->click();
+  Native n(&main);bool valid=true;
+  QTimer::singleShot(40,&n.dialog,[&]{
+   EXPECT(!n.dialog.isWindow());EXPECT(main.rect().contains(n.dialog.geometry()));
+   EXPECT(n.dialog.width()<=400&&n.dialog.height()<=420);
+   auto *tabs=n.dialog.findChild<QTabBar*>("aftermarket-source-picker-tabs");
+   EXPECT(tabs&&tabs->currentIndex()==0);EXPECT(n.types->isVisible());
+   EXPECT(!n.cards->isVisible());EXPECT(!n.add->isVisible());EXPECT(n.types->item(0)->isHidden());EXPECT(n.types->item(3)->isHidden());
+   EXPECT(n.types->item(2)->sizeHint().height()<=32);
+   n.types->setCurrentRow(2);
+   emit n.types->itemClicked(n.types->item(2));
   });
-  QTimer::singleShot(900,&dialog,&QDialog::reject);
-  CHECK(dialog.exec()==QDialog::Accepted);
-  CHECK(inspected&&valid);
+  QTimer::singleShot(800,&n.dialog,&QDialog::reject);
+  CHECK(n.dialog.exec()==QDialog::Accepted);CHECK(valid&&n.created==1&&n.createdType=="image_source"&&n.added==0);
+ }
+ {
+  Native n(&main);bool valid=true;
+  QTimer::singleShot(40,&n.dialog,[&]{
+   auto *tabs=n.dialog.findChild<QTabBar*>("aftermarket-source-picker-tabs");
+   auto *types=n.dialog.findChild<QComboBox*>("aftermarket-existing-type");
+   auto *query=n.dialog.findChild<QLineEdit*>("aftermarket-existing-search");
+   auto *rows=n.dialog.findChild<QListWidget*>("aftermarket-existing-list");
+   EXPECT(tabs&&types&&query&&rows);
+   if(!tabs||!types||!query||!rows){n.dialog.reject();return;}
+   tabs->setCurrentIndex(1);
+   EXPECT(!n.types->isVisible()&&rows->isVisible()&&n.add->isVisible());
+   types->setCurrentIndex(types->findData("image_source"));
+   EXPECT(rows->count()==2&&n.created==0);
+   query->setText("back");
+   EXPECT(rows->item(0)->isHidden()&&!rows->item(1)->isHidden());
+   emit rows->itemClicked(rows->item(1));
+   EXPECT(n.add->isEnabled());EXPECT(n.created==0);EXPECT(main.rect().contains(n.dialog.geometry()));
+   n.add->click();
+  });
+  QTimer::singleShot(900,&n.dialog,&QDialog::reject);
+  CHECK(n.dialog.exec()==QDialog::Accepted);CHECK(valid&&n.added==1&&n.addedName=="Backdrop"&&n.created==0);
  }
  CHECK(picker.setEnabled(false));
- CHECK(!picker.enabled());
- {
-  QDialog dialog(&main);fill(dialog,true);
-  bool inspected=false,valid=true;
-  QTimer::singleShot(25,[&]{
-    inspected=true;
-    CHECK_CB(dialog.isWindow());
-    CHECK_CB(dialog.findChild<QListWidget*>("sourceTypeList")->minimumHeight()==460);
-    dialog.reject();
-  });
-  CHECK(dialog.exec()==QDialog::Rejected);
-  CHECK(inspected&&valid);
- }
+ {Native n(&main);bool valid=true;
+  QTimer::singleShot(25,&n.dialog,[&]{EXPECT(n.dialog.isWindow());EXPECT(n.types->minimumHeight()==460);n.dialog.reject();});
+  CHECK(n.dialog.exec()==QDialog::Rejected);CHECK(valid);}
  CHECK(picker.setEnabled(true));
- {
-  // Setting survives a new hook instance and is opt-in reversible.
-  augment::SourcePicker persisted(&main,temp.filePath("source-picker.ini"));
-  CHECK(persisted.enabled());
-  CHECK(persisted.setEnabled(false));
- }
- {
-  augment::SourcePicker persisted(&main,temp.filePath("source-picker.ini"));
-  CHECK(!persisted.enabled());
-  CHECK(persisted.setEnabled(true));
- }
- {
-  QDialog other(&main);fill(other,false);
-  QTimer::singleShot(25,&other,&QDialog::reject);
-  CHECK(other.exec()==QDialog::Rejected);
-  CHECK(other.isWindow()); // incomplete or changed native picker must be left alone
- }
- std::cout<<"Native Add Source embedded lifecycle verified\n";
- return 0;
+ {augment::SourcePicker persisted(&main,temp.filePath("source-picker.ini"));CHECK(persisted.enabled());CHECK(persisted.setEnabled(false));}
+ {augment::SourcePicker persisted(&main,temp.filePath("source-picker.ini"));CHECK(!persisted.enabled());CHECK(persisted.setEnabled(true));}
+ {QDialog other(&main);other.setObjectName("OBSBasicSourceSelect");QTimer::singleShot(20,&other,&QDialog::reject);CHECK(other.exec()==QDialog::Rejected);CHECK(other.isWindow());}
+ std::cout<<"Compact source picker: direct creation, separate filtered native existing selection, bounds, opt-out verified\n";
 }

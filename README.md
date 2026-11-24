@@ -623,20 +623,20 @@ may need to be opened before capturing their full list.
 
 ## Embedded Add Source picker
 
-OBS 32.2 introduced a large standalone **Add Source** window. On compatible
-OBS installations, Aftermarket keeps the original native picker—its source
-types, recent-source thumbnails, Add existing, Make source visible, keyboard
-navigation, source creation, OBS undo, and normal Properties dialog—but
-presents that picker as a bounded overlay **inside the OBS main window**,
-attached to the Sources dock. The source-type list remains scrollable,
-rather than forcing the old 460-pixel minimum height onto the entire dialog.
+Aftermarket presents OBS 32.2's native Add Source workflow in a compact panel
+beside Sources (up to 380 × 400 pixels). **Add new** lists source types as
+scrollable, icon-sized rows: click a type once to create it and open its
+native Properties editor. **Add existing** has a separate source-type selector
+and case-insensitive name filter. Recent sources uses OBS's recent-source
+list; select a source type to browse all existing sources of that type.
+Select a row, then use the native Add existing action. Both modes share
+Make source visible.
 
-The native picker is embedded before OBS opens its dialog, so its original
-source creation callbacks and result are preserved; no duplicate source
-implementation or OBS fork is involved. A small **Add Source** header and
-accessible close button replace the desktop window title. If the Sources
-dock or sufficient window space is unavailable, OBS's original dialog
-appears unchanged.
+The original large thumbnail layout is hidden, not resized into the small
+panel. OBS still owns source identity, creation, selection, add-existing
+callbacks, undo and Properties. The panel stays within the main client area;
+unknown dialog structures, hidden Sources docks and insufficient initial
+space retain OBS's original picker.
 
 The option is **enabled by default** on compatible OBS installations and
 can be turned off under **OBS → Settings → Aftermarket → Appearance →
@@ -646,7 +646,7 @@ persisted option is sourcePicker/embedded in Aftermarket's
 plugin_config/obs-ui-augment/source-picker.ini; it never modifies OBS
 source or scene files.
 
-![OBS's native Add Source list and thumbnails embedded beside its Sources dock](docs/screenshots/readme/embedded-source-picker.webp)
+![Compact Add new and Add existing views in real OBS](docs/screenshots/readme/embedded-source-picker.webp)
 
 ## Motion
 
