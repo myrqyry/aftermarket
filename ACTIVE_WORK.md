@@ -2842,3 +2842,20 @@ Reported long compact context menus appearing on another monitor. Actual desktop
 ## README organization and fresh captures — 2026-11-23
 
 Reorganized the original 957-line README into a 201-line visual product overview by feature family, with detailed instructions and configuration examples preserved in docs/user-guide.md (linked table of contents). Added Dock Layouts and Quick Find discoverability, consistent AudioBus naming, corrected old collapse-motion, audio-activity, menu-monitor and action-strip descriptions. New real OBS 32.2.0 captures from isolated Xvfb :257 with the same installed Aftermarket binary: Quick Find filtered source/filter, actual saved dock layout, split Add Source picker with name filter, measured activity in AudioBus. Added aligned nested Filters Add capture from preceding exact dual-monitor runtime check. Five focused optimized WebP assets total ~69 KiB; visually reviewed. Relative file links, image decode, heading anchors, balanced code fences, git diff --check verified. No production code or user settings changed; unrelated plugin.cpp change excluded. No push.
+
+### Cue Deck provider choice clarified — 2026-11-23 (supersedes hotkeys-only reading)
+
+User explicitly corrected the overcorrection: existing good OBS plugins, especially
+Exeldro's Move, should be USED directly and deeply when they offer a good solution.
+Hotkey registration is a useful generic integration channel, not a ceiling or
+a reason to exclude richer integrations. Build Cue Deck around the best
+existing capability: use native OBS hotkey for simple triggering, OBS source
+and filter API where appropriate for discovery/parameters/state, and supported
+plugin/vendor workflows when they offer materially better orchestration.
+Keep Exeldro Move as a first-class eligible provider, not merely a disposable
+compatibility shim or something we must rewrite. Build Aftermarket-native
+capabilities alongside excellent existing solutions only where our implementation
+adds distinct value; no forced migration, no automatic replacement of effects.
+Preserve user-selected provider and semantics of cues, discover capabilities
+before claiming support, and don't confuse triggered with completed.
+This is a DESIGN DECISION only; no Cue Deck runtime or Move adapter implemented.
