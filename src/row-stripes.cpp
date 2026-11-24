@@ -21,9 +21,14 @@ QString scope(const QAbstractItemView *view){
     return {};
 }
 QColor blend(QColor base,QColor accent,int weight){
-    return QColor((base.red()*(100-weight)+accent.red()*weight)/100,
-                  (base.green()*(100-weight)+accent.green()*weight)/100,
-                  (base.blue()*(100-weight)+accent.blue()*weight)/100);
+    // 100% is exactly the existing alternate color. Up to 200% amplifies
+    // contrast without inventing a different hue; channels stay in gamut.
+    const auto channel=[weight](int native,int alt){
+        return std::clamp(native+(alt-native)*weight/100,0,255);
+    };
+    return QColor(channel(base.red(),accent.red()),
+                  channel(base.green(),accent.green()),
+                  channel(base.blue(),accent.blue()));
 }
 QColor chosenColor(const QJsonObject &settings,const char *key,QColor fallback){
     const QColor custom(settings.value(QLatin1String(key)).toString());
@@ -124,7 +129,10 @@ void RowStripes::updateView(QAbstractItemView *view){
     if(nativeAlternate==nativeBase)
         nativeAlternate=blend(nativeBase,pal.color(QPalette::Highlight),12);
     const QColor base=chosenColor(state->settings,"base",nativeBase);
-    const QColor alternate=chosenColor(state->settings,"alternate",nativeAlternate);
+    const QColor targetAlternate=chosenColor(state->settings,"alternate",nativeAlternate);
+    // Existing settings without strength are unchanged at 100%.
+    const int strength=std::clamp(state->settings.value("strength").toInt(100),0,200);
+    const QColor alternate=blend(base,targetAlternate,strength);
     pal.setColor(QPalette::Base,base);
     pal.setColor(QPalette::AlternateBase,alternate);
     it->applied=pal;
@@ -139,13 +147,17 @@ void RowStripes::updateView(QAbstractItemView *view){
         if(currentStyle!=it->appliedStyleSheet)
             it->nativeStyleSheet=currentStyle; // external/native style change
         QString sheet=it->nativeStyleSheet;
-        for(const auto &spec:{qMakePair(QStringLiteral("base"),QStringLiteral("!alternate")),
-                              qMakePair(QStringLiteral("alternate"),QStringLiteral("alternate"))}){
-            const auto color=state->settings.value(spec.first).toString();
-            if(!color.isEmpty())
-                sheet+=QStringLiteral("\nSceneTree::item:%1:!selected:!hover { background-color: %2; }")
-                    .arg(spec.second,color);
-        }
+        const bool customBase=state->settings.contains("base");
+        const bool customAlternate=state->settings.contains("alternate");
+        if(customBase)
+            sheet+=QStringLiteral("\nSceneTree::item:!alternate:!selected:!hover { background-color: %1; }")
+                .arg(base.name());
+        // Colorway's QSS paints SceneTree::item:alternate directly. Apply
+        // a theme-derived strength override only when needed; at 100% with
+        // no custom alternate, leave the theme's native rule alone.
+        if(customAlternate||strength!=100)
+            sheet+=QStringLiteral("\nSceneTree::item:alternate:!selected:!hover { background-color: %1; }")
+                .arg(alternate.name());
         it->appliedStyleSheet=sheet;
         if(view->styleSheet()!=sheet)view->setStyleSheet(sheet);
     }

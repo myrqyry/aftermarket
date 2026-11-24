@@ -18,6 +18,7 @@
 #include <QFormLayout>
 #include <QLineEdit>
 #include <QSpinBox>
+#include <QSlider>
 #include <QPushButton>
 #include <QTimer>
 #include <QEvent>
@@ -45,6 +46,7 @@ struct ObsSettingsPage::Entry {
     QHash<QString,bool> baseline;
     QPointer<QLineEdit> gradientColors,knobSources;
     QPointer<QSpinBox> gradientPeriod;
+    QPointer<QSlider> stripeStrength;
     QJsonObject gradientBaseline,listRowsBaseline;
     QString existingMode;
     bool editPending=false;
@@ -157,6 +159,23 @@ void ObsSettingsPage::attach(QDialog *dialog){
              appearance.second,appearance.first,stripes.value("scenes").toBool());
     checkbox("source-stripes","Alternate Sources row backgrounds",
              appearance.second,appearance.first,stripes.value("sources").toBool());
+    auto *stripeRow=new QHBoxLayout;
+    stripeRow->addWidget(new QLabel("Strength",appearance.first));
+    entry->stripeStrength=new QSlider(Qt::Horizontal,appearance.first);
+    entry->stripeStrength->setObjectName("aftermarket-setting-stripe-strength");
+    entry->stripeStrength->setAccessibleName("Alternating row background strength");
+    entry->stripeStrength->setToolTip("0% = no alternating contrast, 100% = original colors, 200% = twice the contrast.");
+    entry->stripeStrength->setRange(0,200);
+    entry->stripeStrength->setSingleStep(5);
+    entry->stripeStrength->setPageStep(10);
+    entry->stripeStrength->setValue(stripes.value("strength").toInt(100));
+    stripeRow->addWidget(entry->stripeStrength,1);
+    auto *stripeValue=new QLabel(QString::number(entry->stripeStrength->value())+"%",appearance.first);
+    stripeValue->setMinimumWidth(stripeValue->fontMetrics().horizontalAdvance("200%")+6);
+    stripeRow->addWidget(stripeValue);
+    QObject::connect(entry->stripeStrength,&QSlider::valueChanged,page,
+                     [stripeValue](int amount){stripeValue->setText(QString::number(amount)+"%");});
+    appearance.second->addLayout(stripeRow);
     appearance.second->addStretch(1);
 
     auto menus=makeTab("Menus");
@@ -257,6 +276,9 @@ void ObsSettingsPage::attach(QDialog *dialog){
             changed=true;
         if(entry->knobSources&&entry->knobSources->text()!=spec.knobSources.join(", "))
             changed=true;
+        if(entry->stripeStrength&&entry->stripeStrength->value()!=
+           entry->listRowsBaseline.value("strength").toInt(100))
+            changed=true;
         if(changed){
             entry->editPending=true;
             // Native OBS only watches its own fields; enable the existing
@@ -276,6 +298,8 @@ void ObsSettingsPage::attach(QDialog *dialog){
     for(const auto &checkbox:entry->flags)
         if(checkbox)QObject::connect(checkbox,&QCheckBox::toggled,page,
                                      [updateDirty](bool){updateDirty();});
+    QObject::connect(entry->stripeStrength,&QSlider::valueChanged,page,
+                     [updateDirty](int){updateDirty();});
     QObject::connect(entry->gradientPeriod,qOverload<int>(&QSpinBox::valueChanged),
                      page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->gradientColors,&QLineEdit::textChanged,
@@ -369,6 +393,9 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
         const bool next=entry->flags.value(field)->isChecked();
         if(old!=next)newRows[key]=next;
     }
+    if(entry->stripeStrength&&entry->stripeStrength->value()!=
+       entry->listRowsBaseline.value("strength").toInt(100))
+        newRows["strength"]=entry->stripeStrength->value();
     if(newRows!=currentRows){
         changes.append({[this,c,newRows](QString &e){
                             if(!c||!c->setListRowSettings(newRows,&e))return false;

@@ -47,6 +47,28 @@ int main(int argc,char **argv){
  const auto actualStripe=scenes.viewport()->grab().toImage().pixelColor(
      scenes.viewport()->width()-20,sceneRow.center().y());
  REQUIRE(actualStripe==QColor("#345678"));
+ // Strength is a shared 0..200% contrast multiplier: 100 preserves the
+ // existing base/alternate colors; 0 flattens stripes; 200 enhances them.
+ auto adjusted=both;
+ adjusted["strength"]=50;
+ stripes.configure(adjusted);app.processEvents();
+ REQUIRE(sources.palette().color(QPalette::Base)==QColor("#203040"));
+ REQUIRE(sources.palette().color(QPalette::AlternateBase)==QColor("#2a435c"));
+ REQUIRE(scenes.palette().color(QPalette::AlternateBase)==QColor("#2a435c"));
+ REQUIRE(scenes.viewport()->grab().toImage().pixelColor(
+     scenes.viewport()->width()-20,sceneRow.center().y())==QColor("#2a435c"));
+ adjusted["strength"]=0;
+ stripes.configure(adjusted);app.processEvents();
+ REQUIRE(sources.palette().color(QPalette::AlternateBase)==QColor("#203040"));
+ REQUIRE(scenes.viewport()->grab().toImage().pixelColor(
+     scenes.viewport()->width()-20,sceneRow.center().y())==QColor("#203040"));
+ adjusted["strength"]=200;
+ stripes.configure(adjusted);app.processEvents();
+ REQUIRE(sources.palette().color(QPalette::AlternateBase)==QColor("#487cb0"));
+ REQUIRE(scenes.viewport()->grab().toImage().pixelColor(
+     scenes.viewport()->width()-20,sceneRow.center().y())==QColor("#487cb0"));
+ stripes.configure(both);app.processEvents();
+ REQUIRE(sources.palette().color(QPalette::AlternateBase)==QColor("#345678"));
  REQUIRE(unrelated.alternatingRowColors()==false);
  // If OBS refreshes its theme while striped, the adapter reapplies custom
  // colors but restores the *new* native palette when disabled.
@@ -61,6 +83,10 @@ int main(int argc,char **argv){
  REQUIRE(sources.palette().color(QPalette::Highlight)==normalSource.color(QPalette::Highlight));
  sources.setCurrentIndex(model.index(1,0));app.processEvents();
  REQUIRE(sources.currentIndex().row()==1);
+ stripes.configure({{"sources",false},{"scenes",true},{"strength",0}});
+ app.processEvents();
+ REQUIRE(scenes.palette().color(QPalette::AlternateBase)==scenes.palette().color(QPalette::Base));
+ REQUIRE(scenes.styleSheet().contains("SceneTree::item:alternate:!selected:!hover"));
  stripes.configure({{"sources",false},{"scenes",true},{"alternate","#506070"}});
  app.processEvents();
  REQUIRE(sources.palette().color(QPalette::Base)==QColor("#181818")&&!sources.alternatingRowColors());

@@ -13,6 +13,7 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QCheckBox>
+#include <QSlider>
 #include <QMainWindow>
 #include <QDockWidget>
 #include <QTemporaryDir>
@@ -97,6 +98,9 @@ int main(int argc,char **argv){
         REQUIRE(tabs->tabText(0)=="Appearance");
         auto *ellipsis=pages->currentWidget()->findChild<QComboBox*>("augment-global-ellipsis");
         REQUIRE(ellipsis&&ellipsis->currentData().toString()=="end");
+        auto *stripeStrength=dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength");
+        REQUIRE(stripeStrength&&stripeStrength->minimum()==0&&stripeStrength->maximum()==200);
+        REQUIRE(stripeStrength->value()==100);
         REQUIRE(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
         ellipsis->setCurrentIndex(ellipsis->findData("middle"));
         QApplication::processEvents();
@@ -106,6 +110,9 @@ int main(int argc,char **argv){
         REQUIRE(mixer);
         mixer->setChecked(true);
         REQUIRE(!controller.mixerBacksideEnabled()&&mixerCalls==0);
+        dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength")->setValue(35);
+        QApplication::processEvents();
+        REQUIRE(controller.listRowSettings().isEmpty());
         dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
         QApplication::processEvents();
         REQUIRE(titles.ellipsisMode()==Qt::ElideRight);
@@ -122,6 +129,7 @@ int main(int argc,char **argv){
         ellipsis->setCurrentIndex(ellipsis->findData("middle"));
         mixer->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-scene-stripes")->setChecked(true);
+        dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength")->setValue(175);
         dialog->findChild<QCheckBox*>("aftermarket-setting-sections")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
@@ -134,6 +142,7 @@ int main(int argc,char **argv){
         QApplication::processEvents();
         REQUIRE(controller.mixerBacksideEnabled()&&mixerCalls==1);
         REQUIRE(controller.listRowSettings().value("scenes").toBool()&&stripeUpdates==1);
+        REQUIRE(controller.listRowSettings().value("strength").toInt()==175);
         REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
         REQUIRE(stripEnabled&&stripCalls==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
@@ -151,6 +160,7 @@ int main(int argc,char **argv){
         REQUIRE(dialog->findChild<QComboBox*>("augment-global-ellipsis")
                        ->currentData().toString()=="middle");
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-mixer-back")->isChecked());
+        REQUIRE(dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength")->value()==175);
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->isChecked());
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->isChecked());
         // Do not shift / override the original OBS native settings categories.

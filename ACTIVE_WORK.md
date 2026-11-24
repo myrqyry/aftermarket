@@ -2473,3 +2473,58 @@ Verification:
 Boundary: User's OBS must restart to load the new plugin. No external push
 or release requested in this turn. The isolated test OBS and Xvfb may be
 closed after verification without affecting the user's real OBS process.
+
+## Slice 54 — alternating Scenes/Sources row background strength (2026-11-23)
+
+Requested: adjustable visual strength for the existing alternating
+background stripes in the native OBS Scenes and Sources list widgets.
+
+Implementation:
+- Added one shared 0–200% Strength slider to OBS Settings → Aftermarket →
+  Appearance and the detailed Tools → UI Augment Inspector → Panels →
+  Alternating list backgrounds. Live percent readout in both places.
+- 100% preserves previous chosen/theme normal and alternate row colors
+  exactly, including existing saved configurations without the strength key.
+  0% blends alternating into normal background; 200% doubles the native or
+  authored RGB difference (channels clamped 0–255). Any intermediate
+  strength uses the linear mix. Both lists share the same setting.
+- Reuses RowStripes native QPalette Base/AlternateBase approach. Colorway
+  SceneTree QSS alternate painting uses a narrowly scoped idle-row override
+  when strength differs from default, preserving native selected/hover
+  states, source-specific rows, scene grid layout, widget identities and
+  other third-party list views. Existing override cleanup on disable
+  remains unchanged.
+- Persisted in the already-supported listRows JSON object as integer
+  strength, strictly validated 0–200 (no strings, fractions or out-of-range
+  values). No migration required and no change to old settings unless the
+  slider is moved.
+- Inspector previews through RowStripes.configure while dragging, saving
+  only on slider release/keyboard value change. Native OBS Settings uses
+  existing Apply/OK/Cancel staging and undo semantics.
+- README documents slider semantics and both entry points; added native
+  isolated OBS settings screenshot at
+  docs/screenshots/readme/alternating-row-strength.webp.
+
+Verification:
+- TDD RED: row-stripes contrast checks at 0/50/200, actual SceneTree
+  painted pixels, native-theme QSS without custom colors, Controller
+  rejection of invalid values, native settings slider Apply/Cancel and
+  Inspector persistence all failed prior to implementation. GREEN after
+  changes. Inspector regression additionally proves dragging previews
+  RowStripes without saving, then final valueChange persists.
+- Actual OBS Studio 32.2.0 sandbox with isolated XDG profile and real
+  installed-in-sandbox compiled module shows Aftermarket Appearance
+  Strength slider at 180%, dark theme preserved. Changing to 0% in OBS
+  Settings did not mutate its sandbox rules.json before Apply; Apply
+  saved 0%. Moving to 200% and pressing Cancel kept saved 0%.
+  Never modified the user's current real rules.json during this test.
+- Full CMake build clean, 24/24 serial CTests pass without warnings,
+  git diff --check clean.
+- Installed byte-identical module SHA256
+  968b659c716fecda921a51fcbf3df763f9765dbc3edcbddbe4b51ffcdb682129
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Previous binary saved at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-row-stripe-strength.9801994460ee.so.
+  User OBS PID 24070 remained running; all four tracked real user
+  plugin settings files were hash-identical before/after install.
+- No push requested. User needs an OBS restart to load the new module.

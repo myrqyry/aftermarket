@@ -226,6 +226,12 @@ bool validListRows(const QJsonValue &value){
     for(const char *key:{"base","alternate"})
         if(rows.contains(key)&&(!rows.value(key).isString()||
            !colorPattern.match(rows.value(key).toString()).hasMatch()))return false;
+    if(rows.contains("strength")){
+        const auto value=rows.value("strength");
+        if(!value.isDouble())return false;
+        const double number=value.toDouble();
+        if(number<0||number>200||number!=static_cast<int>(number))return false;
+    }
     return true;
 }
 struct Rules {

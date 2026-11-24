@@ -209,9 +209,23 @@ In **OBS Settings → Aftermarket → Appearance**, turn on **Scenes** and/or
 **Panels → Alternating list backgrounds** editor remains available for
 choosing custom row colors. By default both are off.
 **Normal rows** and **Alternating rows** can each use a chosen solid color
-or **Use theme** to return to native Colorway/OBS styling. The settings
-are stored atomically as `listRows` in `rules.json`; changes apply immediately
-and disabling the feature restores the original palette and stylesheets.
+or **Use theme** to return to native Colorway/OBS styling. **Strength** controls
+the alternating-row contrast for Scenes and Sources together: **0%** removes
+the difference between normal and alternating backgrounds, **100%** uses the
+original theme/chosen colors (the unchanged default for existing settings),
+and **200%** doubles the color difference with RGB values clamped safely.
+It uses the existing theme's colors unless you explicitly choose custom
+ones; selection, hover and source-specific coloring remain native.
+
+The Strength slider is available in **OBS Settings → Aftermarket → Appearance**
+and **Tools → UI Augment Inspector → Panels → Alternating list backgrounds**.
+The Inspector previews changes while you drag and saves on release. Native
+OBS Settings stages the value until you choose Apply or OK; Cancel discards
+unapplied edits. The settings are stored atomically as listRows.strength in
+rules.json, and turning stripes off restores the original palette and
+stylesheets.
+
+![Native Aftermarket Appearance settings with alternating row Strength slider](docs/screenshots/readme/alternating-row-strength.webp)
 
 This augments the **existing OBS widgets**. The built-in scene selection and
 hover colors remain native; source-specific row colors assigned through OBS

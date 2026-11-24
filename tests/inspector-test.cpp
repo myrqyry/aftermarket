@@ -11,6 +11,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSpinBox>
+#include <QSlider>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTabWidget>
@@ -52,7 +53,15 @@ int main(int argc,char **argv) {
     REQUIRE(QJsonDocument::fromJson(read()).object().value("listRows").toObject()==stripeSettings);
     REQUIRE(!c.setListRowSettings({{"sources","not boolean"}}));
     REQUIRE(!c.setListRowSettings({{"alternate","invalid!"}}));
+    REQUIRE(!c.setListRowSettings({{"strength",-1}}));
+    REQUIRE(!c.setListRowSettings({{"strength",201}}));
+    REQUIRE(!c.setListRowSettings({{"strength",55.5}}));
+    REQUIRE(!c.setListRowSettings({{"strength","high"}}));
     REQUIRE(c.listRowSettings()==stripeSettings);
+    auto strong=stripeSettings;strong["strength"]=175;
+    REQUIRE(c.setListRowSettings(strong));
+    REQUIRE(c.listRowSettings()==strong);
+    REQUIRE(QJsonDocument::fromJson(read()).object().value("listRows").toObject()==strong);
     REQUIRE(c.setListRowSettings({}));
     REQUIRE(!c.mixerBacksideEnabled());
     REQUIRE(c.setMixerBacksideEnabled(true));
@@ -110,6 +119,20 @@ int main(int argc,char **argv) {
         REQUIRE(c.listRowSettings().value("scenes").toBool()&&stripes.settings().value("scenes").toBool());
         sourceStripes->click();
         REQUIRE(c.listRowSettings().value("sources").toBool()&&stripes.settings().value("sources").toBool());
+        auto *stripeStrength=inspector.findChild<QSlider*>("augment-striped-strength");
+        REQUIRE(stripeStrength&&stripeStrength->minimum()==0&&stripeStrength->maximum()==200);
+        REQUIRE(stripeStrength->value()==100);
+        stripeStrength->setValue(160);app.processEvents();
+        REQUIRE(c.listRowSettings().value("strength").toInt()==160);
+        REQUIRE(stripes.settings().value("strength").toInt()==160);
+        // During a drag, the canvas previews the color immediately but
+        // the persistent setting waits for slider release/valueChanged.
+        stripeStrength->sliderMoved(35);app.processEvents();
+        REQUIRE(stripes.settings().value("strength").toInt()==35);
+        REQUIRE(c.listRowSettings().value("strength").toInt()==160);
+        stripeStrength->setValue(175);app.processEvents();
+        REQUIRE(stripes.settings().value("strength").toInt()==175);
+        REQUIRE(c.listRowSettings().value("strength").toInt()==175);
         auto *resetAlternate=inspector.findChild<QPushButton*>("augment-striped-alternate-theme");
         REQUIRE(resetAlternate);
         REQUIRE(c.setListRowSettings({{"scenes",true},{"sources",true},{"alternate","#304050"}}));

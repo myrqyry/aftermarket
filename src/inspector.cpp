@@ -12,6 +12,7 @@
 #include <QUuid>
 #include <QComboBox>
 #include <QSpinBox>
+#include <QSlider>
 #include "motion.h"
 #include "gradient.h"
 #include "panels.h"
@@ -811,6 +812,44 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
                 });
             }
             scopeRow->addStretch();contents->addLayout(scopeRow);
+            auto *strengthRow=new QHBoxLayout;
+            strengthRow->addWidget(new QLabel("Strength",section));
+            auto *strength=new QSlider(Qt::Horizontal,section);
+            strength->setObjectName("augment-striped-strength");
+            strength->setAccessibleName("Alternating row background strength");
+            strength->setToolTip("0% = no alternating contrast, 100% = original colors, 200% = twice the contrast.");
+            strength->setRange(0,200);
+            strength->setSingleStep(5);
+            strength->setPageStep(10);
+            strength->setTracking(false); // preview while dragging, save on release
+            strength->setValue(controller.listRowSettings().value("strength").toInt(100));
+            strengthRow->addWidget(strength,1);
+            auto *strengthValue=new QLabel(QString::number(strength->value())+"%",section);
+            strengthValue->setMinimumWidth(strengthValue->fontMetrics().horizontalAdvance("200%")+6);
+            strengthRow->addWidget(strengthValue);
+            contents->addLayout(strengthRow);
+            connect(strength,&QSlider::sliderMoved,section,
+                    [&controller,safe,strengthValue](int amount){
+                strengthValue->setText(QString::number(amount)+"%");
+                if(safe){
+                    auto preview=controller.listRowSettings();
+                    preview["strength"]=amount;
+                    safe->configure(preview);
+                }
+            });
+            connect(strength,&QSlider::valueChanged,section,
+                    [&controller,commit,strength,strengthValue,safe](int amount){
+                strengthValue->setText(QString::number(amount)+"%");
+                auto next=controller.listRowSettings();
+                next["strength"]=amount;
+                if(!commit(next)){
+                    const auto saved=controller.listRowSettings();
+                    const QSignalBlocker blocker(strength);
+                    strength->setValue(saved.value("strength").toInt(100));
+                    strengthValue->setText(QString::number(strength->value())+"%");
+                    if(safe)safe->configure(saved);
+                }
+            });
             auto *colorGrid=new QGridLayout;
             int colorRow=0;
             for(const auto &field:{qMakePair(QStringLiteral("base"),QStringLiteral("Normal rows")),
