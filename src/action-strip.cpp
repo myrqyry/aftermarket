@@ -98,6 +98,26 @@ QString printStatus(const StripItem &item,const StatusSnapshot &s) {
 QString typeLabel(const StripItem &item) {
     return item.label.isEmpty()?(item.type=="dock"?item.target:item.type=="hotkey"?QStringLiteral("Hotkey"):item.target):item.label;
 }
+QDockWidget *dockFor(QMenuBar *bar,const StripItem &item){
+    auto *main=qobject_cast<QMainWindow*>(bar?bar->parentWidget():nullptr);
+    return main?main->findChild<QDockWidget*>(item.target):nullptr;
+}
+QString dockLabel(const StripItem &item,QMenuBar *bar){
+    if(!item.label.trimmed().isEmpty())return item.label.trimmed();
+    if(auto *dock=dockFor(bar,item)){
+        // Aftermarket may elide/pad an on-screen dock title to fit a narrow
+        // header. The native Docks-menu action retains its full original
+        // title; use that rather than a technical ID while the dock exists.
+        if(auto *action=dock->toggleViewAction()){
+            const auto name=action->text().simplified();
+            if(!name.isEmpty())return name;
+        }
+        const auto name=dock->windowTitle().simplified();
+        if(!name.isEmpty())return name;
+    }
+    // Keep missing targets diagnosable without guessing replacement docks.
+    return item.target;
+}
 }
 bool ActionStrip::validItem(const StripItem &i) {
     if(i.id.isEmpty()||i.id.size()>128||i.label.size()>160||i.target.size()>2048)return false;
@@ -271,7 +291,9 @@ bool ActionStrip::trigger(const QString &id){
 }
 QString ActionStrip::itemText(const QString &id) const {
     for(const auto &i:items_)if(i.id==id){
-        return i.type=="status"?printStatus(i,latest_):typeLabel(i);
+        if(i.type=="status")return printStatus(i,latest_);
+        if(i.type=="dock")return dockLabel(i,bar_);
+        return typeLabel(i);
     }
     return {};
 }
@@ -287,7 +309,8 @@ void ActionStrip::refresh(){
     for(const auto &item:items_){
         auto *b=content_->findChild<QToolButton*>("aftermarket-strip-"+item.id);
         if(!b)continue;
-        b->setText(itemText(item.id));
+        const QString label=itemText(item.id);
+        b->setText(label);
         if(item.type=="status"){
             b->setEnabled(true);
             b->setToolTip(item.target+" · native OBS status");
@@ -296,10 +319,14 @@ void ActionStrip::refresh(){
                 (item.target=="streaming"&&latest_.streaming));
         }
         if(item.type=="dock"){
-            auto *main=qobject_cast<QMainWindow*>(bar_?bar_->parentWidget():nullptr);
-            auto *dock=main?main->findChild<QDockWidget*>(item.target):nullptr;
+            auto *dock=dockFor(bar_,item);
+            const bool showing=dock&&dock->isVisible();
             b->setEnabled(dock);
-            b->setChecked(dock&&dock->isVisible());
+            b->setChecked(showing);
+            const QString action=dock?(showing?"Hide ":"Show ")+label:
+                QStringLiteral("Dock unavailable: ")+item.target;
+            b->setToolTip(action);
+            b->setAccessibleName(action);
         }
         if(item.type=="hotkey"){
             bool found=false;
@@ -423,13 +450,26 @@ void ActionStrip::updateOverflow(){
             auto *action=menu->addAction(itemText(id));
             if(it->type=="status")action->setEnabled(false);
             else connect(action,&QAction::triggered,this,[this,id]{trigger(id);});
+            if(it->type=="dock")action->setCheckable(true);
             action->setData(id);
         }
     }
     overflowIds_=overflow;
     if(showMore){
-        for(auto *action:overflow_->menu()->actions())
-            action->setText(itemText(action->data().toString()));
+        for(auto *action:overflow_->menu()->actions()){
+            const QString id=action->data().toString();
+            action->setText(itemText(id));
+            const auto it=std::find_if(items_.begin(),items_.end(),
+                [&id](const StripItem &item){return item.id==id;});
+            if(it!=items_.end()&&it->type=="dock"){
+                auto *dock=dockFor(bar_,*it);
+                action->setEnabled(dock);
+                action->setCheckable(true);
+                action->setChecked(dock&&dock->isVisible());
+                action->setToolTip(dock?(dock->isVisible()?"Hide ":"Show ")+action->text():
+                    QStringLiteral("Dock unavailable: ")+it->target);
+            }
+        }
     }
     overflow_->setVisible(showMore);
     content_->layout()->activate();
@@ -542,7 +582,8 @@ QString ActionStrip::chooseDock(QWidget *parent)const{
     QStringList labels;QMap<QString,QString> identities;
     for(auto *dock:main->findChildren<QDockWidget*>()){
         if(dock->objectName().isEmpty())continue;
-        const auto display=dock->windowTitle()+" ["+dock->objectName()+"]";
+        const StripItem option{"","dock",dock->objectName(),{}};
+        const auto display=dockLabel(option,bar_)+" ["+dock->objectName()+"]";
         labels.append(display);identities[display]=dock->objectName();
     }
     bool accepted=false;
@@ -587,7 +628,8 @@ void ActionStrip::showEditor(QWidget *parent,QMenuBar *menuBar){
     auto rebuildList=[this,list](){
         list->clear();
         for(const auto &item:items_){
-            auto *row=new QListWidgetItem(typeLabel(item)+"    ("+item.type+")",list);
+            const auto text=item.type=="dock"?dockLabel(item,bar_):typeLabel(item);
+            auto *row=new QListWidgetItem(text+"    ("+item.type+")",list);
             row->setData(Qt::UserRole,item.id);
         }
     };

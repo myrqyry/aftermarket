@@ -9,6 +9,7 @@
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QDockWidget>
+#include <QAction>
 #include <QMimeData>
 #include <QDropEvent>
 #include <iostream>
@@ -37,7 +38,7 @@ int main(int argc,char **argv){
  REQUIRE(strip.addItem({"rec","status","recording",""}));
  REQUIRE(strip.addItem({"fps","status","fps",""}));
  REQUIRE(strip.addItem({"mute","hotkey","hotkey:v1:source-a:mute","Mute mic"}));
- REQUIRE(strip.addItem({"dock","dock","mixerDock","Audio Mixer"}));
+ REQUIRE(strip.addItem({"dock","dock","mixerDock",""}));
  REQUIRE(strip.addItem({"space","spacer","",""}));
  REQUIRE(!strip.addItem({"fps","status","fps",""})); // duplicate IDs rejected
  REQUIRE(!strip.addItem({"bad","status","bogus",""}));
@@ -52,11 +53,40 @@ int main(int argc,char **argv){
  auto *mixerButton=strip.widget()->findChild<QToolButton*>("aftermarket-strip-dock");
  REQUIRE(mixerButton&&mixerButton->isCheckable());
  strip.refresh();
+ // Empty custom labels must use the native dock name, never its technical
+ // objectName (the user's Controls button currently says controlsDock).
+ REQUIRE(mixerButton->text()=="Audio Mixer");
+ REQUIRE(mixerButton->toolTip()=="Hide Audio Mixer");
+ REQUIRE(mixerButton->accessibleName()=="Hide Audio Mixer");
  REQUIRE(mixerButton->isChecked());
  REQUIRE(strip.trigger("dock"));
  REQUIRE(!mixerButton->isChecked());
+ REQUIRE(mixerButton->text()=="Audio Mixer");
+ REQUIRE(mixerButton->toolTip()=="Show Audio Mixer");
+ REQUIRE(mixerButton->accessibleName()=="Show Audio Mixer");
  REQUIRE(strip.trigger("dock"));
  REQUIRE(mixerButton->isChecked());
+ // OBS/Aftermarket may shorten the visible dock title for a narrow title
+ // bar. The action-strip label must use the full native Docks-menu text.
+ mixer->setWindowTitle("  Aud…");
+ mixer->toggleViewAction()->setText("Audio Mixer");
+ strip.refresh();
+ REQUIRE(mixerButton->text()=="Audio Mixer");
+ // Native rename changes the default label without rewriting the saved
+ // dock target. A user-defined label always takes precedence.
+ mixer->setWindowTitle("  Mus…");
+ mixer->toggleViewAction()->setText("Music Mixer");
+ strip.refresh();
+ REQUIRE(mixerButton->text()=="Music Mixer");
+ REQUIRE(mixerButton->toolTip()=="Hide Music Mixer");
+ REQUIRE(strip.replaceItem("dock",{"dock","dock","mixerDock","Custom mixer"}));
+ mixerButton=strip.widget()->findChild<QToolButton*>("aftermarket-strip-dock");
+ REQUIRE(mixerButton&&mixerButton->text()=="Custom mixer");
+ REQUIRE(mixerButton->toolTip()=="Hide Custom mixer");
+ REQUIRE(strip.replaceItem("dock",{"dock","dock","mixerDock",""}));
+ mixerButton=strip.widget()->findChild<QToolButton*>("aftermarket-strip-dock");
+ REQUIRE(mixerButton&&mixerButton->text()=="Music Mixer");
+ REQUIRE(strip.items().at(3).label.isEmpty());
  REQUIRE(strip.itemText("rec").contains("REC"));
  REQUIRE(strip.itemText("fps").contains("59.9"));
  REQUIRE(queries>0);
@@ -177,6 +207,11 @@ int main(int argc,char **argv){
  narrow.menuBar()->addMenu("Edit");
  narrow.menuBar()->addMenu("Tools");
  narrow.resize(420,360);narrow.show();app.processEvents();
+ auto *controlsDock=new QDockWidget("Controls",&narrow);
+ controlsDock->setObjectName("controlsDock");
+ controlsDock->setWidget(new QLabel("Native Controls"));
+ narrow.addDockWidget(Qt::RightDockWidgetArea,controlsDock);
+ app.processEvents();
  augment::ActionStrip constrained(temp.filePath("overflow.json"),
      [&]{return stats;},
      []{return QList<augment::HotkeyChoice>{{"hotkey:v1:source-a:mute","Mute mic","Sources"}};},
@@ -185,6 +220,7 @@ int main(int argc,char **argv){
      REQUIRE(constrained.addItem({"status-"+metric,"status",metric,{}}));
  REQUIRE(constrained.setEnabled(narrow.menuBar(),true));
  REQUIRE(constrained.addItem({"control","hotkey","hotkey:v1:source-a:mute","Mute mic"}));
+ REQUIRE(constrained.addItem({"dock-controls","dock","controlsDock",""}));
  app.processEvents();
  auto *overflow=constrained.widget()->findChild<QToolButton*>("aftermarket-strip-overflow");
  REQUIRE(overflow&&overflow->isVisible()&&overflow->menu()&&!overflow->menu()->actions().isEmpty());
@@ -193,6 +229,20 @@ int main(int argc,char **argv){
  for(auto *candidate:overflow->menu()->actions())
      if(candidate->text()=="Mute mic")overflowHotkey=candidate;
  REQUIRE(overflowHotkey&&overflowHotkey->isEnabled());
+ // Overflow has the same readable native name and checkable Show/Hide
+ // semantics as the corresponding visible dock button.
+ QAction *overflowDock=nullptr;
+ for(auto *candidate:overflow->menu()->actions())
+     if(candidate->data().toString()=="dock-controls")overflowDock=candidate;
+ REQUIRE(overflowDock&&overflowDock->text()=="Controls");
+ REQUIRE(overflowDock->isEnabled()&&overflowDock->isCheckable()&&overflowDock->isChecked());
+ REQUIRE(overflowDock->toolTip()=="Hide Controls");
+ overflowDock->trigger();app.processEvents();
+ REQUIRE(!controlsDock->isVisible());
+ REQUIRE(overflowDock->text()=="Controls"&&!overflowDock->isChecked());
+ REQUIRE(overflowDock->toolTip()=="Show Controls");
+ overflowDock->trigger();app.processEvents();
+ REQUIRE(controlsDock->isVisible()&&overflowDock->isChecked());
  const int beforeOverflowHotkey=hotkeyCalls;
  overflowHotkey->trigger();
  REQUIRE(hotkeyCalls==beforeOverflowHotkey+1);

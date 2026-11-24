@@ -2528,3 +2528,57 @@ Verification:
   User OBS PID 24070 remained running; all four tracked real user
   plugin settings files were hash-identical before/after install.
 - No push requested. User needs an OBS restart to load the new module.
+
+## Slice 55 — readable Action Strip dock show/hide labels (2026-11-23)
+
+User wanted the text for dock show/hide buttons cleaned up. Current real
+action-strip.json holds one button with empty label and target controlsDock,
+which ActionStrip previously rendered literally as the technical object ID.
+
+Implementation:
+- For dock toggles without an explicit custom label, resolve the native
+  QDockWidget via its saved stable objectName, then render its full
+  toggleViewAction text. Thus controlsDock displays "Controls", not the
+  internal ID. The Docks menu action remains the authority even when
+  Aftermarket abbreviates/pads the visible dock header for limited space.
+  Explicit user-authored labels remain authoritative; missing dock IDs
+  remain diagnosable, and the button remains disabled.
+- A checkable dock button has a stable plain title regardless of state,
+  with dynamic tooltip and accessible name "Hide Controls" when visible
+  and "Show Controls" when hidden. The checkmark/pressed state still shows
+  visibility; no extra on-button wording or width churn was added.
+- Overflow menu entries for dock toggles are also checkable, show the
+  same full native name and track enabled/checked state and tooltip. The
+  Action Strip editor's dock list and native dock chooser now display
+  full names instead of the technical objectName where possible (ID
+  remains available in the chooser to disambiguate same-name docks).
+  Original docking, content, action targets, hotkeys and saved configuration
+  are unchanged.
+
+Verification:
+- TDD red with actual user-equivalent empty dock label: initial test failed
+  because mixerDock rendered as a raw ID. Green checks native "Audio Mixer"
+  label, checked state and Show/Hide tooltips/accessibility, native action
+  title remaining full when window title is shortened, dock rename updating
+  the text, custom labels overriding, and persistence of blank original
+  labels. Narrow bar regression exercises checked/unchecked overflow
+  actions including the actual dock visibility toggle and restored state.
+- Real OBS 32.2.0 isolated Xvfb profile with a copy of the user's existing
+  single controlsDock Action Strip item (no real user config mutations)
+  and the exact compiled module loaded from sandbox plugin path. Top-right
+  button visibly reads "Controls"; clicked once to hide actual Controls
+  panel while button remains, clicked again to restore it. Screenshots
+  in build/dock-text-smoke/controls-toggle.png,
+  controls-hidden.png and controls-restored.png. No relevant OBS log errors.
+- Full CMake build clean; all 24/24 CTests pass, no compiler warnings,
+  git diff --check clean. Byte-matched installed module SHA256
+  bac4894eec30e32c1eb25898af6b5eb2f27fa2a1f9e6ad691b4d7e8bfb6291cb
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Previous binary backed up to
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-dock-toggle-labels.968b659c716f.so.
+  User OBS PID 99268 was not restarted; rules.json, action-strip.json,
+  front-audio-controls.json and dock-title-settings.ini hashes are identical
+  before and after installation. No GitHub push requested.
+
+Boundary: the actual user's running OBS must restart before displaying the
+updated label. No native dock action data or streaming settings are altered.

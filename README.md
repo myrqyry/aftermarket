@@ -181,7 +181,12 @@ Available items:
   name. Missing/ambiguous hotkeys become inactive; they are never reassigned
   to an unrelated source.
 - **Native dock buttons:** Show/hide any dock with an identifiable OBS dock ID.
-  Buttons reflect real dock visibility without replacing the dock.
+  Buttons show the full native dock name (**Controls**, not `controlsDock`)
+  when no custom label has been set; user-defined labels take precedence.
+  Checked means visible; the tooltip and accessible name say **Hide Controls**
+  or **Show Controls**, as appropriate. Overflow menu entries keep the same
+  label, enabled state and checked state. Missing docks stay disabled rather
+  than silently toggling a different dock. OBS's dock widgets are not replaced.
 - **Flexible spacers and separators** for arranging groups.
 
 Drag controls to reorder them directly on the strip, or use the editor's
