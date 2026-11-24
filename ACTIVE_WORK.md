@@ -2812,3 +2812,19 @@ and native implementations incremental rather than a forced replacement.
 No cue engine or adapter implementation is claimed here. Next focused slice:
 one vertical capability across native OBS and one verified external plugin,
 with runtime discovery and a full real-OBS test; only then generalize.
+
+### Cue Deck direction refinement — 2026-11-23 (supersedes adapter-first priority)
+
+User clarified that well-designed OBS plugins already expose hotkeys and does NOT
+want separate third-party adapters unless they make Aftermarket materially
+better. Build Cue Deck atop the existing NativeActionBridge stable hotkey
+enumeration/triggering, native dock-layout switching, and documented OBS
+frontend actions first. Avoid an Exeldro-specific adapter as the first slice.
+Add narrow provider-specific integration only when hotkeys cannot express
+parameters, query state, signal completion/error, or guarantee intended
+on/off semantics. A toggle hotkey alone cannot serve as a deterministic
+"enable" or "disable" operation without confirmed state. Preserve plugin
+independence, no forced migration, no reimplementation for compatibility's
+sake. Next viable engineering slice is a small sequencer of existing OBS
+actions/layouts/hotkeys with explicit safety and error semantics. This is
+a design correction, NOT implemented code.
