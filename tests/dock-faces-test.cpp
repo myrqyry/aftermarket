@@ -12,8 +12,7 @@
 #include <QVBoxLayout>
 #include <QStyle>
 #include <QStyleOptionDockWidget>
-#include <QPropertyAnimation>
-#include <QGraphicsOpacityEffect>
+#include <QVariantAnimation>
 #include <QEventLoop>
 #include <QTimer>
 #include <iostream>
@@ -101,28 +100,40 @@ int main(int argc,char **argv) {
   REQUIRE(flip->text()=="AudioBus");
   REQUIRE(flip->toolTip().contains("routing",Qt::CaseInsensitive));
   REQUIRE(knobs->isVisible());
-  // Global Motion opt-in adds a click-through visual overlay; it must NOT
-  // alter OBS native widget effects, state or ownership.
+  // With Motion on, a single click-through flip animates two paint-only
+  // snapshots. The actual mixer/routing widgets retain identity, ownership
+  // and native effects, and become interactive immediately underneath it.
   motionOn=true;
   flip->click();app.processEvents();
   REQUIRE(faces.backVisible(a)&&back->isVisible());
-  auto *fade=stack->findChild<QWidget*>("aftermarket-view-fade");
-  REQUIRE(fade&&fade->isVisible());
-  REQUIRE(fade->testAttribute(Qt::WA_TransparentForMouseEvents));
-  REQUIRE(fade->graphicsEffect()!=nullptr);
+  auto *surface=stack->findChild<QWidget*>("aftermarket-view-flip");
+  REQUIRE(surface&&surface->isVisible());
+  REQUIRE(surface->testAttribute(Qt::WA_TransparentForMouseEvents));
+  REQUIRE(surface->focusPolicy()==Qt::NoFocus);
+  REQUIRE(surface->geometry()==stack->rect());
   REQUIRE(native->graphicsEffect()==nullptr&&back->graphicsEffect()==nullptr);
-  REQUIRE(fade->findChild<QPropertyAnimation*>("aftermarket-view-fade-motion"));
-  flip->click();app.processEvents(); // rapid reversal
+  auto *flipMotion=surface->findChild<QVariantAnimation*>("aftermarket-view-flip-motion");
+  REQUIRE(flipMotion&&flipMotion->state()==QAbstractAnimation::Running);
+  REQUIRE(flipMotion->duration()>=175&&flipMotion->duration()<=260);
+  // At midway the old face must fold out of view; the new face folds in.
+  // Compare real paint frames, not only the animation's running flag.
+  auto first=surface->grab().toImage();
+  QEventLoop foldLoop;
+  QTimer::singleShot(95,&foldLoop,&QEventLoop::quit);
+  foldLoop.exec();app.processEvents();
+  REQUIRE(surface->grab().toImage()!=first);
+  REQUIRE(stack->currentWidget()==back&&back->isVisible());
+  flip->click();app.processEvents(); // rapid reversal cancels previous
   REQUIRE(!faces.backVisible(a)&&native->isVisible());
-  REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-fade").size()==1);
-  QEventLoop fadeLoop;
-  QTimer::singleShot(250,&fadeLoop,&QEventLoop::quit);
-  fadeLoop.exec();app.processEvents();
-  REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-fade").isEmpty());
-  motionOn=false; // reduced-motion mode: no visual overlay
+  REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-flip").size()==1);
+  QEventLoop finishLoop;
+  QTimer::singleShot(280,&finishLoop,&QEventLoop::quit);
+  finishLoop.exec();app.processEvents();
+  REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-flip").isEmpty());
+  motionOn=false; // reduced-motion mode: immediate switch
   flip->click();app.processEvents();
   REQUIRE(faces.backVisible(a)&&back->isVisible());
-  REQUIRE(!stack->findChild<QWidget*>("aftermarket-view-fade"));
+  REQUIRE(!stack->findChild<QWidget*>("aftermarket-view-flip"));
   flip->click();app.processEvents();
   REQUIRE(!faces.backVisible(a)&&native->isVisible());
   auto *next=a->findChild<QToolButton*>("aftermarket-tab-next");

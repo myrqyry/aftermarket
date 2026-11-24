@@ -2582,3 +2582,55 @@ Verification:
 
 Boundary: the actual user's running OBS must restart before displaying the
 updated label. No native dock action data or streaming settings are altered.
+
+## Slice 56 — two-sided dock backside flip (2026-11-23)
+
+Requested exploration: whether a card-flip animation between the front and
+back sides of an OBS dock would be feasible or excessive. Chosen a restrained
+210 ms half-turn in the existing DockFaces two-page Audio Mixer/AudioBus path,
+replacing (not layering over) the older 155 ms crossfade.
+
+Implementation:
+- Retained existing global Motion toggle, Qt animation style hint, bottom
+  AudioBus/Audio Mixer button and actual QStackedWidget page identities.
+  Motion disabled still switches immediately with no temporary widget.
+- New internal FlipFrame paints two QPixmap snapshots, captured once from
+  the outgoing and newly selected real native pages. A 210 ms InOutSine
+  QVariantAnimation drives a horizontal pseudo-perspective half-turn:
+  outgoing face folds to the center; incoming face unfolds. The temporary
+  overlay has no focus or mouse input, uses the current Qt palette for its
+  background and is deleted on completion, interruption, or dock detach.
+  The actual OBS mixer, AudioBus widgets, routing, and streams are never
+  rotated, duplicated, replaced, or assigned a graphics effect.
+- README Motion explanation and existing real-OBS screenshot montage updated
+  from crossfade to actual captured flip frames. No new preferences or
+  unrelated UI changes.
+
+Verification:
+- TDD red against prior crossfade: required temporary QWidget named
+  aftermarket-view-flip, bounded 175–260 ms QVariantAnimation, real pixel
+  changes after an intermediate frame, QStackedWidget identity preserved,
+  quick reversal clearing the earlier frame, no native QWidget effects,
+  and no overlay when Motion is disabled. Green with flip implementation.
+- Real isolated OBS 32.2.0 used native Audio Mixer and actual AudioBus
+  audio-route page in the same dock, with the expected module loaded from
+  the sandbox plugin path. Before, mid-turn and settled screenshots showed
+  visible intermediate geometry; the correct final routing page was active,
+  with no relevant OBS errors. Repeated using an isolated build exact binary
+  SHA256 aa0ada16bdf7eb89d7ed01cc8b6208e5ecf97e3a2c8f0c3981b7b517acdd2e9e,
+  with both frame change and destination-page change verified.
+- Concurrent unrelated dock-layout work appeared uncommitted in the shared
+  checkout while verifying. Preserved that work entirely and built the flip
+  separately from the checked-in HEAD plus only the modified source/test
+  files, in an ephemeral temporary directory outside Loam. Clean 90-target
+  CMake build without warnings. Original 24 tests each pass under appropriate
+  display backend: 23/24 in one XCB suite, and menu-bar-compact passes offscreen;
+  panels and obs-routing pass under XCB but fail under unavailable/flaky
+  offscreen conditions. Thus no single 24/24 CTest invocation is claimed.
+- Existing user's running OBS session and actual plugin configuration were
+  not used for development; separate Xvfb/XDG config profiles only.
+
+Boundaries: only docks already managed by DockFaces get the flip (currently
+the Audio Mixer/AudioBus backside). No new global widget interception or
+animation engine, no forced motion, no remote push requested. Other in-flight
+dock-layout files are outside this change.

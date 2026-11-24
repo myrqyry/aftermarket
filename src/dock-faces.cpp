@@ -16,10 +16,12 @@
 #include <QStyleOptionDockWidget>
 #include <QEvent>
 #include <QFontMetrics>
-#include <QGraphicsOpacityEffect>
-#include <QPropertyAnimation>
+#include <QVariantAnimation>
+#include <QPainter>
+#include <QPaintEvent>
+#include <QTransform>
 #include <QGuiApplication>
-#include <QLabel>
+#include <QtMath>
 #include <functional>
 
 namespace augment {
@@ -37,6 +39,61 @@ QToolButton *button(QWidget *parent,const char *name,const QString &tooltip,
     result->setAccessibleName(tooltip);
     return result;
 }
+// A paint-only, short two-sided flip. Neither real OBS widget is transformed
+// or reassigned a graphics effect. Frame images are captured only once, not
+// repeatedly on every paint; the animation remains inside the original dock.
+class FlipFrame final : public QWidget {
+public:
+    FlipFrame(QPixmap outgoing,QPixmap incoming,QWidget *parent)
+        :QWidget(parent),outgoing_(std::move(outgoing)),incoming_(std::move(incoming)){
+        setObjectName("aftermarket-view-flip");
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setFocusPolicy(Qt::NoFocus);
+    }
+    void setProgress(qreal value){
+        progress_=qBound(qreal(0),value,qreal(1));
+        update();
+    }
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.fillRect(rect(),palette().color(QPalette::Window));
+        if(width()<=0||height()<=0)return;
+        const bool first=progress_<0.5;
+        const QPixmap &face=first?outgoing_:incoming_;
+        if(face.isNull())return;
+        const qreal halfTurn=first?progress_*2:(1-progress_)*2;
+        const qreal angle=halfTurn*M_PI_2;
+        const qreal amount=qCos(angle);
+        if(amount<0.01)return;
+        const qreal halfWidth=width()*amount/2;
+        const qreal cx=width()/2.0;
+        const qreal inset=height()*0.09*qSin(angle);
+        // One vertical edge recedes as the card rotates away; the other
+        // recedes as the second side turns in. The perspective is intentionally
+        // restrained to avoid a distracting gimmick in a working mixer.
+        const qreal leftInset=first?0:inset;
+        const qreal rightInset=first?inset:0;
+        const QPolygonF target{
+            QPointF(cx-halfWidth,leftInset),
+            QPointF(cx+halfWidth,rightInset),
+            QPointF(cx+halfWidth,height()-rightInset),
+            QPointF(cx-halfWidth,height()-leftInset)
+        };
+        const qreal pixelRatio=face.devicePixelRatio();
+        const QRectF bounds(0,0,face.width()/pixelRatio,face.height()/pixelRatio);
+        const QPolygonF source{bounds.topLeft(),bounds.topRight(),
+                               bounds.bottomRight(),bounds.bottomLeft()};
+        QTransform perspective;
+        if(!QTransform::quadToQuad(source,target,perspective))return;
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.setTransform(perspective);
+        painter.drawPixmap(bounds,face,QRectF(QPointF(0,0),face.size()/pixelRatio));
+    }
+private:
+    QPixmap outgoing_,incoming_;
+    qreal progress_=0;
+};
 }
 struct DockFaces::State {
     struct Entry {
@@ -48,7 +105,7 @@ struct DockFaces::State {
         QPointer<QStackedWidget> stack;
         QPointer<QToolButton> flip,prev,next;
         QPointer<QWidget> accessory;
-        QPointer<QLabel> fade;
+        QPointer<FlipFrame> transition;
         bool wasHidden=false;
     };
     QHash<QDockWidget*,Entry> entries;
@@ -161,7 +218,7 @@ bool DockFaces::addFrontAccessory(QDockWidget *dock,QWidget *accessory){
 bool DockFaces::detach(QDockWidget *dock) {
     auto it=state->entries.find(dock);
     if(it==state->entries.end())return false;
-    if(it->fade)delete it->fade.data();
+    if(it->transition)delete it->transition.data();
     const State::Entry e=it.value();
     state->entries.erase(it);
     if(e.dock)e.dock->removeEventFilter(this);
@@ -196,44 +253,39 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     auto *stack=it->stack.data();
     auto *destination=visible?it->alternate.data():it->native.data();
     if(stack->currentWidget()==destination)return true;
-    // Clear an interrupted transition rather than stacking screenshots.
-    if(it->fade)delete it->fade.data();
-    it->fade=nullptr;
+    // Keep only the latest transition during rapid user reversals.
+    if(it->transition)delete it->transition.data();
+    it->transition=nullptr;
     const bool animate=state->motionEnabled&&state->motionEnabled()&&
         stack->isVisible()&&stack->width()>0&&stack->height()>0&&
         stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack);
-    // A short, click-through snapshot fades away over the real new page.
-    // The original OBS mixer keeps its native widget and rendering unchanged.
-    const QPixmap previous=animate?stack->grab():QPixmap{};
+    const QPixmap outgoing=animate?stack->grab():QPixmap{};
     stack->setCurrentWidget(destination);
-    if(!previous.isNull()){
-        auto *overlay=new QLabel(stack);
-        overlay->setObjectName("aftermarket-view-fade");
-        overlay->setAttribute(Qt::WA_TransparentForMouseEvents);
-        overlay->setFocusPolicy(Qt::NoFocus);
-        overlay->setPixmap(previous);
-        overlay->setScaledContents(true);
-        overlay->setGeometry(stack->rect());
-        auto *opacity=new QGraphicsOpacityEffect(overlay);
-        overlay->setGraphicsEffect(opacity);
-        overlay->show();
-        overlay->raise();
-        auto *animation=new QPropertyAnimation(opacity,"opacity",overlay);
-        animation->setObjectName("aftermarket-view-fade-motion");
-        animation->setDuration(155);
-        animation->setStartValue(1.0);
-        animation->setEndValue(0.0);
-        animation->setEasingCurve(QEasingCurve::OutCubic);
-        QPointer<QLabel> safe=overlay;
+    const QPixmap incoming=animate?stack->grab():QPixmap{};
+    if(!outgoing.isNull()&&!incoming.isNull()){
+        auto *surface=new FlipFrame(outgoing,incoming,stack);
+        surface->setGeometry(stack->rect());
+        surface->show();
+        surface->raise();
+        auto *animation=new QVariantAnimation(surface);
+        animation->setObjectName("aftermarket-view-flip-motion");
+        animation->setDuration(210);
+        animation->setStartValue(0.0);
+        animation->setEndValue(1.0);
+        animation->setEasingCurve(QEasingCurve::InOutSine);
+        QPointer<FlipFrame> safe=surface;
         QPointer<QDockWidget> target=dock;
-        connect(animation,&QPropertyAnimation::finished,this,[this,target,safe]{
+        connect(animation,&QVariantAnimation::valueChanged,surface,[safe](const QVariant &v){
+            if(safe)safe->setProgress(v.toReal());
+        });
+        connect(animation,&QVariantAnimation::finished,this,[this,target,safe]{
             if(target){
                 auto it=state->entries.find(target);
-                if(it!=state->entries.end()&&it->fade==safe)it->fade=nullptr;
+                if(it!=state->entries.end()&&it->transition==safe)it->transition=nullptr;
             }
             if(safe)safe->deleteLater();
         });
-        it->fade=overlay;
+        it->transition=surface;
         animation->start();
     }
     // The native dock title already renders the real name.

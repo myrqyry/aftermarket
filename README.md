@@ -615,16 +615,18 @@ a dock's **⋮ → Collapse / Expand** (or middle-clicking its native title) eas
 the real QDockWidget height over **165 ms**, with its original min/max size
 constraints restored after expansion. Tabbed, floating and custom-title
 docks remain governed by the existing native restrictions. Switching between
-**Audio Mixer and AudioBus** uses a **155 ms crossfade** of a click-through
-temporary snapshot; the original native OBS mixer and routing widgets
-are not duplicated, replaced or assigned an opacity effect. Reversing
-quickly cancels the earlier animation; emergency restoration leaves no
-temporary height constraint. Both are instantaneous with Motion off.
+**Audio Mixer and AudioBus** uses a restrained **210 ms horizontal flip**:
+two temporary snapshots turn around the middle of the existing dock, while
+the original OBS mixer and routing widgets stay in place. Nothing is rotated
+or assigned a graphics effect on the live native controls, and no extra
+animation is layered on top. Rapid reversals discard the earlier frame,
+and emergency recovery removes the animation. Both dock movements and
+page switching are instantaneous with Motion off.
 
 These are **OBS interface animations**, not OBS's video scene-transition
 effects. Aftermarket never invokes or replaces a streaming transition.
 
-![Native Qt dock collapse frames and AudioBus view crossfade in real isolated OBS](docs/screenshots/readme/ui-motion-docks-and-audiobus.webp)
+![Native Qt dock collapse and real OBS AudioBus half-turn frames](docs/screenshots/readme/ui-motion-docks-and-audiobus.webp)
 
 ```json
 {
