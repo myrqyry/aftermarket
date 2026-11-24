@@ -50,6 +50,68 @@ int main(int argc, char **argv) {
     const auto path = dir.filePath("rules.json");
     auto write = [&](const QByteArray &json) { QFile f(path); return f.open(QIODevice::WriteOnly | QIODevice::Truncate) && f.write(json)==json.size(); };
     REQUIRE(write(R"({"enabled":true,"rules":[{"text":"Rename","icon":"pencil","color":"#ff00ff"},{"text":"Copy","icon":"copy","color":"#ff00ff"},{"text":"Remove","icon":"trash","color":"#ff00ff"}]})"));
+    // A real dual-head X11 run exercises screens with nonzero origins.
+    // The cursor can be on another screen when a menu opens by keyboard.
+    // Native popup geometry, not the cursor's matching x coordinate, owns it.
+    if(app.screens().size()>1){
+        augment::Controller controller(path);
+        const QPoint saved=QCursor::pos();
+        for(auto *target:app.screens()){
+            const QRect work=target->availableGeometry();
+            QScreen *other=nullptr;
+            for(auto *candidate:app.screens())if(candidate!=target){other=candidate;break;}
+            const QRect otherWork=other->availableGeometry();
+            const int overlapLeft=qMax(work.left(),otherWork.left());
+            const int overlapRight=qMin(work.right(),otherWork.right());
+            const int x=overlapRight-overlapLeft>400?overlapLeft+100:work.left()+100;
+            const QPoint anchor(x,work.top()+100);
+            const QPoint unrelated(qBound(otherWork.left(),x,otherWork.right()),otherWork.center().y());
+            QCursor::setPos(unrelated);
+            QMenu root;
+            for(int i=0;i<42;++i)root.addAction(QString("Filter %1 / effect options").arg(i));
+            root.popup(anchor);app.processEvents();
+            std::cerr<<"multi-head root "<<qPrintable(target->name())<<" anchor "<<anchor.x()<<","<<anchor.y()
+                     <<" cursor "<<unrelated.x()<<","<<unrelated.y()<<" actual "
+                     <<root.x()<<","<<root.y()<<" "<<root.width()<<"x"<<root.height()<<"\n";
+            REQUIRE(work.contains(root.geometry()));
+            QSet<int> columns;
+            for(auto *action:root.actions()){
+                const auto r=root.actionGeometry(action);
+                REQUIRE(root.rect().contains(r)&&root.actionAt(r.center())==action);
+                columns.insert(r.x());
+            }
+            REQUIRE(columns.size()>1);
+            root.hide();app.processEvents();
+            // Open a genuine submenu through Qt's keyboard navigation.
+            QMenu parent;
+            parent.addAction("Remove");
+            auto *child=parent.addMenu("Add");
+            for(int i=0;i<42;++i)child->addAction(QString("Filter %1 / effect options").arg(i));
+            parent.popup(QPoint(work.right()-230,work.bottom()-100));app.processEvents();
+            const auto row=parent.actionGeometry(child->menuAction());
+            const QRect globalRow(parent.mapToGlobal(row.topLeft()),row.size());
+            QCursor::setPos(unrelated);
+            parent.setActiveAction(child->menuAction());
+            QKeyEvent right(QEvent::KeyPress,Qt::Key_Right,Qt::NoModifier);
+            QApplication::sendEvent(&parent,&right);app.processEvents();
+            REQUIRE(child->isVisible());
+            std::cerr<<"multi-head submenu "<<qPrintable(target->name())<<" row "
+                     <<globalRow.x()<<","<<globalRow.y()<<" actual "
+                     <<child->x()<<","<<child->y()<<" "<<child->width()<<"x"<<child->height()<<"\n";
+            REQUIRE(work.contains(child->geometry()));
+            REQUIRE(qAbs(child->geometry().right()-globalRow.left())<=20||
+                    qAbs(child->geometry().left()-globalRow.right())<=20);
+            columns.clear();
+            for(auto *action:child->actions()){
+                const auto r=child->actionGeometry(action);
+                REQUIRE(child->rect().contains(r)&&child->actionAt(r.center())==action);
+                columns.insert(r.x());
+            }
+            REQUIRE(columns.size()>1);
+            child->hide();parent.hide();app.processEvents();
+        }
+        QCursor::setPos(saved);
+    }
     QMenu menu;
     auto *rename = menu.addAction("&Rename...");
     auto *copy = menu.addAction("Copy");

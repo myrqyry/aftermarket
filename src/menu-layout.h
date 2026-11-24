@@ -7,6 +7,7 @@
 #include <QRect>
 class QMenu;
 class QAction;
+class QScreen;
 
 namespace augment {
 // Native overflow pages share the logical scope of their original menu.
@@ -28,6 +29,10 @@ private:
     bool columnsApplied=false;
     QPoint openingAnchor;
     bool anchoredToInvocation=false;
+    bool placementResolved=false;
+    bool menuBarAnchor=false;
+    QRect parentActionAnchor;
+    QPointer<QScreen> invocationScreen;
     QString originalStyle,appliedStyle;
     QList<QPointer<QAction>> originalActions;
     QList<QPointer<QMenu>> pages;

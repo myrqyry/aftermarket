@@ -39,6 +39,19 @@ bool sourceContextMenu(const QMenu *menu) {
         && labels.contains(QStringLiteral("filters"))
         && labels.contains(QStringLiteral("properties"));
 }
+// A QWindow's screen can lag behind its newly assigned popup geometry,
+// particularly when exec() creates its native window on the parent's screen.
+// Pick the monitor from actual global geometry, never the virtual desktop.
+QScreen *geometryScreen(const QRect &rect){
+    QScreen *best=QGuiApplication::screenAt(rect.center());
+    qint64 bestArea=0;
+    for(auto *screen:QGuiApplication::screens()){
+        const QRect part=screen->geometry().intersected(rect);
+        const qint64 area=qint64(part.width())*part.height();
+        if(area>bestArea){bestArea=area;best=screen;}
+    }
+    return best;
+}
 QStringList nativeLabels(const QMenu *menu) {
     QStringList labels;
     for(const auto *a:menu->actions())
@@ -71,17 +84,11 @@ void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow,con
     const int cap=qMin(340,qMax(160,int(available*.48)));
     const bool density=compact&&(count>10||menu->sizeHint().height()>cap);
     if(!density&&explicitOverflow.isEmpty()&&explicitHidden.isEmpty())return;
-    // A root context menu may be positioned by Qt for its original narrow,
-    // tall contents. Before reflow changes the width, remember the pointer
-    // that launched it, provided it aligns with the original popup edge.
-    // This avoids guessing from the current cursor later (which may already
-    // be hovering a different menu column). Native submenu placement stays
-    // entirely Qt-owned.
+    // Qt has not assigned its native popup geometry at aboutToShow.
+    // Record the pointer now, but resolve the actual monitor and anchor
+    // once the native popup appears. Do not let hover move either later.
 #ifdef AFTERMARKET_QT642_COLUMNS
     if(qstrcmp(qVersion(),QT_VERSION_STR)==0){
-        // aboutToShow fires *before* Qt assigns the native popup geometry.
-        // Record the pointer now, then validate it against that geometry
-        // on the first present() call. It must never drift with hover.
         openingAnchor=QCursor::pos();
         anchoredToInvocation=QGuiApplication::screenAt(openingAnchor)!=nullptr;
     }
@@ -134,15 +141,35 @@ void MenuLayout::present() {
     // all read identical rectangles. Never use this on a different Qt ABI.
     if(!prepared||arranging||!menu->isVisible()||qstrcmp(qVersion(),QT_VERSION_STR)!=0)return;
     auto *d=QMenuPrivate::get(menu);
-    if(anchoredToInvocation&&!columnsApplied){
+    if(!placementResolved){
+        placementResolved=true;
+        // Submenus inherit the actual triggering action's global rectangle,
+        // even if Qt's provisional popup was positioned on another monitor.
+        auto *cause=d->causedPopup.widget.data();
+        auto *action=d->causedPopup.action.data();
+        if(auto *parent=qobject_cast<QMenu*>(cause)){
+            if(action){
+                const QRect row=parent->actionGeometry(action);
+                if(row.isValid())parentActionAnchor=QRect(parent->mapToGlobal(row.topLeft()),row.size());
+            }
+        }else if(auto *bar=qobject_cast<QMenuBar*>(cause)){
+            if(action){
+                const QRect row=bar->actionGeometry(action);
+                if(row.isValid()){
+                    parentActionAnchor=QRect(bar->mapToGlobal(row.topLeft()),row.size());
+                    menuBarAnchor=true;
+                }
+            }
+        }
         const QRect native=menu->geometry();
+        invocationScreen=geometryScreen(parentActionAnchor.isValid()?parentActionAnchor:native);
+        if(!invocationScreen)invocationScreen=menu->screen();
         const int edge=qMin(qAbs(openingAnchor.x()-native.left()),
                             qAbs(openingAnchor.x()-native.right()));
-        // Programmatically opened menus and native submenus have their own
-        // requested anchors. Leave those placements to Qt rather than
-        // treating an unrelated mouse position as the opening point.
-        if(qobject_cast<QMenu*>(d->causedPopup.widget.data())||
-           qobject_cast<QMenuBar*>(d->causedPopup.widget.data())||
+        // A cursor on a different monitor is never a valid root invocation
+        // anchor, even when both monitors share the same x coordinate.
+        if(parentActionAnchor.isValid()||
+           QGuiApplication::screenAt(openingAnchor)!=invocationScreen||
            edge>qMax(64,menu->fontMetrics().height()*4))
             anchoredToInvocation=false;
     }
@@ -161,7 +188,8 @@ void MenuLayout::present() {
     if(native.size()!=actions.size()){arranging=false;return;}
     // Use the trigger's monitor, not the screen that Qt temporarily chose
     // for a tall popup before the columns changed its geometry.
-    auto *screen=anchoredToInvocation?QGuiApplication::screenAt(openingAnchor):menu->screen();
+    auto *screen=invocationScreen.data();
+    if(!screen)screen=geometryScreen(menu->geometry());
     if(!screen){arranging=false;return;}
     const QRect work=screen->availableGeometry().adjusted(4,4,-4,-4);
     const int cap=qMin(340,qMax(160,int(work.height()*.48)));
@@ -202,7 +230,26 @@ void MenuLayout::present() {
         arrangedGeometry=menu->geometry();columnsApplied=false;arranging=false;return;
     }
     QPoint pos=menu->pos();
-    if(anchoredToInvocation){
+    if(parentActionAnchor.isValid()){
+        const QRect row=parentActionAnchor;
+        const bool rtl=menu->isRightToLeft();
+        if(menuBarAnchor){
+            pos.setX(rtl?row.right()-size.width()+1:row.left());
+            pos.setY(row.bottom()+1+size.height()-1<=work.bottom()?
+                     row.bottom()+1:row.top()-size.height());
+        }else{
+            // Choose a side with the final compact dimensions, not Qt's
+            // original tall-menu size. Preserve the triggering row height.
+            const int right=row.right()+1;
+            const int left=row.left()-size.width();
+            const bool fitsRight=right+size.width()-1<=work.right();
+            const bool fitsLeft=left>=work.left();
+            if((!rtl&&fitsRight)||(rtl&&!fitsLeft&&fitsRight))pos.setX(right);
+            else if(fitsLeft)pos.setX(left);
+            else pos.setX(work.right()-row.right()>=row.left()-work.left()?right:left);
+            pos.setY(row.top()-top);
+        }
+    }else if(anchoredToInvocation){
         const QPoint anchor=openingAnchor;
         // Preserve the root popup's original opening point in BOTH axes.
         // A narrow native menu can fit to the right, while the expanded
@@ -241,6 +288,7 @@ void MenuLayout::restore() {
 #endif
     columnsApplied=false;arrangedGeometry={};
     anchoredToInvocation=false;openingAnchor={};
+    placementResolved=false;menuBarAnchor=false;parentActionAnchor={};invocationScreen.clear();
     // Custom entries exist only while this menu is open.
     for(auto &item:custom)if(item) {
         menu->removeAction(item);
