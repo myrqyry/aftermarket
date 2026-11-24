@@ -2654,3 +2654,22 @@ dock-layout files are outside this change.
   AFTERMARKET_REAL_GUI_SAVED_NAME=OBS Layout E2E,
   AFTERMARKET_REAL_GUI_SAVE_SWITCH_UNDO=PASS.
   OBS exited 0. No real user OBS config, dock state or profile touched.
+
+### Local installation — 2026-11-23
+
+- Explicit user accepted implementation of JR Dockie-style layout switching
+  inside Aftermarket; native module installed to
+  ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so
+  using existing atomic scripts/install.sh. Verified installed bytes equal
+  the passing build: SHA-256
+  a30c230b005f9c417cff21f169d5240e05b46e69a881a09ce3d5351f32e9a448.
+- Previous installed binary backed up (and compared) at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-dock-layouts.aa0ada16bdf7eb89.so.
+- An existing OBS process (PID 166750) remained running throughout the
+  atomic module replacement. The new module activates only on the next
+  voluntary OBS restart; no user session, scene, profile, rules, dock layout,
+  stream, or source state was changed. Normal OBS GUI after restart still
+  requires user confirmation. Do not claim it was hot-reloaded.
+- Last verification: post-commit build and 26/26 CTests PASS; disposable
+  OBS 32.2 end-to-end GUI test saved, switched, undid native mixerDock
+  layouts and exited 0. No remote push.
