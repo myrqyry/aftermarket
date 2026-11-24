@@ -2911,3 +2911,25 @@ This is a DESIGN DECISION only; no Cue Deck runtime or Move adapter implemented.
   normal OBS restart. All existing plugin config file SHA-256s verified
   unchanged before/after installation. Postcommit focused 6/6 tests passed.
   Unrelated plugin.cpp comment change preserved unstaged. No push.
+
+## Linux OBS32 CI and README consolidation (2026-11-24)
+
+- Reuse the source-pinned SDK approach from Framerot, strict native testing
+  and install-layout verification from Timeline, and product-first README
+  conventions established across the OBS plugin portfolio. The initial
+  Aftermarket and Streaming Media pilots share identical self-contained
+  verification helpers; do not introduce a remote shared-workflow dependency
+  until the hosted jobs qualify.
+- Downloaded and SHA-256-verified OBS 32.2.0, built its SDK locally in an
+  isolated directory, and clean-built committed source 3f9aa35 plus the
+  scoped CI changes. All 32 native CTest cases passed; no skips.
+  Staged package contained only the expected native module; no embedded
+  RPATH/RUNPATH or unresolved shared libraries, and both libobs libraries
+  resolved to the freshly built SDK. Checksum and extracted bytes verified.
+  Archive SHA-256: a2b6fc5f5d6b197bfc8cca25d9dc22e178cb80596d1b886e23e3fe4e10e42509.
+  Evidence: /tmp/obs-ci-pilots.Kk7s56/obs-ui-augment-ci.log.
+- README relative link regression, shell syntax and YAML structure passed.
+  Hosted GitHub Actions runs are not yet established; no push, release,
+  source export, production installation, or OBS restart. Streaming Media's
+  CI deliberately excludes bundled yt-dlp/Deno and live network playback;
+  release licensing and wider platform qualification remain separate gates.

@@ -14,6 +14,10 @@ layout, and presentation.
 
 [Audio and routing](#audio-and-routing) · [Workspace](#workspace) · [Sources and navigation](#sources-and-navigation) · [Menus](#menus) · [Appearance and motion](#appearance-and-motion) · [Install](#install-locally-linux) · [User guide](docs/user-guide.md)
 
+> **Development preview.** Linux/X11, OBS 32.2.0 and Qt 6.4.2 are the
+> locally exercised runtime target. No public binary release is established.
+> [Build checks](https://github.com/myrqyry/aftermarket/actions) · [Install locally](#install-locally-linux)
+
 ## Audio and routing
 
 ### AudioBus
@@ -196,6 +200,27 @@ OBS 32.2.0 and Qt 6.4.2. The native column layout adapter requires the
 matching Qt private development headers (qt6-base-private-dev on Debian/Ubuntu)
 and runtime; other versions retain compact native rows. Other platforms,
 DPI configurations, and OBS versions need additional verification.
+
+## Build and verification
+
+The [Linux CI workflow](.github/workflows/ci.yml) targets Ubuntu 24.04 and
+a SHA-256-pinned OBS 32.2.0 SDK. It checks local README links, builds the
+module, runs the native Qt/libobs CTest suite under an isolated X display
+(at least 32 tests, no skips), stages the plugin, checks linked libraries
+and the exact package contents, and verifies the archive checksum.
+It does not install into a user's profile, publish release assets, or
+claim Windows, macOS, or OBS 33 support.
+
+| Target | Verification boundary |
+| --- | --- |
+| Linux x86_64 / OBS 32.2 / Qt 6.4.2 | Local native tests and isolated OBS GUI exercises |
+| Ubuntu 24.04 / pinned OBS 32.2 SDK | Local CI driver passed; hosted result pending |
+| Windows, macOS, OBS 31/33 | Not qualified |
+
+For a local build using matching development headers, use the commands
+above. The same CI validation driver can also run against an explicit
+installed SDK (see [CI guide](docs/ci.md)). The temporary module-only
+archive is for verification, not an authorized distributable release.
 
 ## Recovery and documentation
 
