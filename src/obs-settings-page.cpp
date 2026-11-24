@@ -153,6 +153,13 @@ void ObsSettingsPage::attach(QDialog *dialog){
     appearance.second->addLayout(form);
     checkbox("transform","Theme-colored transform frame and handles",
              appearance.second,appearance.first,controller_->modernTransformFrame());
+    if(services_.compactSourcePickerEnabled&&services_.setCompactSourcePicker){
+        auto *embedded=checkbox("source-picker","Embed Add Source picker in OBS",
+            appearance.second,appearance.first,services_.compactSourcePickerEnabled());
+        embedded->setToolTip("Keep OBS's native source picker and source creation, "
+                            "but display it as a compact panel inside the Sources area. "
+                            "Takes effect the next time Add Source opens.");
+    }
     const auto stripes=controller_->listRowSettings();
     entry->listRowsBaseline=stripes;
     checkbox("scene-stripes","Alternate Scenes row backgrounds",
@@ -357,6 +364,12 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     }
     QPointer<Controller> c=controller_;
     addFlag("transform",[c](bool b,QString &e){return c&&c->setModernTransformFrame(b,&e);});
+    if(services_.setCompactSourcePicker)
+        addFlag("source-picker",[this](bool b,QString &e){
+            if(services_.setCompactSourcePicker(b))return true;
+            e="Unable to save the Add Source picker setting.";
+            return false;
+        });
     addFlag("compact-menus",[c](bool b,QString &e){return c&&c->setCompactMenus(b,&e);});
     addFlag("motion",[c](bool b,QString &e){return c&&c->setMotionEnabled(b,&e);});
     addFlag("selections",[c](bool b,QString &e){return c&&c->setShowSubmenuSelections(b,&e);});

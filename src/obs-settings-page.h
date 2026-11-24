@@ -23,6 +23,8 @@ public:
         std::function<void(QWidget*)> editActionStrip;
         std::function<void(bool)> setPropertySections;
         std::function<void(const QJsonObject&)> setRowStripes;
+        std::function<bool()> compactSourcePickerEnabled;
+        std::function<bool(bool)> setCompactSourcePicker;
     };
     explicit ObsSettingsPage(Controller &controller,DockTitleIcons &titles,
                              Services services={},QObject *parent=nullptr);

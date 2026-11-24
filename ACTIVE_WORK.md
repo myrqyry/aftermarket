@@ -2673,3 +2673,66 @@ dock-layout files are outside this change.
 - Last verification: post-commit build and 26/26 CTests PASS; disposable
   OBS 32.2 end-to-end GUI test saved, switched, undid native mixerDock
   layouts and exited 0. No remote push.
+
+## Slice 58 — embed OBS 32.2 native Add Source picker beside Sources (2026-11-23)
+
+User supplied an image of the new OBS 32.2 native Add Source chooser and
+described its 1040x620 standalone window as a UX regression, preferring to
+incorporate it into OBS without replacing OBS's source-creation workflow.
+
+Implementation:
+- SourcePicker is a tightly scoped QApplication event adapter for only the
+  native dialog named OBSBasicSourceSelect with required sourceTypeList,
+  existingScrollArea, sourceVisible and addExistingButton children. It acts
+  on Qt's pre-show Polish event, BEFORE the dialog enters its exec loop.
+  Reparenting after Show was experimentally proven to terminate QDialog::exec
+  prematurely, so that unsafe path is deliberately avoided.
+- Instead of any new source implementation, reparent the existing QDialog
+  as a bounded child QWidget of the main OBS window, beside the native
+  sourcesDock. A responsive ~700–820 wide and 460–540 tall overlay preserves
+  source-type list, preview cards, recent items, native signals, create/add
+  logic and subsequent Properties dialog. Reduces native type-list minimum
+  from 460 to 240 and keeps it scrollable; long type labels expose their
+  exact full text via tooltips. Preserves OBS palette/theme.
+- Adds a compact Add Source title and accessible close button because the
+  original desktop titlebar no longer exists. Uses the existing native
+  dialog result and modality. When Sources dock is hidden, the main window
+  is too small, or the expected native controls are missing, leave OBS's
+  original standalone source dialog unchanged.
+- Native OBS Settings → Aftermarket → Appearance now exposes "Embed Add
+  Source picker in OBS", enabled by default. Apply/OK persists explicitly
+  in plugin_config/obs-ui-augment/source-picker.ini; Cancel discards staged
+  changes. Opt-out restores the standalone OBS picker on its next opening.
+  No changes to OBS scene, sources, or configuration files by this setting.
+  Emergency recovery disables the hook without forcibly closing any
+  active source dialog.
+- README added behavior explanation and real isolated OBS screenshot
+  docs/screenshots/readme/embedded-source-picker.webp.
+
+Verification:
+- TDD RED: missing SourcePicker module; GREEN unit tests for native dialog
+  identity and required control contract, child-widget embedding, bounded
+  geometry, in-window source dock anchoring, modal exec accept, accessible
+  close title, scroll height and full-name tooltips, disabled fallback,
+  incomplete dialog fallback, and QSettings persistence/reversibility.
+  Native Aftermarket settings test checks staged Apply/Cancel checkbox state
+  and commit via the existing OBS Settings integration.
+- Actual OBS Studio 32.2.0 under disposable Xvfb and isolated XDG profile
+  with byte-matched test plugin: clicking the true Sources dock plus opened
+  the ORIGINAL source selector in the OBS main window with a new compact
+  Add Source header; selecting Image and pressing Add a new Image created
+  a real native Image source and opened its ordinary OBS Properties dialog.
+  Clicking the added close icon dismissed the picker; clicking Sources plus
+  reopened it. No relevant OBS log errors. User OBS was never touched.
+- Clean isolated source tree was built from checked-in HEAD 0b85cda plus
+  only these source-picker changes, to avoid unrelated concurrent QuickFind
+  edits in the shared working tree. Complete CMake build with no compiler
+  warnings and serial CTest **27/27 passed**.
+- Shared checkout contains in-progress unrelated QuickFind work (CMake,
+  plugin, Action Strip, new files). Transplanted the source-picker changes
+  surgically and staged only their hunks for plugin.cpp/CMakeLists.txt,
+  preserving QuickFind work in the unstaged working tree. No push requested.
+
+Boundary: the source-creation Properties editor remains OBS's existing
+dialog; this slice embeds the initial Add Source picker only. No OBS fork,
+no reimplementation of scene/undo/source creation, no global dialog changes.

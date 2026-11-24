@@ -19,6 +19,7 @@
 #include "dock-header-button.h"
 #include "dock-title-icons.h"
 #include "obs-settings-page.h"
+#include "source-picker.h"
 #include "native-audio-settings.h"
 #include "obs-signal-levels.h"
 #include <QToolButton>
@@ -54,6 +55,7 @@ static QString stripConfigPath;
 static std::unique_ptr<augment::DockFaces> dockFaces;
 static std::unique_ptr<augment::DockTitleIcons> dockTitleIcons;
 static std::unique_ptr<augment::ObsSettingsPage> nativeSettings;
+static std::unique_ptr<augment::SourcePicker> sourcePicker;
 static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
@@ -158,6 +160,7 @@ static void stopCustomUi(){
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
     nativeSettings.reset(); // remove only plugin page from any open native Settings
+    sourcePicker.reset(); // existing native source dialogs finish normally
     if(panels)panels->restoreAll();
     mixerRetry.reset();
     actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
@@ -210,6 +213,10 @@ static bool startCustomUi(){
             main,panels.get(),QDir(QFileInfo(stripConfigPath).absolutePath())
                                .filePath("dock-title-settings.ini"));
     dockFaces=std::make_unique<augment::DockFaces>(nullptr,uiMotion);
+    if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
+        sourcePicker=std::make_unique<augment::SourcePicker>(
+            main,QDir(QFileInfo(stripConfigPath).absolutePath())
+                .filePath("source-picker.ini"));
     mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
     transforms=std::make_unique<augment::ObsTransformStyle>(
         static_cast<QWidget*>(obs_frontend_get_main_window()),
@@ -247,6 +254,12 @@ static bool startCustomUi(){
         };
         services.setRowStripes=[](const QJsonObject &settings){
             if(rowStripes)rowStripes->configure(settings);
+        };
+        services.compactSourcePickerEnabled=[]{
+            return sourcePicker&&sourcePicker->enabled();
+        };
+        services.setCompactSourcePicker=[](bool enabled){
+            return sourcePicker&&sourcePicker->setEnabled(enabled);
         };
         nativeSettings=std::make_unique<augment::ObsSettingsPage>(
             *controller,*dockTitleIcons,std::move(services));

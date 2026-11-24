@@ -593,6 +593,33 @@ may need to be opened before capturing their full list.
 | --- | --- |
 | ![Native OBS source menu showing selected color and Lanczos filtering](docs/screenshots/readme/menu-selected-choices.png) | ![Inspector listing nested native menu items and selected color preset](docs/screenshots/readme/inspector-menu-tree.png) |
 
+## Embedded Add Source picker
+
+OBS 32.2 introduced a large standalone **Add Source** window. On compatible
+OBS installations, Aftermarket keeps the original native picker—its source
+types, recent-source thumbnails, Add existing, Make source visible, keyboard
+navigation, source creation, OBS undo, and normal Properties dialog—but
+presents that picker as a bounded overlay **inside the OBS main window**,
+attached to the Sources dock. The source-type list remains scrollable,
+rather than forcing the old 460-pixel minimum height onto the entire dialog.
+
+The native picker is embedded before OBS opens its dialog, so its original
+source creation callbacks and result are preserved; no duplicate source
+implementation or OBS fork is involved. A small **Add Source** header and
+accessible close button replace the desktop window title. If the Sources
+dock or sufficient window space is unavailable, OBS's original dialog
+appears unchanged.
+
+The option is **enabled by default** on compatible OBS installations and
+can be turned off under **OBS → Settings → Aftermarket → Appearance →
+Embed Add Source picker in OBS**. It takes effect the next time Add Source
+opens; changes in native Settings follow **Apply / OK / Cancel**. Its only
+persisted option is sourcePicker/embedded in Aftermarket's
+plugin_config/obs-ui-augment/source-picker.ini; it never modifies OBS
+source or scene files.
+
+![OBS's native Add Source list and thumbnails embedded beside its Sources dock](docs/screenshots/readme/embedded-source-picker.webp)
+
 ## Motion
 
 Enable **Motion** in **OBS → Settings → Aftermarket → Menus** or from

@@ -80,6 +80,12 @@ int main(int argc,char **argv){
     services.actionStripEnabled=[&]{return stripEnabled;};
     services.setPropertySections=[&](bool){++sectionUpdates;};
     services.setRowStripes=[&](const QJsonObject &){++stripeUpdates;};
+    bool embeddedPickerEnabled=true;
+    int pickerUpdates=0;
+    services.compactSourcePickerEnabled=[&]{return embeddedPickerEnabled;};
+    services.setCompactSourcePicker=[&](bool value){
+        embeddedPickerEnabled=value;++pickerUpdates;return true;
+    };
     auto bridge=std::make_unique<augment::ObsSettingsPage>(controller,titles,services);
 
     {
@@ -101,7 +107,14 @@ int main(int argc,char **argv){
         auto *stripeStrength=dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength");
         REQUIRE(stripeStrength&&stripeStrength->minimum()==0&&stripeStrength->maximum()==200);
         REQUIRE(stripeStrength->value()==100);
+        auto *picker=dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker");
+        REQUIRE(picker&&picker->isChecked());
         REQUIRE(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        picker->setChecked(false);
+        REQUIRE(embeddedPickerEnabled&&pickerUpdates==0);
+        REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        picker->setChecked(true); // OBS owns Apply; it need not disable on undo
+        REQUIRE(embeddedPickerEnabled&&pickerUpdates==0);
         ellipsis->setCurrentIndex(ellipsis->findData("middle"));
         QApplication::processEvents();
         REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
@@ -131,6 +144,7 @@ int main(int argc,char **argv){
         dialog->findChild<QCheckBox*>("aftermarket-setting-scene-stripes")->setChecked(true);
         dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength")->setValue(175);
         dialog->findChild<QCheckBox*>("aftermarket-setting-sections")->setChecked(true);
+        dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker")->setChecked(false);
         dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
         REQUIRE(!controller.mixerBacksideEnabled()&&titles.ellipsisMode()==Qt::ElideRight);
@@ -143,6 +157,7 @@ int main(int argc,char **argv){
         REQUIRE(controller.mixerBacksideEnabled()&&mixerCalls==1);
         REQUIRE(controller.listRowSettings().value("scenes").toBool()&&stripeUpdates==1);
         REQUIRE(controller.listRowSettings().value("strength").toInt()==175);
+        REQUIRE(!embeddedPickerEnabled&&pickerUpdates==1);
         REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
         REQUIRE(stripEnabled&&stripCalls==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
