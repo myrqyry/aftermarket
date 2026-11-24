@@ -106,9 +106,11 @@ void ObsTransformStyle::disable(){
 void ObsTransformStyle::refresh(){
     if(!main||!enabled||!enabled()){disable();return;}
     // An independent tool window must not linger over other applications,
-    // native menus, or OBS when its own main window is minimized.
+    // native menus, modal dialogs (including the compact source picker),
+    // or OBS when its own main window is minimized.
     if(!main->isVisible()||main->isMinimized()||
-       !main->window()->isActiveWindow()||QApplication::activePopupWidget()){
+       !main->window()->isActiveWindow()||QApplication::activePopupWidget()||
+       QApplication::activeModalWidget()){
         if(visual)visual->hide();
         return;
     }

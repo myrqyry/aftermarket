@@ -20,6 +20,8 @@
 #include <QFont>
 #include <QStyle>
 #include <QPointer>
+#include <QScreen>
+#include <QWindow>
 #include <QTabBar>
 #include <QStackedWidget>
 #include <QComboBox>
@@ -140,16 +142,25 @@ struct ExistingRows {
 };
 
 void placePicker(QDialog *dialog,QMainWindow *main,QDockWidget *sources){
-    // Never impose a minimum larger than the available client area.
-    const int w=qMax(1,qMin(380,main->width()-16));
-    const int h=qMax(1,qMin(400,main->height()-16));
-    const QPoint origin=sources->mapTo(main,QPoint(0,0));
-    const bool left=origin.x()+sources->width()/2<main->width()/2;
-    const int x=qBound(0,left?origin.x()+sources->width()-8:origin.x()-w+8,
-                       qMax(0,main->width()-w));
-    const int y=qBound(0,origin.y()+sources->height()-h+8,
-                       qMax(0,main->height()-h));
-    dialog->setGeometry(x,y,w,h);
+    // Keep the compact transient inside the owner's visible client area.
+    // Window coordinates are global, unlike those of the former child widget.
+    QRect work(main->mapToGlobal(QPoint(0,0)),main->size());
+    const QPoint origin=sources->mapToGlobal(QPoint(0,0));
+    auto *screen=QGuiApplication::screenAt(origin+QPoint(sources->width()/2,sources->height()/2));
+    if(!screen)screen=main->screen();
+    if(screen){
+        const QRect visible=work.intersected(screen->availableGeometry());
+        if(!visible.isEmpty())work=visible;
+    }
+    const int w=qMax(1,qMin(380,work.width()-16));
+    const int h=qMax(1,qMin(400,work.height()-16));
+    const bool left=origin.x()+sources->width()/2<work.center().x();
+    const int x=qBound(work.left(),left?origin.x()+sources->width()-8:origin.x()-w+8,
+                       work.right()-w+1);
+    const int y=qBound(work.top(),origin.y()+sources->height()-h+8,
+                       work.bottom()-h+1);
+    const QRect next(x,y,w,h);
+    if(dialog->geometry()!=next)dialog->setGeometry(next);
 }
 }
 void SourcePicker::embed(QDialog *dialog){
@@ -178,7 +189,11 @@ void SourcePicker::embed(QDialog *dialog){
     // Retain OBS's dialog and hidden native card layout. Move only the real
     // list, visibility checkbox and Add existing button to a compact shell.
     // Native creation, undo, selection, refresh and properties remain intact.
-    dialog->setParent(main_,Qt::Widget);
+    // A QWidget child can be occluded by OBSQTDisplay's native graphics
+    // surface. Keep a real modal transient, with no desktop chrome, so its
+    // stacking is owned by the window system and remains above that surface.
+    dialog->setParent(main_,Qt::Dialog|Qt::FramelessWindowHint);
+    dialog->setWindowModality(Qt::WindowModal);
     dialog->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Preferred);
     dialog->setMinimumSize(0,0);
     dialog->setMaximumSize(QWIDGETSIZE_MAX,QWIDGETSIZE_MAX);
@@ -282,10 +297,11 @@ void SourcePicker::embed(QDialog *dialog){
     QPointer<QDockWidget> dock=sources;
     auto *refresh=new QTimer(dialog);refresh->setInterval(150);
     QObject::connect(refresh,&QTimer::timeout,dialog,[dialog,main,dock,state,pages]{
-        if(!main||!dock){dialog->reject();return;}
+        if(!main||!dock||!main->isVisible()||main->isMinimized()||!dock->isVisible()){dialog->reject();return;}
         placePicker(dialog,main,dock);
         if(pages->currentIndex()==1)state->refresh();
     });
+    QObject::connect(dialog,&QDialog::finished,refresh,&QTimer::stop);
     QObject::connect(tabs,&QTabBar::currentChanged,dialog,[pages,list,search,selectType](int index){
         pages->setCurrentIndex(index);
         if(index==1){selectType();search->setFocus();}

@@ -15,6 +15,9 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QTabBar>
+#include <QScreen>
+#include <QWindow>
+#include <QImage>
 #include <iostream>
 #define CHECK(expr) do {if(!(expr)){std::cerr<<"FAILED "<<__LINE__<<": "<<#expr<<"\n";return 1;}}while(false)
 #define EXPECT(expr) do {if(!(expr)){std::cerr<<"FAILED callback "<<__LINE__<<": "<<#expr<<"\n";valid=false;}}while(false)
@@ -70,7 +73,10 @@ struct Native {
 };
 int main(int argc,char **argv){
  QApplication app(argc,argv);QTemporaryDir temp;
- QMainWindow main;main.resize(680,440);main.setCentralWidget(new QLabel("Preview"));
+ QMainWindow main;main.resize(680,440);auto *preview=new QLabel("Preview");
+ preview->setAttribute(Qt::WA_NativeWindow);
+ preview->setStyleSheet("background: #ed180b;");
+ main.setCentralWidget(preview);
  auto *sources=new QDockWidget("Sources",&main);sources->setObjectName("sourcesDock");sources->setWidget(new QListWidget);
  main.addDockWidget(Qt::LeftDockWidgetArea,sources);main.show();app.processEvents();
  augment::SourcePicker picker(&main,temp.filePath("source-picker.ini"));
@@ -78,7 +84,20 @@ int main(int argc,char **argv){
  {
   Native n(&main);bool valid=true;
   QTimer::singleShot(40,&n.dialog,[&]{
-   EXPECT(!n.dialog.isWindow());EXPECT(main.rect().contains(n.dialog.geometry()));
+   // Native graphics widgets can punch through an ordinary alien child.
+   // The compact chooser must be its own frameless, modal transient surface.
+   EXPECT(n.dialog.isWindow());
+   EXPECT(n.dialog.windowFlags().testFlag(Qt::FramelessWindowHint));
+   EXPECT(n.dialog.parentWidget()==&main);
+   EXPECT(QApplication::activeModalWidget()==&n.dialog);
+   EXPECT(main.rect().contains(QRect(main.mapFromGlobal(n.dialog.geometry().topLeft()),n.dialog.size())));
+   if(n.dialog.windowHandle()&&main.windowHandle())
+       EXPECT(n.dialog.windowHandle()->transientParent()==main.windowHandle());
+   if(QApplication::platformName()=="xcb"){
+       const QPoint p=n.dialog.mapToGlobal(QPoint(n.dialog.width()/2,45));
+       const auto screen=main.screen()->grabWindow(0,p.x(),p.y(),1,1).toImage();
+       EXPECT(!screen.isNull()&&screen.pixelColor(0,0)!=QColor("#ed180b"));
+   }
    EXPECT(n.dialog.width()<=400&&n.dialog.height()<=420);
    auto *tabs=n.dialog.findChild<QTabBar*>("aftermarket-source-picker-tabs");
    EXPECT(tabs&&tabs->currentIndex()==0);EXPECT(n.types->isVisible());
@@ -106,7 +125,7 @@ int main(int argc,char **argv){
    query->setText("back");
    EXPECT(rows->item(0)->isHidden()&&!rows->item(1)->isHidden());
    emit rows->itemClicked(rows->item(1));
-   EXPECT(n.add->isEnabled());EXPECT(n.created==0);EXPECT(main.rect().contains(n.dialog.geometry()));
+   EXPECT(n.add->isEnabled());EXPECT(n.created==0);EXPECT(main.rect().contains(QRect(main.mapFromGlobal(n.dialog.geometry().topLeft()),n.dialog.size())));
    n.add->click();
   });
   QTimer::singleShot(900,&n.dialog,&QDialog::reject);
@@ -114,7 +133,7 @@ int main(int argc,char **argv){
  }
  CHECK(picker.setEnabled(false));
  {Native n(&main);bool valid=true;
-  QTimer::singleShot(25,&n.dialog,[&]{EXPECT(n.dialog.isWindow());EXPECT(n.types->minimumHeight()==460);n.dialog.reject();});
+  QTimer::singleShot(25,&n.dialog,[&]{EXPECT(n.dialog.isWindow());EXPECT(!n.dialog.windowFlags().testFlag(Qt::FramelessWindowHint));EXPECT(n.types->minimumHeight()==460);n.dialog.reject();});
   CHECK(n.dialog.exec()==QDialog::Rejected);CHECK(valid);}
  CHECK(picker.setEnabled(true));
  {augment::SourcePicker persisted(&main,temp.filePath("source-picker.ini"));CHECK(persisted.enabled());CHECK(persisted.setEnabled(false));}

@@ -370,7 +370,10 @@ Select a row, then use the native Add existing action. Both modes share
 Make source visible.
 
 The original large thumbnail layout is hidden, not resized into the small
-panel. OBS still owns source identity, creation, selection, add-existing
+panel. The picker is a frameless modal dialog owned by OBS and positioned
+inside the main window bounds, rather than an ordinary child widget. This
+keeps it above native graphics surfaces; custom transform handles yield
+while a modal dialog is active. OBS still owns source identity, creation, selection, add-existing
 callbacks, undo and Properties. The panel stays within the main client area;
 unknown dialog structures, hidden Sources docks and insufficient initial
 space retain OBS's original picker.
