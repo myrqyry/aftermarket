@@ -2898,6 +2898,16 @@ This is a DESIGN DECISION only; no Cue Deck runtime or Move adapter implemented.
   Source test sessions exited 0. Specific Move completion has not been
   measured. Deeper Move integration should be implemented only once stable
   trigger semantics are verified against this installed version.
-- Pending: install/checkpoint exact final GUI-tested binary and preserve
-  any unrelated plugin.cpp comment changes separately. Do not push merely
-  because locally committed.
+- Local installation verified using the exact final OBS-GUI-tested module
+  (SHA-256 15fe75f65b77c2986e38acca2379b27203f2686777f7fdc61016a7a4c70c8c8a).
+  Final isolated OBS GUI also loaded Exeldro Move 3.2.1 alongside the actual
+  module and passed all authoring/save/hotkey-dispatch/status checks, exited 0:
+  /tmp/aftermarket-cue-final-obs-gui-20261123/obs.log.
+  Previous installed module backed up and byte-verified at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-cue-deck.9ca21fdae63d6ed7.so.
+  scripts/install.sh installed byte-identical binary at
+  ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Active OBS process PID 285986 was left running; feature activates after
+  normal OBS restart. All existing plugin config file SHA-256s verified
+  unchanged before/after installation. Postcommit focused 6/6 tests passed.
+  Unrelated plugin.cpp comment change preserved unstaged. No push.
