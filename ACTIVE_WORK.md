@@ -2419,3 +2419,57 @@ or arbitrary third-party widgets; this slice covers native-supported dock
 collapse/expand and the current two-page Audio Mixer/AudioBus switch.
 No GitHub push or release requested. Motion is already on in user's saved
 rules.json, so these UI transitions become visible next OBS launch.
+
+## Slice 53 — compact popup placement follows its opening point (2026-11-23)
+
+User showed an actual OBS Filters Add effect menu with compact columns
+opening at the wrong position relative to its trigger. Root cause in the
+Qt 6.4.2-specific MenuLayout::present: it resized a menu from the native
+narrow/tall dimensions to wide/multi-column dimensions but reused the old
+horizontal position, clamping only to the screen edge. A concrete test at
+1920x1080 reproduced the bug: a 58-entry menu opened at x=1499 rendered
+with its right edge at x=1916, 417 px away from its trigger.
+
+Implementation:
+- Capture the opening mouse position during QMenu::aboutToShow (before Qt
+  assigns the initial native geometry), then validate its horizontal
+  proximity to the original Qt popup geometry on first presentation.
+  Never assume an unrelated cursor position from a programmatic popup.
+- Reflow large root menus using that stable opening point in BOTH axes.
+  Prefer opening right/down when there is space, otherwise flip left/up;
+  clamp to the available geometry of the screen containing the opening
+  point. Do not recalculate the anchor from later mouse hover events.
+- Parent QMenu/QMenuBar submenu popups retain their native Qt positioning.
+  Unrelated small menus and Qt versions without the exact private-layout
+  ABI continue to use the existing paths. No action text, model data,
+  QAction ownership, hover target or item rectangle was changed.
+- README compact-menu section now explains opening-point anchoring.
+
+Verification:
+- TDD RED on real XCB 1920x1080: for an Add-filter-like popup of 58
+  actions, opening at (1499,879) produced a 954x319 menu at (962,560),
+  with right edge at 1916 rather than 1499. GREEN after change: the same
+  menu is at (546,561), right edge 1499, while every action is present
+  and actionAt(actionGeometry.center()) identifies the original QAction.
+- Rechecked other corners and bottom placements at XCB 1920x1080, XCB
+  3840x2160 and Qt offscreen. In 4K, opening at (3419,1959) now gives
+  a four-column menu at (2466,1641) with the right edge at 3419. A
+  delayed-reflow test checks a cursor move between opening and presentation.
+- Actual OBS 32.2.0 Filters dialog and Add effect list tested via separate
+  Xvfb/XDG profile and exact new module loaded from its sandbox path.
+  The available Color-source effect popup (two columns in this profile)
+  still opens directly at the Add button (222,799); its actions remain
+  intact. The full 58-item long menu behavior is covered by actual Qt/XCB
+  integration, not claimed as a matching real OBS source-specific list.
+- Full CMake build clean with no compiler warnings; 24/24 serial CTests
+  pass, and git diff --check clean. Installed new binary SHA256
+  9801994460ee4acfd07fa8dcb4cd37379d4cae62a11976981abd236a0aaec7f3
+  at ~/.config/obs-studio/plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so.
+  Previous installed module preserved at
+  ~/.local/share/aftermarket/rollback/obs-ui-augment.pre-menu-placement.8b4d920fb2d0.so.
+  The user's running OBS PID 24070 and four tracked real user plugin
+  configuration files were unchanged by the install.
+
+Boundary: User's OBS must restart to load the new plugin. No external push
+or release requested in this turn. The isolated test OBS and Xvfb may be
+closed after verification without affecting the user's real OBS process.

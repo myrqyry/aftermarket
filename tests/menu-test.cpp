@@ -2,6 +2,8 @@
 #include "inspector.h"
 #include "menu-layout.h"
 #include <QScreen>
+#include <QCursor>
+#include <QGuiApplication>
 #include <QSet>
 #include <QComboBox>
 #include <QListWidget>
@@ -228,6 +230,76 @@ int main(int argc, char **argv) {
         }
         REQUIRE(filters.actions()==choices&&filterCols.size()>1);
         filters.hide();app.processEvents();
+        // A multi-column popup belongs at its invocation point, NOT at the
+        // original Qt long-menu position after OBS/Aftermarket reflow.
+        // Reproduce the real Filters Add popup near the lower screen edge.
+        QMenu anchored;
+        anchored.setObjectName("aftermarket-anchor-regression");
+        for(int i=0;i<58;++i)anchored.addAction(
+            QString("Effect %1 - Additional filter settings").arg(i));
+        const QRect work=QGuiApplication::primaryScreen()->availableGeometry();
+        const QPoint savedCursor=QCursor::pos();
+        const QList<QPoint> anchors{
+            QPoint(work.center().x(),work.bottom()-200),
+            QPoint(work.right()-420,work.bottom()-200),
+            QPoint(work.center().x(),work.bottom()-20),
+            QPoint(work.right()-20,work.center().y()),
+            QPoint(work.right()-20,work.bottom()-20),
+            QPoint(work.left()+30,work.top()+30)
+        };
+        for(const auto &anchor:anchors){
+            QCursor::setPos(anchor);
+            anchored.popup(anchor);app.processEvents();
+            QSet<int> columns;
+            for(auto *a:anchored.actions())if(a->isVisible()){
+                const QRect cell=anchored.actionGeometry(a);
+                REQUIRE(cell.isValid()&&anchored.rect().contains(cell));
+                REQUIRE(anchored.actionAt(cell.center())==a);
+                columns.insert(cell.left());
+            }
+            const auto actual=anchored.geometry();
+            REQUIRE(columns.size()>1);
+            const bool nearBottom=anchor.y()>work.center().y();
+            const bool nearRight=anchor.x()>work.center().x();
+            const int verticalRoom=nearBottom ? anchor.y()-work.top()+1
+                                               : work.bottom()-anchor.y()+1;
+            if(actual.height()<=verticalRoom)
+                REQUIRE(qAbs((nearBottom?actual.bottom():actual.top())-anchor.y())<=30);
+            // If there is enough width on the chosen side, preserve the
+            // trigger's horizontal edge. Otherwise Qt may clamp to screen.
+            const int horizontalRoom=nearRight ? anchor.x()-work.left()+1
+                                               : work.right()-anchor.x()+1;
+            if(actual.width()<=horizontalRoom)
+                REQUIRE(qAbs((nearRight?actual.right():actual.left())-anchor.x())<=30);
+            anchored.hide();app.processEvents();
+        }
+
+        // Reproduce OBS Filters/Add: Qt first positions the *tall* list.
+        // Aftermarket then reshapes it into columns, after the mouse may
+        // already have moved onto a choice. The menu must remain anchored
+        // at the original popup point, not the stale tall-menu top edge.
+        QMenu delayed;
+        delayed.setObjectName("aftermarket-delayed-anchor");
+        for(int i=0;i<58;++i)
+            delayed.addAction(QString("Effect %1 - Additional filter settings").arg(i));
+        const QPoint trigger(work.center().x(),work.bottom()-32);
+        QCursor::setPos(trigger);
+        delayed.popup(trigger);app.processEvents();
+        augment::MenuLayout lateLayout(&delayed);
+        lateLayout.prepare(true);
+        QCursor::setPos(work.topLeft()+QPoint(6,6));
+        lateLayout.present();app.processEvents();
+        REQUIRE(qAbs(delayed.geometry().bottom()-trigger.y())<=30);
+        QSet<int> delayedColumns;
+        for(auto *action:delayed.actions()){
+            auto r=delayed.actionGeometry(action);
+            REQUIRE(r.isValid()&&delayed.rect().contains(r));
+            REQUIRE(delayed.actionAt(r.center())==action);
+            delayedColumns.insert(r.x());
+        }
+        REQUIRE(delayedColumns.size()>1);
+        delayed.hide();lateLayout.restore();app.processEvents();
+        QCursor::setPos(savedCursor);
 
         QMenu embedded;
         embedded.setStyleSheet(style);

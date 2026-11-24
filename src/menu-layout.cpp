@@ -71,6 +71,21 @@ void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow,con
     const int cap=qMin(340,qMax(160,int(available*.48)));
     const bool density=compact&&(count>10||menu->sizeHint().height()>cap);
     if(!density&&explicitOverflow.isEmpty()&&explicitHidden.isEmpty())return;
+    // A root context menu may be positioned by Qt for its original narrow,
+    // tall contents. Before reflow changes the width, remember the pointer
+    // that launched it, provided it aligns with the original popup edge.
+    // This avoids guessing from the current cursor later (which may already
+    // be hovering a different menu column). Native submenu placement stays
+    // entirely Qt-owned.
+#ifdef AFTERMARKET_QT642_COLUMNS
+    if(qstrcmp(qVersion(),QT_VERSION_STR)==0){
+        // aboutToShow fires *before* Qt assigns the native popup geometry.
+        // Record the pointer now, then validate it against that geometry
+        // on the first present() call. It must never drift with hover.
+        openingAnchor=QCursor::pos();
+        anchoredToInvocation=QGuiApplication::screenAt(openingAnchor)!=nullptr;
+    }
+#endif
     prepared=true;
     menu->setProperty("_aftermarketSourceContext",sourceContextMenu(menu));
     if(!explicitOverflow.isEmpty()||!explicitHidden.isEmpty()) {
@@ -119,6 +134,18 @@ void MenuLayout::present() {
     // all read identical rectangles. Never use this on a different Qt ABI.
     if(!prepared||arranging||!menu->isVisible()||qstrcmp(qVersion(),QT_VERSION_STR)!=0)return;
     auto *d=QMenuPrivate::get(menu);
+    if(anchoredToInvocation&&!columnsApplied){
+        const QRect native=menu->geometry();
+        const int edge=qMin(qAbs(openingAnchor.x()-native.left()),
+                            qAbs(openingAnchor.x()-native.right()));
+        // Programmatically opened menus and native submenus have their own
+        // requested anchors. Leave those placements to Qt rather than
+        // treating an unrelated mouse position as the opening point.
+        if(qobject_cast<QMenu*>(d->causedPopup.widget.data())||
+           qobject_cast<QMenuBar*>(d->causedPopup.widget.data())||
+           edge>qMax(64,menu->fontMetrics().height()*4))
+            anchoredToInvocation=false;
+    }
     if(!d->itemsDirty&&menu->geometry()==arrangedGeometry)return;
     // Preserve the familiar vertical layout of Source context menus. Do not
     // disable the independent optional placement rules or compact spacing.
@@ -132,7 +159,9 @@ void MenuLayout::present() {
     menu->actionGeometry(actions.first());
     const auto native=d->actionRects;
     if(native.size()!=actions.size()){arranging=false;return;}
-    auto *screen=menu->screen();
+    // Use the trigger's monitor, not the screen that Qt temporarily chose
+    // for a tall popup before the columns changed its geometry.
+    auto *screen=anchoredToInvocation?QGuiApplication::screenAt(openingAnchor):menu->screen();
     if(!screen){arranging=false;return;}
     const QRect work=screen->availableGeometry().adjusted(4,4,-4,-4);
     const int cap=qMin(340,qMax(160,int(work.height()*.48)));
@@ -173,9 +202,27 @@ void MenuLayout::present() {
         arrangedGeometry=menu->geometry();columnsApplied=false;arranging=false;return;
     }
     QPoint pos=menu->pos();
-    const QPoint cursor=QCursor::pos();
-    if(!columnsApplied&&!qobject_cast<QMenu*>(d->causedPopup.widget.data())&&!qobject_cast<QMenuBar*>(d->causedPopup.widget.data())&&menu->geometry().adjusted(-8,-8,8,8).contains(cursor))
-        pos.setY(cursor.y()+size.height()<=work.bottom()?cursor.y():cursor.y()-size.height());
+    if(anchoredToInvocation){
+        const QPoint anchor=openingAnchor;
+        // Preserve the root popup's original opening point in BOTH axes.
+        // A narrow native menu can fit to the right, while the expanded
+        // columns must open to the left. Retaining its old x puts the wide
+        // menu hundreds of pixels away from the control that opened it.
+        const bool rtl=menu->isRightToLeft();
+        if((!rtl&&anchor.x()+size.width()-1<=work.right())||
+           (rtl&&anchor.x()-size.width()+1<work.left()))
+            pos.setX(anchor.x());
+        else if(anchor.x()-size.width()+1>=work.left())
+            pos.setX(anchor.x()-size.width()+1);
+        else
+            pos.setX(anchor.x());
+        if(anchor.y()+size.height()-1<=work.bottom())
+            pos.setY(anchor.y());
+        else if(anchor.y()-size.height()+1>=work.top())
+            pos.setY(anchor.y()-size.height()+1);
+        else
+            pos.setY(anchor.y()-size.height()/2);
+    }
     pos.setX(qBound(work.left(),pos.x(),work.right()-size.width()+1));
     pos.setY(qBound(work.top(),pos.y(),work.bottom()-size.height()+1));
     menu->setGeometry(QRect(pos,size));
@@ -193,6 +240,7 @@ void MenuLayout::restore() {
     if(columnsApplied&&qstrcmp(qVersion(),QT_VERSION_STR)==0)QMenuPrivate::get(menu)->itemsDirty=true;
 #endif
     columnsApplied=false;arrangedGeometry={};
+    anchoredToInvocation=false;openingAnchor={};
     // Custom entries exist only while this menu is open.
     for(auto &item:custom)if(item) {
         menu->removeAction(item);

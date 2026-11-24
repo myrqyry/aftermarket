@@ -452,7 +452,11 @@ balanced, visible columns, typically aiming for about 340 logical pixels in
 height. The regular OBS **Source context menu stays a single column** with
 compact spacing, preserving its familiar command layout. No commands are
 automatically moved behind another menu. If a list cannot fit within the
-available screen space, native navigation remains available.
+available screen space, native navigation remains available. Expanded columns
+keep the popup anchored to the control that opened it, flipping above or to
+the left when needed rather than inheriting the original narrow menu position.
+The opening monitor, clickable native actions and Qt submenu placement are
+preserved.
 
 | Source menu | Filter picker |
 | --- | --- |

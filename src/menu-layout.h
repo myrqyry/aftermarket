@@ -26,6 +26,8 @@ private:
     bool prepared=false, arranging=false;
     QRect arrangedGeometry;
     bool columnsApplied=false;
+    QPoint openingAnchor;
+    bool anchoredToInvocation=false;
     QString originalStyle,appliedStyle;
     QList<QPointer<QAction>> originalActions;
     QList<QPointer<QMenu>> pages;
