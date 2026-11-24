@@ -2786,3 +2786,29 @@ no reimplementation of scene/undo/source creation, no global dialog changes.
 - src/plugin.cpp carries a separate, unrelated in-progress SourcePicker
   comment difference after the feature commit; left it unstaged intentionally.
   No push performed.
+
+## Cue Deck interoperability direction — 2026-11-23 (design decision; not implemented)
+
+User specifically wants Aftermarket Cue Deck to orchestrate existing OBS plugins while
+we develop first-party versions; existing-plugin users must not be forced to migrate
+to use cues. Do not embed copies of third-party plugins or make their installation
+mandatory. Design cue steps as semantic capabilities (switch layout, animate source,
+start named macro, change scene, activate effect), resolving to independent adapters
+with feature/capability discovery and user-pinned provider selection where multiple
+providers exist. Support stable native OBS frontend hotkeys and documented obs-websocket
+vendor requests before considering plugin-specific internal hooks. This machine has
+move-transition, advanced-scene-switcher, emulens, hyperShaderFX installed. Exeldro
+Move supports OBS filter/hotkey triggering; Advanced Scene Switcher documents
+AdvancedSceneSwitcherRunMacro websocket vendor request. JR Dockie can be a
+supported optional external-provider target where actually present, not a Linux
+dependency. Our native Aftermarket dock-layout backend is already implemented.
+
+Guardrails: missing/unsupported providers must be visible as unavailable rather
+than silently substituting an action with different semantics; on-air and
+irreversible actions must be explicit; do not modify third-party configuration;
+do not confuse an action being dispatched with the action completing. Keep
+provider-specific fields isolated, user cue definitions provider-independent,
+and native implementations incremental rather than a forced replacement.
+No cue engine or adapter implementation is claimed here. Next focused slice:
+one vertical capability across native OBS and one verified external plugin,
+with runtime discovery and a full real-OBS test; only then generalize.
