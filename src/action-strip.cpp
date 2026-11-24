@@ -96,7 +96,9 @@ QString printStatus(const StripItem &item,const StatusSnapshot &s) {
     return item.target;
 }
 QString typeLabel(const StripItem &item) {
-    return item.label.isEmpty()?(item.type=="dock"?item.target:item.type=="hotkey"?QStringLiteral("Hotkey"):item.target):item.label;
+    return item.label.isEmpty()?
+        (item.type=="search"?QStringLiteral("Find sources"):
+         item.type=="dock"?item.target:item.type=="hotkey"?QStringLiteral("Hotkey"):item.target):item.label;
 }
 QDockWidget *dockFor(QMenuBar *bar,const StripItem &item){
     auto *main=qobject_cast<QMainWindow*>(bar?bar->parentWidget():nullptr);
@@ -123,6 +125,7 @@ bool ActionStrip::validItem(const StripItem &i) {
     if(i.id.isEmpty()||i.id.size()>128||i.label.size()>160||i.target.size()>2048)return false;
     if(i.type=="spacer"||i.type=="separator")return i.target.isEmpty();
     if(i.type=="dock")return !i.target.isEmpty();
+    if(i.type=="search")return i.target=="quick-find";
     if(i.type=="layout")return QRegularExpression(
         "^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$").match(i.target).hasMatch();
     if(i.type=="hotkey")return i.target.startsWith("hotkey:v1:")&&i.target.size()>11;
@@ -131,9 +134,10 @@ bool ActionStrip::validItem(const StripItem &i) {
     return false;
 }
 ActionStrip::ActionStrip(QString file,StatusProvider status,HotkeyList hotkeys,HotkeyTrigger trigger,
-                         QObject *parent,LayoutList layouts,LayoutApply applyLayout)
+                         QObject *parent,LayoutList layouts,LayoutApply applyLayout,SearchOpen search)
     :QObject(parent),path_(std::move(file)),status_(std::move(status)),hotkeys_(std::move(hotkeys)),
-     trigger_(std::move(trigger)),layouts_(std::move(layouts)),applyLayout_(std::move(applyLayout)) {load();}
+     trigger_(std::move(trigger)),layouts_(std::move(layouts)),applyLayout_(std::move(applyLayout)),
+     search_(std::move(search)) {load();}
 ActionStrip::~ActionStrip(){
     closeEditor();
     shutdown_=true;
@@ -279,6 +283,10 @@ bool ActionStrip::moveItem(const QString &id,int index){
 }
 bool ActionStrip::trigger(const QString &id){
     for(const auto &item:items_)if(item.id==id){
+        if(item.type=="search"){
+            if(!search_)return false;
+            search_();return true;
+        }
         if(item.type=="hotkey")return trigger_&&trigger_(item.target);
         if(item.type=="layout"){
             if(!applyLayout_||!layouts_)return false;
@@ -331,6 +339,11 @@ void ActionStrip::refresh(){
             b->setProperty("aftermarket-on-air",
                 (item.target=="recording"&&latest_.recording)||
                 (item.target=="streaming"&&latest_.streaming));
+        }
+        if(item.type=="search"){
+            b->setEnabled(bool(search_));
+            b->setToolTip(search_?"Find OBS sources, scenes and filters":
+                "Source search unavailable");
         }
         if(item.type=="dock"){
             auto *dock=dockFor(bar_,item);
@@ -483,6 +496,11 @@ void ActionStrip::updateOverflow(){
             action->setText(itemText(id));
             const auto it=std::find_if(items_.begin(),items_.end(),
                 [&id](const StripItem &item){return item.id==id;});
+            if(it!=items_.end()&&it->type=="search"){
+                action->setEnabled(bool(search_));
+                action->setToolTip(search_?"Find OBS sources, scenes and filters":
+                    "Source search unavailable");
+            }
             if(it!=items_.end()&&it->type=="layout"){
                 bool found=false;
                 if(layouts_)for(const auto &c:layouts_())if(c.id==it->target){found=true;break;}
@@ -654,6 +672,8 @@ bool ActionStrip::addFromEditor(const QString &type,QWidget *parent){
     }else if(type=="layout"){
         item.target=chooseLayout(parent);
         if(item.target.isEmpty())return false;
+    }else if(type=="search"){
+        item.target="quick-find";
     }
     return addItem(item);
 }
@@ -700,7 +720,7 @@ void ActionStrip::showEditor(QWidget *parent,QMenuBar *menuBar){
     connect(add,&QPushButton::clicked,&dialog,[this,add,&dialog,rebuildList](){
         QMenu types(add);
         QMap<QAction*,QString> choices;
-        for(const auto &name:{"status","hotkey","dock","layout","separator","spacer"})
+        for(const auto &name:{"status","hotkey","dock","layout","search","separator","spacer"})
             choices[types.addAction(QString::fromLatin1(name))]=QString::fromLatin1(name);
         if(auto *chosen=types.exec(add->mapToGlobal(QPoint(0,add->height())))){
             if(addFromEditor(choices.value(chosen),&dialog))rebuildList();

@@ -37,9 +37,10 @@ public:
     using HotkeyTrigger=std::function<bool(const QString &)>;
     using LayoutList=std::function<QList<LayoutChoice>()>;
     using LayoutApply=std::function<bool(const QString &)>;
+    using SearchOpen=std::function<void()>;
     explicit ActionStrip(QString configFile,StatusProvider status={},HotkeyList hotkeys={},
                          HotkeyTrigger trigger={},QObject *parent=nullptr,
-                         LayoutList layouts={},LayoutApply applyLayout={});
+                         LayoutList layouts={},LayoutApply applyLayout={},SearchOpen search={});
     ~ActionStrip() override;
     bool load();
     bool save() const;
@@ -74,6 +75,7 @@ private:
     HotkeyTrigger trigger_;
     LayoutList layouts_;
     LayoutApply applyLayout_;
+    SearchOpen search_;
     StatusSnapshot latest_;
     QList<HotkeyChoice> cachedHotkeys_;
     qint64 lastHotkeyPoll_=0;

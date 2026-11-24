@@ -2736,3 +2736,30 @@ Verification:
 Boundary: the source-creation Properties editor remains OBS's existing
 dialog; this slice embeds the initial Add Source picker only. No OBS fork,
 no reimplementation of scene/undo/source creation, no global dialog changes.
+
+
+## Nutty-inspired Quick Find — 2026-11-23
+
+- User asked for the next Nutty video improvement after successful JR Dockie
+  layout macros. Built a lightweight native Aftermarket Quick Find palette
+  rather than a permanent QAU-style search dock: source/scene/filter names,
+  type names, common path/URL settings, parent-scene context and ranked
+  multi-token searches. Native actions open Properties or the owning source's
+  Filters; explicit Go to scene uses preview scene in Studio Mode.
+- Native Tools menu entry, Action Strip search item and configurable OBS
+  frontend hotkey with scene-collection save/load callback; no default
+  shortcut, no new global keyboard interception.
+- Runtime lookup by source/filter UUID; stale sources and removed filters
+  fail closed. Catalog is built on palette activation and explicit Refresh,
+  not continuously on the render thread. 5,000-entry and recursion caps.
+- TDD: quick-find-test, quick-find-obs-test and quick-find-strip-test were
+  created RED, then passed with real libobs sources and Qt widgets. A
+  stale-filter regression failed before the ownership check and then passed.
+- Initial disposable OBS harness GUI checks passed but process crashed at
+  exit due to the temporary fixture retaining source refs. Fixed fixture
+  cleanup and reran in fresh isolated profile: real OBS 32.2.0 GUI Tools
+  launch, native source search, URL, filter and parent-scene search, scene
+  navigation, native registered hotkey callback and cleanup all passed;
+  OBS exited 0. Verified log:
+  /tmp/aftermarket-quick-find-hotkey-isolated-20261123/obs.log.
+- No changes to user's real OBS scene collection, no new dock, no push.

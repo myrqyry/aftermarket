@@ -207,6 +207,34 @@ new multi-dock manager or copy Timeline's macro data.
 
 ![Native OBS Action Strip in Colorway](docs/screenshots/readme/action-strip.webp)
 
+### Quick Find: jump to sources and filters without another dock
+
+Open **Tools → Aftermarket: Find Sources…** to search the current OBS scene
+collection in a compact, temporary palette. The search matches **source,
+scene, and filter names**, OBS source types, and common source file paths or
+URLs. Results show a parent-scene context when known. Filtering is local to
+OBS; it doesn't send content elsewhere.
+
+- **Enter** opens the selected result: a scene/source with an available parent
+  scene navigates to that scene, while a filter opens its **owning source's**
+  native Filters dialog. When Studio Mode is on, scene navigation targets
+  the **preview**, not the on-air program.
+- **Properties**, **Filters**, and **Go to scene** are independent actions.
+  Typing in the search box does not change the live scene or source settings.
+  **Refresh** rebuilds the source index if something changed while it was open.
+- For one-click entry, add **Find sources** in the existing
+  **Aftermarket: Action Strip… → Add… → search** editor.
+- For keyboard entry, assign a shortcut to
+  **Aftermarket: Quick Find sources and filters** under
+  **OBS Settings → Hotkeys**. No conflicting shortcut is assigned by default.
+  OBS saves the custom binding in its scene collection.
+
+The palette stores source identities by UUID and resolves them again before
+opening an OBS dialog or changing scenes. Deleted sources and stale filters
+are rejected instead of being redirected to another source. It is not a
+replacement for Quick Access Utility's manual/dynamic docks, and it doesn't
+modify OBS's docking layout.
+
 ### Alternating Scenes and Sources backgrounds
 
 In **OBS Settings → Aftermarket → Appearance**, turn on **Scenes** and/or

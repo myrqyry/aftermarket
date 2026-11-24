@@ -1,5 +1,6 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <obs-hotkey.h>
 #include <QAction>
 #include <QPointer>
 #include "inspector.h"
@@ -8,6 +9,7 @@
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
+#include "quick-find.h"
 #include "dock-layouts.h"
 #include "native-action-bridge.h"
 #include "dock-attach-retry.h"
@@ -42,7 +44,8 @@ static augment::Controller *controller = nullptr;
 static std::unique_ptr<augment::ObsAudio> audio;
 static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
-static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, emergencyAction, resumeAction;
+static QPointer<augment::QuickFind> quickFind;
+static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, findAction, emergencyAction, resumeAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::RowStripes> rowStripes;
@@ -59,6 +62,39 @@ static std::unique_ptr<augment::SourcePicker> sourcePicker;
 static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
+static obs_hotkey_id quickFindHotkey=OBS_INVALID_HOTKEY_ID;
+static void showQuickFind(){
+    if(!uiActive||!frontendReady)return;
+    auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+    if(!main)return;
+    if(!quickFind){
+        quickFind=new augment::QuickFind(main,
+            []{return augment::collectObsQuickFind();},
+            [](const augment::QuickFindEntry &hit,augment::QuickFind::Action action){
+                return augment::performObsQuickFind(hit,action);
+            });
+    }
+    quickFind->open();
+}
+// OBS owns the keybinding and user-defined shortcut. No default global
+// shortcut is imposed; this callback never touches Qt widgets from OBS's
+// hotkey thread.
+static void quickFindHotkeyCallback(void *,obs_hotkey_id,obs_hotkey_t *,bool pressed){
+    if(!pressed)return;
+    if(auto *app=QCoreApplication::instance())
+        QMetaObject::invokeMethod(app,[]{showQuickFind();},Qt::QueuedConnection);
+}
+static void quickFindHotkeyState(obs_data_t *data,bool saving,void *){
+    if(quickFindHotkey==OBS_INVALID_HOTKEY_ID||!data)return;
+    constexpr auto key="aftermarket.quick_find.hotkey";
+    if(saving){
+        auto *bindings=obs_hotkey_save(quickFindHotkey);
+        if(bindings){obs_data_set_array(data,key,bindings);obs_data_array_release(bindings);}
+    }else{
+        auto *bindings=obs_data_get_array(data,key);
+        if(bindings){obs_hotkey_load(quickFindHotkey,bindings);obs_data_array_release(bindings);}
+    }
+}
 static bool setHamburgerMenuBar(bool enabled) {
     if(!compactBar)return false;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -159,6 +195,7 @@ static void stopCustomUi(){
     // scene collection, audio state, saved dock layout, or rules.json.
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
+    delete quickFind.data();
     nativeSettings.reset(); // remove only plugin page from any open native Settings
     sourcePicker.reset(); // existing native source dialogs finish normally
     if(panels)panels->restoreAll();
@@ -177,6 +214,7 @@ static void stopCustomUi(){
     if(panelsAction)panelsAction->setEnabled(false);
     if(stripAction)stripAction->setEnabled(false);
     if(layoutsAction)layoutsAction->setEnabled(false);
+    if(findAction)findAction->setEnabled(false);
     if(emergencyAction)emergencyAction->setEnabled(false);
     if(resumeAction)resumeAction->setVisible(true);
 }
@@ -202,7 +240,8 @@ static bool startCustomUi(){
         },
         [](const QString &id){
             return frontendReady&&dockLayouts&&dockLayouts->restore(id);
-        });
+        },
+        []{showQuickFind();});
     // Global Motion already controls decorative animation. Use the same
     // current setting for native dock height and AudioBus page transitions.
     // Motion off preserves all original immediate UI behavior.
@@ -269,6 +308,7 @@ static bool startCustomUi(){
     if(panelsAction)panelsAction->setEnabled(true);
     if(stripAction)stripAction->setEnabled(true);
     if(layoutsAction)layoutsAction->setEnabled(frontendReady);
+    if(findAction)findAction->setEnabled(frontendReady);
     if(emergencyAction)emergencyAction->setEnabled(true);
     if(resumeAction)resumeAction->setVisible(false);
     return true;
@@ -281,6 +321,7 @@ static void cleanupUi(){
     delete panelsAction.data();
     delete stripAction.data();
     delete layoutsAction.data();
+    delete findAction.data();
     dockLayouts.reset();
     delete toolsAction.data();
 }
@@ -289,6 +330,7 @@ static void frontendEvent(enum obs_frontend_event event, void *) {
     if(event==OBS_FRONTEND_EVENT_FINISHED_LOADING){
         frontendReady=true;
         if(uiActive&&layoutsAction)layoutsAction->setEnabled(true);
+        if(uiActive&&findAction)findAction->setEnabled(true);
         if(actionStrip)actionStrip->refresh();
         if(uiActive&&controller&&controller->mixerBacksideEnabled()&&mixerRetry)
             mixerRetry->start();
@@ -317,6 +359,9 @@ MODULE_EXPORT bool obs_module_load(void) {
     dockLayouts=std::make_unique<augment::DockLayouts>(
         QDir(folder).filePath("dock-layouts.json"),mainWindow);
     nativeActions=std::make_unique<augment::NativeActionBridge>();
+    quickFindHotkey=obs_hotkey_register_frontend("aftermarket.quick_find",
+        "Aftermarket: Quick Find sources and filters",quickFindHotkeyCallback,nullptr);
+    obs_frontend_add_save_callback(quickFindHotkeyState,nullptr);
     auto *main=static_cast<QWidget*>(obs_frontend_get_main_window());
     emergency=std::make_unique<augment::EmergencyRecovery>(
         QDir(folder).filePath("safe-mode.flag"),main,
@@ -373,6 +418,13 @@ MODULE_EXPORT bool obs_module_load(void) {
             if(actionStrip)actionStrip->refresh();
         });
     });
+    findAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
+        "Aftermarket: Find Sources…"));
+    blog(LOG_INFO,"[ui-augment] AFTERMARKET_QUICK_FIND_20261123 registered=%d",findAction?1:0);
+    if(findAction)QObject::connect(findAction.data(),&QAction::triggered,controller,[]{
+        // The tools menu can still be closing when this signal arrives.
+        QTimer::singleShot(0,[]{showQuickFind();});
+    });
     emergencyAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Emergency restore (Ctrl+Alt+Shift+F12)"));
     if(emergencyAction)QObject::connect(emergencyAction.data(),&QAction::triggered,controller,[]{
@@ -394,6 +446,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         if(panelsAction)panelsAction->setEnabled(false);
         if(stripAction)stripAction->setEnabled(false);
         if(layoutsAction)layoutsAction->setEnabled(false);
+        if(findAction)findAction->setEnabled(false);
         if(emergencyAction)emergencyAction->setEnabled(false);
         if(resumeAction)resumeAction->setVisible(true);
         blog(LOG_WARNING,"[ui-augment] safe-mode.flag detected; Aftermarket UI disabled");
@@ -404,6 +457,11 @@ MODULE_EXPORT bool obs_module_load(void) {
 }
 MODULE_EXPORT void obs_module_unload(void) {
     obs_frontend_remove_event_callback(frontendEvent,nullptr);
+    obs_frontend_remove_save_callback(quickFindHotkeyState,nullptr);
+    if(quickFindHotkey!=OBS_INVALID_HOTKEY_ID){
+        obs_hotkey_unregister(quickFindHotkey);
+        quickFindHotkey=OBS_INVALID_HOTKEY_ID;
+    }
     cleanupUi();
     delete controller; controller = nullptr;
     audio.reset();
