@@ -6,6 +6,7 @@ state; extend presentation, animation, control forms and layout. Complement
 Colorway without requiring it. Keep the core independent of OBS where practical,
 without premature rewrites.
 
-Compatibility: the existing obs-ui-augment module identity, config path,
-and local checkout remain unchanged for now. No OBS fork or video effects.
+Identity: module and config directory use aftermarket; migration preserves the
+previous obs-ui-augment configuration and package. Local checkout remains
+obs-ui-augment to preserve existing workspace references. No OBS fork or video effects.
 See ACTIVE_WORK.md for verified slices and remaining gaps.

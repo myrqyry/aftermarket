@@ -20,8 +20,23 @@ ctest --test-dir build --output-on-failure
 ```
 
 Restart OBS (or open it if closed). The module creates its rules file at
-`~/.config/obs-studio/plugin_config/obs-ui-augment/rules.json` by default.
+`~/.config/obs-studio/plugin_config/aftermarket/rules.json` by default.
 If XDG_CONFIG_HOME is set, use that configuration root.
+
+### Upgrading from obs-ui-augment
+
+Close OBS before launching the new version. The Linux installer preserves the
+previous plugin under the user data directory's aftermarket/rollback folder,
+outside the active plugin search path. When the renamed module first loads,
+it moves the complete legacy configuration directory to plugin_config/aftermarket,
+preserving all files including safe-mode.flag. If both directories contain data,
+the plugin refuses to start rather than overwrite either one. Back up and resolve
+the conflict manually. For a manual package upgrade, remove the old plugin
+from OBS's search path before installing the new module.
+
+For rollback, close OBS, remove the new module from the search path, restore
+the previous package from the rollback directory, and move the current config
+directory back to obs-ui-augment (do not overwrite an existing directory).
 
 ### Settings inside OBS
 
@@ -45,7 +60,7 @@ remain in the Inspector; the regular preferences now have their own home.
 
 ### Inspector workspace
 
-Open **Tools → UI Augment Inspector** for advanced per-target editing and
+Open **Tools → Aftermarket: Inspector** for advanced per-target editing and
 richer visual editors. Its specialized pages remain available for:
 
 - **Menus & widgets:** Pick target with an adjustable 2–10 second delay,
@@ -69,7 +84,7 @@ richer visual editors. Its specialized pages remain available for:
   Toggle **Audio Mixer backside (native routing)** to add a flip button to
   OBS's real Audio Mixer dock. **Alternating list backgrounds** adds separate
   Scenes and Sources switches with native-theme or custom row colors. The
-  Tools → UI Augment Panels shortcut opens this page.
+  Tools → Aftermarket: Panels shortcut opens this page.
 
 ![Mixer page in OBS](screenshots/readme/workspace-mixer.png)
 
@@ -134,7 +149,7 @@ extra dock or floating toolbar.
 
 ![Audio Mixer overflow with Pop out and Close above mixer-specific options](screenshots/readme/mixer-dock-window-actions.webp)
 
-**Text overflow preference:** **OBS Settings → Aftermarket → Appearance → Long text → At end / In middle** sets the preferred ellipsis position. On native Qt lists and tabs, Aftermarket uses their built-in text-elide modes. On OBS's known source-name display labels, middle ellipsis changes only the drawn text, never QLabel::text or its size hint. Aftermarket's own dock titles, AudioBus labels, and submenu-value captions also follow the preference where they own the layout. Full source/model names and the Docks menu remain unchanged. The saved choice is in plugin_config/obs-ui-augment/dock-title-settings.ini.
+**Text overflow preference:** **OBS Settings → Aftermarket → Appearance → Long text → At end / In middle** sets the preferred ellipsis position. On native Qt lists and tabs, Aftermarket uses their built-in text-elide modes. On OBS's known source-name display labels, middle ellipsis changes only the drawn text, never QLabel::text or its size hint. Aftermarket's own dock titles, AudioBus labels, and submenu-value captions also follow the preference where they own the layout. Full source/model names and the Docks menu remain unchanged. The saved choice is in plugin_config/aftermarket/dock-title-settings.ini.
 
 **Native controls stay native.** Buttons (including OBS's **Filters** and **Properties**), checkboxes, dropdowns, and ordinary labels keep their original Qt/Colorway paintEvent, style sheets, size hints, and text. Aftermarket does not force a custom ellipsis into those widgets: their original theme may clip or elide text according to its own behavior. This intentionally avoids the incorrect Fi…rs / Pro…ies truncation and the shrinking of labels caused by rewriting QLabel::text. Third-party custom-drawn widgets require an explicit, tested adapter rather than a generic application-wide paint interceptor.
 
@@ -151,7 +166,7 @@ extra dock or floating toolbar.
 ### Collapsible panels
 
 Middle-click a visible dock's title bar to collapse it to its header. Middle-click
-again to expand. Alternatively open **Tools → UI Augment Panels**, select a
+again to expand. Alternatively open **Tools → Aftermarket: Panels**, select a
 panel, and choose **Collapse / expand**. **Expand all** restores all rolled-up
 panels. The original dock and its contents stay alive; this does not close the
 dock or delete OBS sources.
@@ -178,7 +193,7 @@ restored it. Also verified by Qt dock-layout regression tests.
 ### Dockable video preview
 
 The preview normally stays in the center of OBS. To move it into the native
-dock system, open **Tools → UI Augment Panels** (or the **Panels** tab of the
+dock system, open **Tools → Aftermarket: Panels** (or the **Panels** tab of the
 Inspector) and press **Make preview dockable**. The Preview dock can be
 dragged between dock areas, floated, resized, or closed just like the other
 native OBS docks.
@@ -243,7 +258,7 @@ See the [dock layouts reference](dock-layouts.md) for persistence, missing-dock 
 
 ### Compact hamburger menu bar
 
-**Tools → UI Augment Inspector → Menus & widgets → ☰ Menu bar** replaces OBS's
+**Tools → Aftermarket: Inspector → Menus & widgets → ☰ Menu bar** replaces OBS's
 top-level File/Edit/View/Docks/Profile/Scene Collection/Tools/Help labels
 with one hamburger entry, using **the same native Qt menus and actions**.
 Click it to access every original submenu, including items registered by other
@@ -304,7 +319,7 @@ not enough horizontal room, excess items move to a working **⋯** overflow
 menu instead of becoming tiny or cut off.
 
 Its configuration lives in the independently and atomically saved
-`plugin_config/obs-ui-augment/action-strip.json`. The emergency shortcut
+`plugin_config/aftermarket/action-strip.json`. The emergency shortcut
 **Ctrl+Alt+Shift+F12** hides the strip and restores OBS's original menu
 corner widget; **Resume UI customizations** recreates it with the same saved
 items and enabled preference. Aftermarket also makes bounded attempts to
@@ -347,7 +362,7 @@ To add one-click playback, use **Tools → Aftermarket: Action Strip… → Add�
 Renaming a cue updates its button caption; deleting it disables that button.
 
 Cue definitions are atomically written to
-`~/.config/obs-studio/plugin_config/obs-ui-augment/cue-deck.json`.
+`~/.config/obs-studio/plugin_config/aftermarket/cue-deck.json`.
 Up to 32 cues, each up to 48 steps, are supported; total waits per cue are
 limited to 120 seconds. Existing scene, filter, and plugin configurations are
 never rewritten by creating or editing a cue.
@@ -383,7 +398,7 @@ can be turned off under **OBS → Settings → Aftermarket → Appearance →
 Embed Add Source picker in OBS**. It takes effect the next time Add Source
 opens; changes in native Settings follow **Apply / OK / Cancel**. Its only
 persisted option is sourcePicker/embedded in Aftermarket's
-plugin_config/obs-ui-augment/source-picker.ini; it never modifies OBS
+plugin_config/aftermarket/source-picker.ini; it never modifies OBS
 source or scene files.
 
 ![Compact Add new and Add existing views in real OBS](screenshots/readme/embedded-source-picker.webp)
@@ -434,7 +449,7 @@ It uses the existing theme's colors unless you explicitly choose custom
 ones; selection, hover and source-specific coloring remain native.
 
 The Strength slider is available in **OBS Settings → Aftermarket → Appearance**
-and **Tools → UI Augment Inspector → Panels → Alternating list backgrounds**.
+and **Tools → Aftermarket: Inspector → Panels → Alternating list backgrounds**.
 The Inspector previews changes while you drag and saves on release. Native
 OBS Settings stages the value until you choose Apply or OK; Cancel discards
 unapplied edits. The settings are stored atomically as listRows.strength in
@@ -482,7 +497,7 @@ Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket →
 
 **Controls within the mixer:** Pan and Sync offset remain horizontally aligned in one compact row per OBS source, rather than two vertically stacked rows. Narrow vertical strips use a pan dial and a precise millisecond spinner; horizontal mixer strips use the same one-row layout. Pan maps to native OBS balance (0 = left, 50 = center, 100 = right), with mono pan disabled; the coarse sync dial spans ±2000 ms and the precise editor supports OBS's wider range. The vertical fader/meter geometry stays native — no compression is needed when the patchbay uses a separate page. No fader, mute button, source identity or monitoring state is replaced.
 
-Pan and sync are read from and written to the same source properties shown in **Advanced Audio Properties**. Adjustments request a debounced OBS project save; the separate atomic `plugin_config/obs-ui-augment/front-audio-controls.json` holds only the slider/knob presentation preference. External source changes are read back while the dock is visible, and all additional widgets detach cleanly.
+Pan and sync are read from and written to the same source properties shown in **Advanced Audio Properties**. Adjustments request a debounced OBS project save; the separate atomic `plugin_config/aftermarket/front-audio-controls.json` holds only the slider/knob presentation preference. External source changes are read back while the dock is visible, and all additional widgets detach cleanly.
 
 **Monitoring note:** the physical Monitor Device is selected under **OBS Settings → Audio → Advanced**. Routing a source to an already-captured monitor device can cause echo/feedback. Monitor Only suppresses normal program output even if track assignments remain enabled. The plugin neither chooses a hardware output nor performs arbitrary DSP/bus routing. With many sources, the diagram can still scroll.
 
@@ -502,7 +517,7 @@ chains.
 
 ### Rotary mixer knobs
 
-Open **Tools → UI Augment Inspector → Mixer** and check
+Open **Tools → Aftermarket: Inspector → Mixer** and check
 **Replace mixer faders with knobs**. Enable All mixer sources to replace every
 mixer fader, or select specific sources in the checklist (e.g.
 `Mic; Music`). Apply without restarting OBS. For now this is limited to mixer
@@ -555,7 +570,7 @@ one-second peak marker, clip flash and 30 dB/s release.
 The native meter is hidden only when paired with the supported knob and
 source can be resolved. It is restored if the binding is unavailable or
 the effect is disabled. Disable **Integrate peak meter into knob** in
-Tools → UI Augment Inspector → Mixer to retain the full native meter.
+Tools → Aftermarket: Inspector → Mixer to retain the full native meter.
 The corresponding JSON key is `gradient.knobMeters` (default true).
 The compact control requests a 68-pixel minimum and 76-pixel maximum height
 subject to native constraints. The OBS setting for sample/true peak is used.
@@ -573,7 +588,7 @@ The meter scale remains visible at silence and mute, using dimmed native zone co
 
 ### Audio-reactive mixer effects
 
-In **Tools → UI Augment Inspector**, enable gradient tracks on Gradients, then open Mixer and enable
+In **Tools → Aftermarket: Inspector**, enable gradient tracks on Gradients, then open Mixer and enable
 **Audio-reactive mixer gradients**, and optionally **Pulse native meter colors**.
 Enable Motion in the inspector. The effects are opt-in and can be toggled live.
 
@@ -617,7 +632,7 @@ inside meter bars remain future work.
 
 ### Animated gradient tracks
 
-Open **Tools → UI Augment Inspector → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+Open **Tools → Aftermarket: Inspector → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
 
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
@@ -666,7 +681,7 @@ The opening monitor and native action hit targets are preserved. Submenus anchor
 | --- | --- |
 | ![Compact single-column source context menu](screenshots/readme/menu-source-single.png) | ![All 18 effect filters in two columns](screenshots/readme/filter-columns.png) |
 
-Use **Tools → UI Augment Inspector → Compact menus** to enable or disable
+Use **Tools → Aftermarket: Inspector → Compact menus** to enable or disable
 the layout (enabled by default). Pick a particular action and check
 **Move to More actions** only if you want that specific command tucked
 away. Placement rules are stored independently in the root-level
@@ -693,7 +708,7 @@ theme supplies colors and type.
 ### Context-menu actions
 
 Aftermarket can now customize the **contents** of a native context menu,
-rather than only its appearance. Open **Tools → UI Augment Inspector**, pick
+rather than only its appearance. Open **Tools → Aftermarket: Inspector**, pick
 the target menu, then use the **Menus & widgets** page:
 
 - **Hide this default entry** removes that selected command only from
@@ -752,7 +767,7 @@ layout for safety.
 
 ### Submenu inspection and selected choices
 
-In **Tools → UI Augment Inspector → Menus & widgets**, check **List submenu
+In **Tools → Aftermarket: Inspector → Menus & widgets**, check **List submenu
 items** to expand a captured menu into a browsable tree. It includes
 currently available nested actions, checked states, disabled rows,
 separators, and OBS's color-preset buttons. Leave it unchecked for the
@@ -829,7 +844,7 @@ widgets, menus and source list selection remain owned by OBS and its theme.**
 
 OBS's native selection frame normally uses red borders with square resize
 handles. Aftermarket now offers **Modern transform frame and handles** in
-**Tools → UI Augment Inspector → Gradients → Preview selection**.
+**Tools → Aftermarket: Inspector → Gradients → Preview selection**.
 This option is **off by default**, applies immediately, and is independent
 of gradient tracks and the Motion toggle.
 
@@ -868,7 +883,7 @@ settings are not changed by installation.
 ### Motion
 
 Enable **Motion** in **OBS → Settings → Aftermarket → Menus** or from
-**Tools → UI Augment Inspector**. The same global control governs menu artwork,
+**Tools → Aftermarket: Inspector**. The same global control governs menu artwork,
 dock collapse/expand, AudioBus page switching, and existing reactive gradients.
 Motion is off by default, preserving the native immediate behavior until enabled.
 For individual menu artwork rules, pick a preset and duration in the inspector.
@@ -942,7 +957,7 @@ Aftermarket preferences**. It is not OBS's own *Reset UI* command and does
 not reset OBS dock layouts or close the application.
 
 Before changing the UI, recovery writes a separate
-`plugin_config/obs-ui-augment/safe-mode.flag` alongside `rules.json`.
+`plugin_config/aftermarket/safe-mode.flag` alongside `rules.json`.
 On the next OBS startup, the plugin checks this marker and does not apply
 customizations, **even if** the settings file is unreadable. Repeated use of
 the emergency shortcut cannot accidentally re-enable a broken interface.
@@ -1001,5 +1016,5 @@ Recent real OBS checks include the split compact source picker, single-click cre
 ### Disable/remove
 
 Use **Tools → Aftermarket: Emergency restore** for reversible suspension of the plugin UI. Setting `"enabled": false` in rules.json disables rule-driven augmentation; it is not a complete plugin unload. To completely unload,
-close OBS and remove just `plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so`
+close OBS and remove just `plugins/aftermarket/bin/64bit/aftermarket.so`
 from its user config directory. The rules file can be preserved.

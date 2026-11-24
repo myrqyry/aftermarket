@@ -38,6 +38,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include "augment.h"
+#include "config-identity.h"
 #include "obs-audio.h"
 #include "obs-transform.h"
 OBS_DECLARE_MODULE()
@@ -207,7 +208,7 @@ static void stopCustomUi(){
     delete quickFind.data();
     if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
     nativeSettings.reset(); // remove only plugin page from any open native Settings
-    sourcePicker.reset(); // existing native picker dialogs finish normally
+    sourcePicker.reset(); // existing native source dialogs finish normally
     if(panels)panels->restoreAll();
     mixerRetry.reset();
     actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
@@ -281,11 +282,11 @@ static bool startCustomUi(){
         []{return controller&&controller->modernTransformFrame();});
     controller->setRuntimeSafeMode(false);
     if(controller->hamburgerMenuBarEnabled()&&!setHamburgerMenuBar(true))
-        blog(LOG_WARNING,"[ui-augment] hamburger menu bar unavailable in this layout");
+        blog(LOG_WARNING,"[aftermarket] hamburger menu bar unavailable in this layout");
     if(actionStrip->desiredEnabled()){
         auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
         if(main&&!actionStrip->setEnabled(main->menuBar(),true))
-            blog(LOG_WARNING,"[ui-augment] action strip unavailable in this layout");
+            blog(LOG_WARNING,"[aftermarket] action strip unavailable in this layout");
     }
     if(frontendReady&&controller->mixerBacksideEnabled())mixerRetry->start();
     if(dockTitleIcons){
@@ -365,8 +366,8 @@ static void frontendEvent(enum obs_frontend_event event, void *) {
         nativeActions.reset();
     }
 }
-MODULE_EXPORT const char *obs_module_name(void) { return "OBS UI Augment"; }
-MODULE_EXPORT const char *obs_module_description(void) { return "Runtime menu decorations drawn independently of OBS themes"; }
+MODULE_EXPORT const char *obs_module_name(void) { return "Aftermarket"; }
+MODULE_EXPORT const char *obs_module_description(void) { return "Native OBS interface customization, workspace controls and audio routing"; }
 MODULE_EXPORT bool obs_module_load(void) {
     auto *app = qobject_cast<QApplication *>(QCoreApplication::instance());
     if (!app || app->thread() != QThread::currentThread()) return false;
@@ -375,7 +376,18 @@ MODULE_EXPORT bool obs_module_load(void) {
     const QString file = QString::fromUtf8(raw);
     bfree(raw);
     const QString folder=QFileInfo(file).absolutePath();
-    QDir().mkpath(folder);
+    // Refuse a side-by-side upgrade rather than load duplicate UI adapters.
+    const auto profile=QFileInfo(folder).dir().absoluteFilePath("..");
+    if(obs_get_module("obs-ui-augment")||
+       QFileInfo::exists(QDir(profile).filePath("plugins/obs-ui-augment/bin/64bit/obs-ui-augment.so"))){
+        blog(LOG_ERROR,"[aftermarket] remove the old obs-ui-augment installation before upgrading");
+        return false;
+    }
+    QString migrationError;
+    if(!augment::prepareConfigIdentity(folder,&migrationError)){
+        blog(LOG_ERROR,"[aftermarket] %s",qPrintable(migrationError));
+        return false;
+    }
     stripConfigPath=QDir(folder).filePath("action-strip.json");
     auto *mainWindow=qobject_cast<QMainWindow*>(
         static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -412,25 +424,25 @@ MODULE_EXPORT bool obs_module_load(void) {
             QTimer::singleShot(0,[] {
                 if(emergency&&emergency->active()){
                     stopCustomUi();
-                    blog(LOG_WARNING,"[ui-augment] emergency safe mode enabled; native UI restored");
+                    blog(LOG_WARNING,"[aftermarket] emergency safe mode enabled; native UI restored");
                 }
             });
         },
         []{return startCustomUi();});
     controller = new augment::Controller(file, nullptr, [](const QString &message) {
-        blog(LOG_INFO, "[ui-augment] %s", qPrintable(message));
+        blog(LOG_INFO, "[aftermarket] %s", qPrintable(message));
     },emergency->active());
     audio=std::make_unique<augment::ObsAudio>();
     controller->setAudioProvider([](const QWidget *w){return audio?audio->level(w):std::optional<float>{};},
         []{if(audio)audio->clear();});
     controller->setMeterProvider([](const QWidget *w){return audio?audio->sample(w):std::optional<augment::MeterReading>{};});
-    toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Inspector"));
+    toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket: Inspector"));
     if(toolsAction)QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
         if(!inspector)inspector=new augment::Inspector(*controller,
             static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
         inspector->show();inspector->raise();inspector->activateWindow();
     });
-    panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("UI Augment Panels"));
+    panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket: Panels"));
     if(panelsAction)QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
         if(!panels)return;
         if(!inspector)inspector=new augment::Inspector(*controller,
@@ -447,7 +459,7 @@ MODULE_EXPORT bool obs_module_load(void) {
     });
     layoutsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Dock Layouts…"));
-    blog(LOG_INFO,"[ui-augment] AFTERMARKET_LAYOUT_TOOLS_20261123 registered=%d",layoutsAction?1:0);
+    blog(LOG_INFO,"[aftermarket] AFTERMARKET_LAYOUT_TOOLS_20261123 registered=%d",layoutsAction?1:0);
     if(layoutsAction)QObject::connect(layoutsAction.data(),&QAction::triggered,controller,[]{
         auto *main=qobject_cast<QMainWindow*>(
             static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -461,14 +473,14 @@ MODULE_EXPORT bool obs_module_load(void) {
     });
     findAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Find Sources…"));
-    blog(LOG_INFO,"[ui-augment] AFTERMARKET_QUICK_FIND_20261123 registered=%d",findAction?1:0);
+    blog(LOG_INFO,"[aftermarket] AFTERMARKET_QUICK_FIND_20261123 registered=%d",findAction?1:0);
     if(findAction)QObject::connect(findAction.data(),&QAction::triggered,controller,[]{
         // The tools menu can still be closing when this signal arrives.
         QTimer::singleShot(0,[]{showQuickFind();});
     });
     cuesAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Cue Deck…"));
-    blog(LOG_INFO,"[ui-augment] AFTERMARKET_CUE_DECK_20261123 registered=%d",cuesAction?1:0);
+    blog(LOG_INFO,"[aftermarket] AFTERMARKET_CUE_DECK_20261123 registered=%d",cuesAction?1:0);
     if(cuesAction)QObject::connect(cuesAction.data(),&QAction::triggered,controller,[]{
         QTimer::singleShot(0,[]{showCueDeck();});
     });
@@ -476,7 +488,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         "Aftermarket: Emergency restore (Ctrl+Alt+Shift+F12)"));
     if(emergencyAction)QObject::connect(emergencyAction.data(),&QAction::triggered,controller,[]{
         if(emergency&&!emergency->engage()&&!emergency->active())
-            blog(LOG_ERROR,"[ui-augment] emergency marker could not be saved; no UI state changed");
+            blog(LOG_ERROR,"[aftermarket] emergency marker could not be saved; no UI state changed");
     });
     resumeAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
         "Aftermarket: Resume UI customizations"));
@@ -484,7 +496,7 @@ MODULE_EXPORT bool obs_module_load(void) {
         // A native Tools menu may still be closing; avoid reparenting it mid-signal.
         QTimer::singleShot(0,[]{
             if(emergency&&!emergency->resume())
-                blog(LOG_ERROR,"[ui-augment] safe mode remains enabled; resume failed");
+                blog(LOG_ERROR,"[aftermarket] safe mode remains enabled; resume failed");
         });
     });
     if(emergency->active()){
@@ -497,10 +509,10 @@ MODULE_EXPORT bool obs_module_load(void) {
         if(cuesAction)cuesAction->setEnabled(false);
         if(emergencyAction)emergencyAction->setEnabled(false);
         if(resumeAction)resumeAction->setVisible(true);
-        blog(LOG_WARNING,"[ui-augment] safe-mode.flag detected; Aftermarket UI disabled");
+        blog(LOG_WARNING,"[aftermarket] safe-mode.flag detected; Aftermarket UI disabled");
     }else startCustomUi();
     obs_frontend_add_event_callback(frontendEvent,nullptr);
-    blog(LOG_INFO, "[ui-augment] recovery shortcut registered; rules: %s", qPrintable(file));
+    blog(LOG_INFO, "[aftermarket] recovery shortcut registered; rules: %s", qPrintable(file));
     return true;
 }
 MODULE_EXPORT void obs_module_unload(void) {

@@ -24,7 +24,7 @@ if [[ "$module" == obs-streaming-media ]]; then
   curl -fsSL --retry 3 "https://raw.githubusercontent.com/obsproject/obs-websocket/$rev/lib/obs-websocket-api.h" -o "$header"
   printf '%s  %s\n' "$digest" "$header" | sha256sum -c -
   args+=("-DOBS_WEBSOCKET_INCLUDE_DIR=$work/headers" "-DSTREAMING_MEDIA_RUNTIME_DIR=")
-elif [[ "$module" != obs-ui-augment ]]; then
+elif [[ "$module" != aftermarket ]]; then
   echo "Unsupported pilot module: $module" >&2
   exit 2
 fi

@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
         REQUIRE(startSafe.runtimeSafeMode());
         menu.popup(QPoint(40,40));app.processEvents();
         REQUIRE(rename->icon().isNull());
-        REQUIRE(!menu.findChild<QWidget*>("obs-ui-augment-overlay"));
+        REQUIRE(!menu.findChild<QWidget*>("aftermarket-overlay"));
         menu.hide();app.processEvents();
         startSafe.setRuntimeSafeMode(false);
         menu.popup(QPoint(40,40));app.processEvents();
@@ -141,7 +141,7 @@ int main(int argc, char **argv) {
         REQUIRE(copy->icon().cacheKey() == key);
         REQUIRE(check->icon().isNull());
         REQUIRE(unknown->icon().isNull());
-        auto *overlay = menu.findChild<QWidget*>("obs-ui-augment-overlay");
+        auto *overlay = menu.findChild<QWidget*>("aftermarket-overlay");
         REQUIRE(overlay && overlay->isVisible());
         REQUIRE(overlay->testAttribute(Qt::WA_TransparentForMouseEvents));
         QImage img=menu.grab().toImage().convertToFormat(QImage::Format_ARGB32);
@@ -196,7 +196,7 @@ int main(int argc, char **argv) {
         REQUIRE(copy->icon().cacheKey()!=key);
     }
     REQUIRE(rename->icon().isNull());
-    REQUIRE(!menu.findChild<QWidget*>("obs-ui-augment-overlay"));
+    REQUIRE(!menu.findChild<QWidget*>("aftermarket-overlay"));
     // Actual native popup: a long styled menu must remain bounded without
     // discarding, copying or changing the original QAction instances.
     REQUIRE(write(R"({"enabled":true,"rules":[{"text":"Entry 20","icon":"pencil","menuContains":["Entry 0","Entry 1"]}]})"));
@@ -532,7 +532,7 @@ int main(int argc, char **argv) {
         root.popup(QPoint(50,50));app.processEvents();
         REQUIRE(scale->menuAction()->text()=="Scale Filtering");
         REQUIRE(scale->menuAction()->property("_aftermarketSelectedChoice").toString()=="Lanczos");
-        REQUIRE(root.findChild<QWidget*>("obs-ui-augment-overlay")->isVisible());
+        REQUIRE(root.findChild<QWidget*>("aftermarket-overlay")->isVisible());
         const auto selectedRow=root.actionGeometry(scale->menuAction());
         REQUIRE(root.actionAt(selectedRow.center())==scale->menuAction());
         REQUIRE(root.width()>=root.fontMetrics().horizontalAdvance("Scale Filtering")+
@@ -634,7 +634,7 @@ int main(int argc, char **argv) {
         REQUIRE(rtl.actionAt(rtlRow.center())==choiceMenu->menuAction());
         REQUIRE(choiceMenu->menuAction()->text()=="Filtering");
         REQUIRE(choiceMenu->menuAction()->property("_aftermarketSelectedChoice").toString()=="Lanczos");
-        REQUIRE(rtl.findChild<QWidget*>("obs-ui-augment-overlay")->isVisible());
+        REQUIRE(rtl.findChild<QWidget*>("aftermarket-overlay")->isVisible());
         rtl.hide();app.processEvents();
         REQUIRE(choiceMenu->menuAction()->text()=="Filtering");
         REQUIRE(!choiceMenu->menuAction()->property("_aftermarketSelectedChoice").isValid());

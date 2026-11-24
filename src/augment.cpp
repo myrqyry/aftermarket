@@ -263,7 +263,7 @@ struct Rules {
     }
     void log(const QString &message) const {
         if (logger) logger(message);
-        else qInfo().noquote() << "[ui-augment]" << message;
+        else qInfo().noquote() << "[aftermarket]" << message;
     }
     bool parse(const QByteArray &bytes) {
         QJsonParseError error;
@@ -521,7 +521,7 @@ public:
         clock_->setTimerType(Qt::PreciseTimer);
         clock_->setInterval(16);
         connect(clock_,&QTimer::timeout,this,[this]{tick();});
-        setObjectName("obs-ui-augment-overlay");
+        setObjectName("aftermarket-overlay");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_NoSystemBackground);
         setFocusPolicy(Qt::NoFocus);
@@ -588,7 +588,7 @@ public:
                 connect(a,&QAction::triggered,menu,[program,args,log]{
                     if(!QProcess::startDetached(program,args)) {
                         if(log)log("Custom menu command failed to launch: "+program);
-                        else qWarning().noquote()<<"[ui-augment] Custom menu command failed to launch:"<<program;
+                        else qWarning().noquote()<<"[aftermarket] Custom menu command failed to launch:"<<program;
                     }
                 });
                 layout.trackCustom(a);

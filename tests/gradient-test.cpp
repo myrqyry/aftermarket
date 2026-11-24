@@ -31,11 +31,11 @@ int main(int argc,char **argv) {
     auto *vertical=new QSlider(Qt::Vertical,&host);vertical->setRange(0,100);vertical->setValue(55);layout->addWidget(vertical);
     host.resize(360,300);host.show();app.processEvents();
     auto wait=[&](int ms){QElapsedTimer t;t.start();while(t.elapsed()<ms){app.processEvents();QThread::msleep(4);}app.processEvents();};
-    REQUIRE(!slider->findChild<QWidget*>("obs-ui-augment-gradient"));
+    REQUIRE(!slider->findChild<QWidget*>("aftermarket-gradient"));
     QJsonObject spec{{"enabled",true},{"period",1000},{"colors",QJsonArray{"#ff00ff","#d000bb","#ff00ff"}}};
     REQUIRE(controller.setGradientSettings(spec));
     wait(60);
-    auto *overlay=slider->findChild<QWidget*>("obs-ui-augment-gradient");
+    auto *overlay=slider->findChild<QWidget*>("aftermarket-gradient");
     REQUIRE(overlay && overlay->isVisible() && overlay->testAttribute(Qt::WA_TransparentForMouseEvents));
     auto fill=augment::gradientFill(slider);REQUIRE(fill.isValid() && fill.width()<slider->width()/2);
     auto im=slider->grab().toImage();REQUIRE(colored(im,fill)>10);
@@ -97,7 +97,7 @@ int main(int argc,char **argv) {
     vertical->setStyleSheet("QSlider::groove:vertical { background:#29233a; width:14px; border-radius:7px; } QSlider::sub-page:vertical { background:#29233a; } QSlider::add-page:vertical { background:#00ffff; border-bottom-left-radius:7px; border-bottom-right-radius:7px; } QSlider::handle:vertical { background:white; width:14px; height:14px; margin:0px; border-radius:7px; }");
     REQUIRE(checkJoin(vertical,55,true));
     REQUIRE(controller.setGradientSettings(QJsonObject{{"enabled",false}}));wait(40);
-    REQUIRE(!slider->findChild<QWidget*>("obs-ui-augment-gradient"));
-    REQUIRE(!progress->findChild<QWidget*>("obs-ui-augment-gradient"));
+    REQUIRE(!slider->findChild<QWidget*>("aftermarket-gradient"));
+    REQUIRE(!progress->findChild<QWidget*>("aftermarket-gradient"));
     std::cout<<"gradient pixels, fill boundaries, native position, visibility and reduced motion passed\n";
 }

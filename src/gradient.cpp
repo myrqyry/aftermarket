@@ -88,7 +88,8 @@ bool knobTarget(const QWidget *w,const GradientSpec &spec) {
 bool eligible(const QWidget *w,const GradientSpec &spec) {
     if((!spec.enabled&&!spec.knobs)||!w)return false;
     for(auto *p=w;p;p=p->parentWidget())
-        if(p->objectName().startsWith("obs-ui-augment-"))return false;
+        if(p->objectName()=="aftermarket-overlay"||p->objectName()=="aftermarket-gradient"||
+           p->objectName()=="aftermarket-inspector"||p->objectName()=="aftermarket-panels")return false;
     return knobTarget(w,spec)||(spec.enabled&&((spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
 }
 }
@@ -476,7 +477,7 @@ public:
         }
     }
     explicit Layer(QWidget *w):QWidget(w) {
-        setObjectName("obs-ui-augment-gradient");
+        setObjectName("aftermarket-gradient");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_NoSystemBackground);
         setFocusPolicy(Qt::NoFocus);

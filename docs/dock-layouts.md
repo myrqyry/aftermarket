@@ -13,7 +13,7 @@ Save and restore native OBS dock arrangements using Qt dock state. Aftermarket d
 ## Safety and scope
 
 - Qt QMainWindow::saveState() captures dock placement, tabs, floating states, sizes, visibility, and window-owned toolbars as supported by Qt. It does not save scenes, sources, stream settings, or audio routing.
-- Snapshots live in a separate versioned plugin_config/obs-ui-augment/dock-layouts.json in the current OBS profile. Their UUIDs remain stable when renamed. The file is atomically saved with Qt QSaveFile, capped in size, and validated with a SHA-256 checksum per snapshot.
+- Snapshots live in a separate versioned plugin_config/aftermarket/dock-layouts.json in the current OBS profile. Their UUIDs remain stable when renamed. The file is atomically saved with Qt QSaveFile, capped in size, and validated with a SHA-256 checksum per snapshot.
 - Layout switching refuses a snapshot if one of its required dock IDs is missing. Failed Qt restoration triggers a best-effort rollback to the previous arrangement. Invalid or corrupt files cannot replace already loaded valid snapshots.
 - One successful layout switch creates a single in-memory Undo state. No snapshot is automatically restored at startup. Emergency safe mode disables layout management alongside the other Aftermarket UI customizations.
 - These files are tied to the available docks and Qt/OBS version, not guaranteed to transfer identically between systems. A dock supplied by another plugin must already be registered before its saved layout can load.

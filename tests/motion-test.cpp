@@ -31,7 +31,7 @@ int main(int argc,char **argv) {
  QObject::connect(a,&QAction::triggered,[&]{triggered=true;});
  auto wait=[&](int ms){QElapsedTimer t;t.start();while(t.elapsed()<ms){app.processEvents();QThread::msleep(4);}app.processEvents();};
  menu.popup(QPoint(40,40));app.processEvents();
- auto *overlay=menu.findChild<QWidget*>("obs-ui-augment-overlay");
+ auto *overlay=menu.findChild<QWidget*>("aftermarket-overlay");
  REQUIRE(overlay && overlay->isVisible());
  auto *clock=overlay->findChild<QTimer*>("augment-motion-clock");
  REQUIRE(clock && clock->isActive());

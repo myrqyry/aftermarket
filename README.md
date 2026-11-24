@@ -174,7 +174,7 @@ Appearance, Menus, Mixer, Panels, and Action strip.
 
 ![Aftermarket's native OBS Settings page](docs/screenshots/readme/aftermarket-obs-settings.webp)
 
-For advanced per-target rules, open **Tools → UI Augment Inspector**.
+For advanced per-target rules, open **Tools → Aftermarket: Inspector**.
 Capture an actual menu or widget, browse its native identity, and customize
 supported targets. Detailed gradient and mixer editors are available there too.
 
@@ -192,8 +192,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 Restart OBS. Existing themes and configuration are preserved by the installer.
-The installed module and configuration directory retain the original
-obs-ui-augment name for compatibility.
+The module and configuration directory are now named aftermarket. The Linux installer backs up the previous plugin outside OBS’s search path; existing settings migrate as a complete directory on the next launch. See the [upgrade guide](docs/user-guide.md#upgrading-from-obs-ui-augment).
 
 **Compatibility:** Runtime verification currently covers Linux/X11,
 OBS 32.2.0 and Qt 6.4.2. The native column layout adapter requires the

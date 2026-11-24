@@ -741,8 +741,8 @@ void Panels::showManager(QMainWindow *main) {
     if(!main)return;
     if(state->manager){state->manager->raise();state->manager->activateWindow();return;}
     auto *dlg=new QDialog(main);state->manager=dlg;
-    dlg->setObjectName("obs-ui-augment-panels");
-    dlg->setWindowTitle("UI Augment · Panels");
+    dlg->setObjectName("aftermarket-panels");
+    dlg->setWindowTitle("Aftermarket · Panels");
     dlg->setAttribute(Qt::WA_DeleteOnClose);dlg->resize(400,380);
     auto *layout=new QVBoxLayout(dlg);layout->setContentsMargins(0,0,0,0);
     layout->addWidget(createPage(main,dlg));dlg->show();

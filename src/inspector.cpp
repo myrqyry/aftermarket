@@ -132,7 +132,7 @@ bool ActionSnapshot::eligible() const {
 WidgetSnapshot inspectWidget(QWidget *widget,const QPoint &globalPosition) {
     WidgetSnapshot s;
     if (!widget) return s;
-    if (widget->objectName()=="obs-ui-augment-overlay"||widget->objectName()=="obs-ui-augment-gradient") widget=widget->parentWidget();
+    if (widget->objectName()=="aftermarket-overlay"||widget->objectName()=="aftermarket-gradient") widget=widget->parentWidget();
     if (!widget) return s;
     s.type=QString::fromLatin1(widget->metaObject()->className());
     s.objectName=widget->objectName();
@@ -453,8 +453,8 @@ struct Inspector::Ui {
 };
 
 Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar,ActionStrip *actionStrip):QDialog(parent),ui(new Ui(controller)) {
-    setWindowTitle("UI Augment · Inspector");
-    setObjectName("obs-ui-augment-inspector");
+    setWindowTitle("Aftermarket · Inspector");
+    setObjectName("aftermarket-inspector");
     // Colorway and other OBS themes may make every control bold. Apply only
     // font weights inside this plugin-owned dialog: inherit the theme's
     // actual font family, font size, palette, borders and control styling.

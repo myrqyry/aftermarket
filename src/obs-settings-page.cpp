@@ -316,7 +316,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
 
     stack->addWidget(page);
     auto *item=new QListWidgetItem("Aftermarket",nav);
-    item->setData(Qt::UserRole,QStringLiteral("obs-ui-augment"));
+    item->setData(Qt::UserRole,QStringLiteral("aftermarket"));
     item->setIcon(QIcon::fromTheme("preferences-system"));
     entries_.insert(dialog,entry);
     QObject::connect(dialog,&QObject::destroyed,this,[this,dialog]{
@@ -506,7 +506,7 @@ void ObsSettingsPage::detach(){
                 if(entry->navigation->currentRow()==idx)
                     entry->navigation->setCurrentRow(0);
                 if(idx<entry->navigation->count() &&
-                   entry->navigation->item(idx)->data(Qt::UserRole).toString()=="obs-ui-augment")
+                   entry->navigation->item(idx)->data(Qt::UserRole).toString()=="aftermarket")
                     delete entry->navigation->takeItem(idx);
                 entry->pages->removeWidget(entry->page);
             }

@@ -106,7 +106,7 @@ std::optional<MeterReading> ObsAudio::sample(const QWidget *widget) {
         auto probe=std::make_unique<Probe>(source);
         obs_source_release(source);
         if(!probe->meter||!probe->weak)return {};
-        blog(LOG_INFO,"[ui-augment] audio envelope attached to %s",utf8.constData());
+        blog(LOG_INFO,"[aftermarket] audio envelope attached to %s",utf8.constData());
         it=state->probes.emplace(name,std::move(probe)).first;
         if(!state->sweep.isActive())state->sweep.start();
     }
