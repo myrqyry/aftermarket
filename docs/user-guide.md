@@ -381,7 +381,10 @@ scrollable, icon-sized rows: click a type once to create it and open its
 native Properties editor. **Add existing** has a separate source-type selector
 and case-insensitive name filter. Recent sources uses OBS's recent-source
 list; select a source type to browse all existing sources of that type.
-Select a row, then use the native Add existing action. Both modes share
+Existing rows show 64 × 36 previews from OBS’s native thumbnail cache,
+with source-type icons when no video preview is available. Preview updates
+follow OBS’s own thumbnail scheduling; Aftermarket does not render additional
+source frames. Select a row, then use the native Add existing action. Both modes share
 Make source visible.
 
 The original large thumbnail layout is hidden, not resized into the small

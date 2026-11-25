@@ -105,8 +105,8 @@ On compatible OBS 32.2 installations, replace the oversized source chooser's
 layout with a compact panel beside Sources.
 
 - **Add new:** click a source type once to create it and open OBS Properties.
-- **Add existing:** filter by type and source name, select the result, and use
-  OBS's native Add existing action.
+- **Add existing:** browse compact source thumbnails, filter by type and
+  source name, select a result, and use OBS's native Add existing action.
 
 Both modes share the native visibility option. OBS retains source identity,
 creation, selection, undo, and Properties. The original standalone chooser

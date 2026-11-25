@@ -30,6 +30,8 @@
 #include <QSignalBlocker>
 #include <QAbstractButton>
 #include <QVector>
+#include <QPainter>
+#include <QPixmap>
 #include <memory>
 #include <algorithm>
 
@@ -67,6 +69,8 @@ bool SourcePicker::eventFilter(QObject *watched,QEvent *event){
 namespace {
 constexpr int TypeRole=Qt::UserRole+1;
 constexpr int DeprecatedRole=Qt::UserRole+2;
+const QSize ThumbnailSize(64,36);
+constexpr int ThumbnailKeyRole=Qt::UserRole+3;
 
 void compactList(QListWidget *list){
     list->setMinimumSize(0,0);
@@ -94,6 +98,32 @@ struct ExistingRows {
     QPointer<QLabel> empty;
     QVector<QPointer<QAbstractButton>> buttons;
     QStringList names;
+    void updateThumbnail(QListWidgetItem *item,QAbstractButton *button){
+        const auto *label=button?button->findChild<QLabel*>("thumbnail"):nullptr;
+        const QPixmap native=label?label->pixmap():QPixmap{};
+        const qint64 key=native.isNull()?0:native.cacheKey();
+        if(item->data(ThumbnailKeyRole).isValid()&&
+           item->data(ThumbnailKeyRole).toLongLong()==key)return;
+        item->setData(ThumbnailKeyRole,key);
+        if(native.isNull()){
+            item->setIcon(QIcon{});
+            return;
+        }
+        // Copy OBS's existing thumbnail, never capture or render the source
+        // ourselves. Preserve aspect ratio and give every preview equal space.
+        const qreal dpr=list->devicePixelRatioF();
+        QPixmap tile(ThumbnailSize*dpr);
+        tile.setDevicePixelRatio(dpr);
+        tile.fill(Qt::transparent);
+        const QPixmap scaled=native.scaled(tile.size(),Qt::KeepAspectRatio,Qt::SmoothTransformation);
+        QPainter painter(&tile);
+        const QSizeF logical=QSizeF(scaled.size())/dpr;
+        painter.drawPixmap(QRectF((ThumbnailSize.width()-logical.width())/2,
+                                 (ThumbnailSize.height()-logical.height())/2,
+                                 logical.width(),logical.height()),scaled,QRectF(scaled.rect()));
+        painter.end();
+        item->setIcon(QIcon(tile));
+    }
     void refresh(){
         if(!frame||!frame->layout()||!list||!search)return;
         QVector<QPointer<QAbstractButton>> next;
@@ -116,6 +146,7 @@ struct ExistingRows {
             for(const auto &name:names){
                 auto *item=new QListWidgetItem(name,list);
                 compactItem(item,list);
+                item->setSizeHint(QSize(0,qMax(ThumbnailSize.height()+8,list->fontMetrics().height()+6)));
             }
         }
         const QString query=search->text().trimmed();
@@ -125,6 +156,7 @@ struct ExistingRows {
             auto *item=list->item(i);
             const bool shown=item->text().contains(query,Qt::CaseInsensitive);
             item->setHidden(!shown);
+            if(shown)updateThumbnail(item,buttons[i]);
             item->setSelected(buttons[i]&&buttons[i]->isChecked());
             item->setFlags(buttons[i]&&buttons[i]->isEnabled()?
                 Qt::ItemIsEnabled|Qt::ItemIsSelectable:Qt::NoItemFlags);
@@ -234,7 +266,7 @@ void SourcePicker::embed(QDialog *dialog){
     search->setPlaceholderText("Filter by source name");search->setClearButtonEnabled(true);
     search->setAccessibleName("Filter existing sources");
     auto *rows=new QListWidget(existingPage);rows->setObjectName("aftermarket-existing-list");
-    compactList(rows);rows->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    compactList(rows);rows->setIconSize(ThumbnailSize);rows->setSelectionMode(QAbstractItemView::ExtendedSelection);
     auto *empty=new QLabel("No matching sources",existingPage);empty->setAlignment(Qt::AlignCenter);
     existingLayout->addWidget(types);existingLayout->addWidget(search);
     existingLayout->addWidget(rows,1);existingLayout->addWidget(empty);

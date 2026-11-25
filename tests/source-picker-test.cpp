@@ -18,6 +18,8 @@
 #include <QScreen>
 #include <QWindow>
 #include <QImage>
+#include <QPixmap>
+#include <QEventLoop>
 #include <iostream>
 #define CHECK(expr) do {if(!(expr)){std::cerr<<"FAILED "<<__LINE__<<": "<<#expr<<"\n";return 1;}}while(false)
 #define EXPECT(expr) do {if(!(expr)){std::cerr<<"FAILED callback "<<__LINE__<<": "<<#expr<<"\n";valid=false;}}while(false)
@@ -63,6 +65,9 @@ struct Native {
    auto *button=new QPushButton(cards);button->setAccessibleName(name);
    button->setCheckable(true);button->setMinimumSize(300,180);
    auto *label=new QLabel(name,button);label->setObjectName("name");
+   auto *thumbnail=new QLabel(button);thumbnail->setObjectName("thumbnail");
+   QPixmap pixels(160,90);pixels.fill(name=="Backdrop"?QColor("#c32a86"):QColor("#2c9470"));
+   thumbnail->setPixmap(pixels);
    cards->layout()->addWidget(button);
    QObject::connect(button,&QPushButton::clicked,&dialog,[this,button](bool checked){
     for(auto *other:cards->findChildren<QPushButton*>())if(other!=button)other->setChecked(false);
@@ -122,6 +127,24 @@ int main(int argc,char **argv){
    EXPECT(!n.types->isVisible()&&rows->isVisible()&&n.add->isVisible());
    types->setCurrentIndex(types->findData("image_source"));
    EXPECT(rows->count()==2&&n.created==0);
+   EXPECT(rows->iconSize()==QSize(64,36));
+   EXPECT(rows->item(0)->sizeHint().height()>=36);
+   EXPECT(rows->item(0)->sizeHint().height()<=48);
+   EXPECT(!rows->item(1)->icon().isNull());
+   auto thumbnail=rows->item(1)->icon().pixmap(64,36).toImage();
+   EXPECT(!thumbnail.isNull()&&thumbnail.pixelColor(32,18)==QColor("#c32a86"));
+   // OBS updates a thumbnail asynchronously without replacing the card.
+   auto *card=n.cards->findChildren<QPushButton*>().last();
+   QPixmap changed(90,160);changed.fill(QColor("#2345cd"));
+   card->findChild<QLabel*>("thumbnail")->setPixmap(changed);
+   QEventLoop updates;QTimer::singleShot(190,&updates,&QEventLoop::quit);updates.exec();
+   thumbnail=rows->item(1)->icon().pixmap(64,36).toImage();
+   EXPECT(!thumbnail.isNull()&&thumbnail.pixelColor(32,18)==QColor("#2345cd"));
+   EXPECT(thumbnail.hasAlphaChannel()&&thumbnail.pixelColor(0,18).alpha()==0);
+   // A source without a thumbnail still has a usable row and identity.
+   card->findChild<QLabel*>("thumbnail")->clear();
+   QEventLoop cleared;QTimer::singleShot(190,&cleared,&QEventLoop::quit);cleared.exec();
+   EXPECT(rows->item(1)->icon().isNull());
    query->setText("back");
    EXPECT(rows->item(0)->isHidden()&&!rows->item(1)->isHidden());
    emit rows->itemClicked(rows->item(1));
