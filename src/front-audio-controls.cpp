@@ -9,6 +9,8 @@
 #include <QDial>
 #include <QSpinBox>
 #include <QLabel>
+#include <QPainter>
+#include <QPainterPath>
 #include <QMenu>
 #include <QToolBar>
 #include <QPushButton>
@@ -54,6 +56,35 @@ bool volumeControl(QWidget *widget){
                      widget->inherits("VolumeControl")||
                      widget->objectName()=="VolumeControl");
 }
+enum class ChannelStatus { Unknown, Pinned, Active, Inactive };
+ChannelStatus statusKind(const QString &text){
+    const auto value=text.trimmed();
+    if(value=="Pinned")return ChannelStatus::Pinned;
+    if(value=="Active")return ChannelStatus::Active;
+    if(value=="Inactive")return ChannelStatus::Inactive;
+    return ChannelStatus::Unknown;
+}
+void paintStatus(QLabel *label,ChannelStatus kind){
+    QPainter painter(label);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const qreal side=qMin(14,qMin(label->width(),label->height()));
+    if(side<8)return;
+    painter.translate((label->width()-side)/2.,(label->height()-side)/2.);
+    painter.scale(side/16.,side/16.);
+    const auto group=label->isEnabled()?QPalette::Active:QPalette::Disabled;
+    const auto color=label->palette().color(group,label->foregroundRole());
+    painter.setPen(QPen(color,1.5,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+    painter.setBrush(Qt::NoBrush);
+    if(kind==ChannelStatus::Pinned){
+        QPainterPath pin;pin.moveTo(5,2);pin.lineTo(11,2);pin.lineTo(10,6);
+        pin.lineTo(13,9);pin.lineTo(3,9);pin.lineTo(6,6);pin.closeSubpath();
+        painter.drawPath(pin);painter.drawLine(QPointF(8,9),QPointF(8,14));
+    }else if(kind==ChannelStatus::Active){
+        painter.drawPolyline(QPolygonF{QPointF(1,8),QPointF(4,8),QPointF(6,4),QPointF(9,12),QPointF(11,8),QPointF(15,8)});
+    }else if(kind==ChannelStatus::Inactive){
+        painter.drawEllipse(QRectF(4,4,8,8));
+    }
+}
 QWidget *sourceNameLabel(QWidget *volume){
     if(!volume)return nullptr;
     for(auto *candidate:volume->findChildren<QWidget*>()){
@@ -83,7 +114,21 @@ struct FrontAudioControls::State {
         QPointer<QWidget> nameHandle;
         QCursor originalCursor;
         bool hadCursor=false;
+        // Preserve all native layout slots and widget identities.
+        QPointer<QBoxLayout> root,body,header,center,nameRow;
+        int nameIndex=-1,nameStretch=0;
+        QPointer<QWidget> frame;
+        QPointer<QLabel> db,status;
+        int dbIndex=0,dbStretch=0,frameIndex=0,frameStretch=0,controlsIndex=0,controlsStretch=0;
+        Qt::Alignment dbAlignment,frameAlignment,controlsAlignment;
+        QSize controlsMin,controlsMax;
+        QSizePolicy controlsPolicy;
+        int statusMin=0,statusMax=QWIDGETSIZE_MAX;
+        QString statusTip,appliedStatusTip;
+        bool statusDecorated=false;
+
     };
+    QObject *owner=nullptr;
     QString file;
     Query query;
     SetPan pan;
@@ -210,7 +255,7 @@ struct FrontAudioControls::State {
 
 
     static QBoxLayout *containingBox(QLayout *layout,QWidget *widget){
-        if(!layout)return nullptr;
+        if(!layout||!widget)return nullptr;
         for(int i=0;i<layout->count();++i){
             auto *item=layout->itemAt(i);
             if(item->widget()==widget){
@@ -416,7 +461,114 @@ struct FrontAudioControls::State {
             .toJson(QJsonDocument::Indented);
         return f.write(bytes)==bytes.size()&&f.commit();
     }
+    void restoreStatus(Row &r){
+        if(!r.statusDecorated)return;
+        if(r.status){
+            r.status->removeEventFilter(owner);
+            if(r.status->minimumWidth()==18&&r.status->maximumWidth()==18){
+                r.status->setMinimumWidth(r.statusMin);r.status->setMaximumWidth(r.statusMax);
+            }
+            if(r.status->toolTip()==r.appliedStatusTip)r.status->setToolTip(r.statusTip);
+            r.status->update();
+        }
+        r.statusDecorated=false;
+    }
+    void syncStatus(Row &r){
+        if(!r.status||statusKind(r.status->text())==ChannelStatus::Unknown){restoreStatus(r);return;}
+        if(!r.statusDecorated){
+            r.statusMin=r.status->minimumWidth();r.statusMax=r.status->maximumWidth();
+            r.statusTip=r.status->toolTip();
+            r.status->setFixedWidth(18);r.status->installEventFilter(owner);r.statusDecorated=true;
+            r.status->update();
+        }
+        const auto tip=r.statusTip.isEmpty()?r.status->text():r.statusTip;
+        if(tip!=r.appliedStatusTip){r.status->setToolTip(tip);r.appliedStatusTip=tip;}
+    }
+    void restoreRotary(Row &r){
+        restoreStatus(r);
+        if(!r.center)return;
+        if(r.root&&r.body&&r.header&&r.frame&&r.db&&r.controls){
+            r.body->removeWidget(r.controls);
+            r.center->removeWidget(r.frame);r.center->removeWidget(r.db);
+            r.body->removeItem(r.center);delete r.center.data();
+            r.body->insertWidget(r.frameIndex,r.frame,r.frameStretch,r.frameAlignment);
+            r.header->insertWidget(r.dbIndex,r.db,r.dbStretch,r.dbAlignment);
+            r.root->insertWidget(r.controlsIndex,r.controls,r.controlsStretch,r.controlsAlignment);
+            r.controls->setMinimumSize(r.controlsMin);r.controls->setMaximumSize(r.controlsMax);
+            r.controls->setSizePolicy(r.controlsPolicy);
+            if(auto *box=qobject_cast<QBoxLayout*>(r.controls->layout())){
+                box->setDirection(QBoxLayout::LeftToRight);
+                if(r.panDial)box->setAlignment(r.panDial,Qt::Alignment{});
+                if(r.offsetDial)box->setAlignment(r.offsetDial,Qt::Alignment{});
+            }
+        }
+        if(r.nameRow&&r.nameHandle&&r.nameIndex>=0&&r.nameRow->indexOf(r.nameHandle)==r.nameIndex)
+            r.nameRow->setStretch(r.nameIndex,r.nameStretch);
+        r.nameRow.clear();r.nameIndex=-1;
+        r.center.clear();r.root.clear();r.body.clear();r.header.clear();r.frame.clear();r.db.clear();r.status.clear();
+    }
+    bool syncRotary(Row &r){
+        if(!r.volume||!r.controls||!useKnobs||r.volume->width()<145){restoreRotary(r);return false;}
+        auto *frame=r.volume->findChild<QWidget*>("volMeterFrame",Qt::FindDirectChildrenOnly);
+        QSlider *gain=nullptr;
+        if(frame)for(auto *s:frame->findChildren<QSlider*>(QString(),Qt::FindDirectChildrenOnly)){
+            if(gain){restoreRotary(r);return false;}gain=s;
+        }
+        if(!gain||gain->orientation()!=Qt::Horizontal||!gain->property("_obsUiAugmentKnob").toBool()){
+            restoreRotary(r);return false;
+        }
+        if(r.center){syncStatus(r);return true;}
+        auto *root=qobject_cast<QBoxLayout*>(r.volume->layout());
+        auto *db=r.volume->findChild<QLabel*>("volLabel",Qt::FindDirectChildrenOnly);
+        auto *body=containingBox(root,frame),*header=containingBox(root,db);
+        if(!root||!db||!body||!header||root->direction()!=QBoxLayout::TopToBottom||
+           body==header||body->direction()!=QBoxLayout::LeftToRight||
+           header->direction()!=QBoxLayout::LeftToRight||body->count()!=2||
+           body->itemAt(1)->widget()!=frame||root->indexOf(r.controls)<0)return false;
+        auto *left=qobject_cast<QBoxLayout*>(body->itemAt(0)->layout());
+        if(!left||left->direction()!=QBoxLayout::TopToBottom||left->count()!=2||
+           !qobject_cast<QAbstractButton*>(left->itemAt(0)->widget())||
+           !qobject_cast<QAbstractButton*>(left->itemAt(1)->widget()))return false;
+        QLabel *status=nullptr;
+        for(int i=0;i<header->count();++i)
+            if(auto *label=qobject_cast<QLabel*>(header->itemAt(i)->widget());label&&label!=db){
+                if(status)return false;status=label;
+            }
+        auto *adjust=qobject_cast<QBoxLayout*>(r.controls->layout());
+        if(!adjust)return false;
+        r.root=root;r.body=body;r.header=header;r.frame=frame;r.db=db;r.status=status;
+        r.frameIndex=body->indexOf(frame);r.frameStretch=body->stretch(r.frameIndex);r.frameAlignment=body->itemAt(r.frameIndex)->alignment();
+        r.dbIndex=header->indexOf(db);r.dbStretch=header->stretch(r.dbIndex);r.dbAlignment=header->itemAt(r.dbIndex)->alignment();
+        r.controlsIndex=root->indexOf(r.controls);r.controlsStretch=root->stretch(r.controlsIndex);r.controlsAlignment=root->itemAt(r.controlsIndex)->alignment();
+        r.controlsMin=r.controls->minimumSize();r.controlsMax=r.controls->maximumSize();r.controlsPolicy=r.controls->sizePolicy();
+        // Allocate the reclaimed header width to the existing source name.
+        // Its Ignored policy still keeps long names from widening channels.
+        if(auto *names=containingBox(root,r.nameHandle);names&&names!=header&&
+            names->direction()==QBoxLayout::LeftToRight){
+            const int index=names->indexOf(r.nameHandle);
+            bool sibling=false;
+            for(int i=0;i<names->count();++i)if(names->itemAt(i)->layout()==header)sibling=true;
+            if(index>=0&&sibling){
+                r.nameRow=names;r.nameIndex=index;r.nameStretch=names->stretch(index);
+                names->setStretch(index,1);
+            }
+        }
+        header->removeWidget(db);body->removeWidget(frame);root->removeWidget(r.controls);
+        auto *center=new QVBoxLayout;center->setObjectName("aftermarket-rotary-center");
+        center->setContentsMargins(0,0,0,0);center->setSpacing(0);
+        center->addWidget(frame,1);center->addWidget(db,0,Qt::AlignHCenter);
+        body->insertLayout(r.frameIndex,center,1);r.center=center;
+        adjust->setDirection(QBoxLayout::TopToBottom);
+        r.controls->setMinimumSize(30,0);r.controls->setMaximumSize(30,QWIDGETSIZE_MAX);
+        r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Expanding);
+        adjust->setAlignment(r.panDial,Qt::AlignHCenter);
+        adjust->setAlignment(r.offsetDial,Qt::AlignHCenter);
+        body->addWidget(r.controls);
+        syncStatus(r);
+        return true;
+    }
     void remove(Row &r){
+        restoreRotary(r);
         if(r.nameHandle){
             if(r.hadCursor)r.nameHandle->setCursor(r.originalCursor);
             else r.nameHandle->unsetCursor();
@@ -499,6 +651,16 @@ struct FrontAudioControls::State {
     }
     void syncLayout(Row &r){
         if(!r.controls)return;
+        const bool compact=syncRotary(r);
+        if(compact){
+            if(r.panLabel)r.panLabel->hide();
+            if(r.offsetLabel)r.offsetLabel->hide();
+            if(r.panSlider)r.panSlider->hide();
+            if(r.panDial)r.panDial->show();
+            if(r.offsetDial)r.offsetDial->show();
+            if(r.offsetSpin)r.offsetSpin->hide();
+            return;
+        }
         const bool narrow=r.volume&&r.volume->width()<145;
         if(r.panLabel)r.panLabel->setVisible(!narrow);
         if(r.offsetLabel)r.offsetLabel->setVisible(!narrow);
@@ -506,6 +668,7 @@ struct FrontAudioControls::State {
         if(r.panDial)r.panDial->setVisible(useKnobs||narrow);
         if(r.offsetDial)r.offsetDial->setVisible(useKnobs&&!narrow);
         if(r.offsetSpin){
+            r.offsetSpin->show();
             r.offsetSpin->setMinimumWidth(narrow?46:54);
             r.offsetSpin->setMaximumWidth(narrow?58:78);
         }
@@ -531,12 +694,21 @@ struct FrontAudioControls::State {
         }
         if(r.panSlider)r.panSlider->setEnabled(source.stereo);
         if(r.panDial)r.panDial->setEnabled(source.stereo);
+        if(r.panDial){
+            const auto tip=QString("Stereo pan: %1% (50% center)").arg(panValue);
+            if(r.panDial->toolTip()!=tip)r.panDial->setToolTip(tip);
+        }
+        if(r.offsetDial){
+            const auto tip=QString("Sync offset: %1 ms · right-click to enter exact value").arg(source.offsetMs);
+            if(r.offsetDial->toolTip()!=tip)r.offsetDial->setToolTip(tip);
+        }
         syncLayout(r);
     }
 };
 FrontAudioControls::FrontAudioControls(QString settingsFile,Query q,SetPan p,
                                        SetOffset o,std::function<void()> persist,QObject *parent)
     :QObject(parent),state(new State){
+    state->owner=this;
     state->file=std::move(settingsFile);
     state->query=std::move(q);
     state->pan=std::move(p);
@@ -604,6 +776,12 @@ bool FrontAudioControls::setMenuButton(QToolButton *button){
     return true;
 }
 bool FrontAudioControls::eventFilter(QObject *watched,QEvent *event){
+    if(event->type()==QEvent::Paint)
+        for(const auto &row:state->rows)if(row.statusDecorated&&row.status==watched){
+            const auto kind=statusKind(row.status->text());
+            if(kind!=ChannelStatus::Unknown){paintStatus(row.status,kind);return true;}
+            break;
+        }
     if(watched==state->native&&(event->type()==QEvent::Resize||event->type()==QEvent::Show))
         state->gridDebounce.start();
     if(watched==state->menuButton&&
@@ -847,6 +1025,26 @@ void FrontAudioControls::refresh(){
             offset->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
             offset->setToolTip("Precise OBS audio sync offset in milliseconds");
             outer->addWidget(offset);
+            panDial->setAccessibleName("Stereo pan");
+            offsetDial->setAccessibleName("Audio sync offset");
+            // Precise editing stays reachable in floating docks whose
+            // native title cannot host Aftermarket's overflow menu.
+            offsetDial->setContextMenuPolicy(Qt::CustomContextMenu);
+            connect(offsetDial,&QWidget::customContextMenuRequested,offsetDial,[offsetDial,safe=QPointer<QSpinBox>(offset)](QPoint point){
+                if(!safe)return;
+                auto *menu=new QMenu(offsetDial);
+                menu->setObjectName("aftermarket-precise-sync-menu");
+                auto *editor=new QSpinBox(menu);
+                editor->setObjectName("aftermarket-precise-sync-value");
+                editor->setRange(-maxOffsetMs,maxOffsetMs);editor->setSingleStep(10);
+                editor->setSuffix(" ms");editor->setValue(safe->value());
+                editor->setAccessibleName("Precise audio sync offset");
+                auto *action=new QWidgetAction(menu);action->setDefaultWidget(editor);menu->addAction(action);
+                QObject::connect(editor,&QSpinBox::valueChanged,menu,[safe](int value){if(safe)safe->setValue(value);});
+                QObject::connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+                menu->popup(offsetDial->mapToGlobal(point));editor->setFocus();
+            });
+
             bool inserted=false;
             if(auto *box=qobject_cast<QBoxLayout*>(widget->layout())){
                 // Native OBS uses either stacked or side-by-side VolumeControl

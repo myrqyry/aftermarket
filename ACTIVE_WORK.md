@@ -3361,3 +3361,35 @@ same evidence directory. Two unattributed shutdown leaks. Native probe
 floating horizontal mixer; manual ordering tested in Qt fixture, other
 platforms not qualified. Docs updated. Existing plugin.cpp unrelated
 comment preserved. Production OBS running; not installed/pushed.
+
+## 2026-11-25: compact rotary channel arrangement
+
+User screenshot requested dB under gain knob, pan/sync opposite native
+mute/monitor, icon statuses. Adapter recognizes exact native horizontal
+VolumeControl layout (native volLabel, volMeterFrame, left two buttons,
+nested header/body), active gain knob property and pan/sync knob preference.
+Reversible nested center with original frame and dB label; right-side
+original adjustment widget uses vertical dials, exact value spin hidden
+only while compact. Right-click sync dial opens precise millisecond editor
+(±999999, real native setter through existing spin callback); hover
+reports values and both dials accessible names. Header name receives
+reclaimed space without letting long names determine channel minimum.
+Theme palette glyphs for exact native English Pinned, Active, Inactive;
+retain actual native text and tooltip, restore width and paint for unknown
+statuses. Native active is not audio signal level. Other layouts/narrow
+under 145px, nonrotary and pan/sync slider mode revert to prior layout.
+Original layout indices, stretches, alignments and widget identity
+preserved. No duplicate volume control or audio routing changes.
+RED missing arrangement, GREEN Qt fixture includes pin/active/unknown,
+exact sync menu, restore/reattach and existing grid tests. Full CTest
+39/39 /tmp/am-rotary-ctest.log. Isolated real OBS 32.2.0 native probe
+/tmp/am-mixer-rotary.NWYt1V/obs.log 9/9, exit0: native five channels,
+dB below gain, side alignment <=6px, actual Active icon, dB values,
+precise sync 12345ms and reset, grid-to-list, unchanged gain and offset.
+Actual list/grid screenshots in evidence dir; list visually inspected.
+Earlier probe missed nested native layouts via QObject discovery; fixed
+recursive QLayout traversal, verified geometry independently. Pinned
+and Inactive icons unit/implementation only; no native pinned-state
+fixture. Two unattributed shutdown leaks; other platforms/localized
+statuses not qualified. Docs updated. Existing unrelated plugin.cpp
+comment preserved. Production OBS running, no install or push.
