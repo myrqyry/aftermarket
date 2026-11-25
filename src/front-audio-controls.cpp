@@ -17,6 +17,10 @@
 #include <QTimer>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QMouseEvent>
+#include <QCursor>
+#include <QStringList>
 #include <QSaveFile>
 #include <QFile>
 #include <QSignalBlocker>
@@ -36,6 +40,9 @@ QString sourceName(QWidget *volume){
     for(auto *button:volume->findChildren<QAbstractButton*>())
         if(button->inherits("VolumeName")||button->objectName()=="VolumeName")
             return button->text();
+    for(auto *label:volume->findChildren<QLabel*>())
+        if(label->inherits("OBSSourceLabel")||label->objectName()=="OBSSourceLabel")
+            return label->text();
     return {};
 }
 bool volumeControl(QWidget *widget){
@@ -72,6 +79,9 @@ struct FrontAudioControls::State {
         QPointer<QSpinBox> offsetSpin;
         QPointer<QLabel> panLabel,offsetLabel;
         QString id;
+        QPointer<QWidget> nameHandle;
+        QCursor originalCursor;
+        bool hadCursor=false;
     };
     QString file;
     Query query;
@@ -88,6 +98,129 @@ struct FrontAudioControls::State {
     QString nativeOptionsTitle;
     bool footerWasHidden=false;
     QList<Row> rows;
+    QStringList channelOrder;
+    bool orderingUnlocked=false;
+    QPointer<QWidget> dragHandle;
+    QPoint dragStart;
+    bool dragging=false;
+    struct LayoutBaseline {
+        QPointer<QBoxLayout> layout;
+        QList<QPointer<QWidget>> order;
+    };
+    QList<LayoutBaseline> baselines;
+
+    static QBoxLayout *containingBox(QLayout *layout,QWidget *widget){
+        if(!layout)return nullptr;
+        for(int i=0;i<layout->count();++i){
+            auto *item=layout->itemAt(i);
+            if(item->widget()==widget)return qobject_cast<QBoxLayout*>(layout);
+            if(auto *nested=containingBox(item->layout(),widget))return nested;
+        }
+        return nullptr;
+    }
+    static QBoxLayout *channelBox(QWidget *widget){
+        if(!widget||!widget->parentWidget())return nullptr;
+        return containingBox(widget->parentWidget()->layout(),widget);
+    }
+    QString idFor(QWidget *widget)const{
+        for(const auto &row:rows)if(row.volume==widget)return row.id;
+        return {};
+    }
+    QList<QWidget*> orderedWidgets(QBoxLayout *box)const{
+        QList<QWidget*> result;
+        if(!box)return result;
+        for(int i=0;i<box->count();++i){
+            auto *widget=box->itemAt(i)->widget();
+            if(widget&&volumeControl(widget)&&!widget->property("aftermarket-foreign").toBool())
+                result.append(widget);
+        }
+        return result;
+    }
+    static void arrange(QBoxLayout *box,const QList<QWidget*> &desired){
+        if(!box||desired.size()<2)return;
+        // Move only channel items. Preserve every native widget, spacer,
+        // layout slot, stretch and alignment (including unrelated toolbar).
+        QList<int> positions;
+        QList<QWidget*> before;
+        for(int i=0;i<box->count();++i){
+            auto *w=box->itemAt(i)->widget();
+            if(desired.contains(w)){positions.append(i);before.append(w);}
+        }
+        if(before==desired||before.size()!=desired.size())return;
+        struct Item { QWidget *widget; int stretch; Qt::Alignment alignment; };
+        QList<Item> items;
+        for(int i:positions)items.append({box->itemAt(i)->widget(),box->stretch(i),box->itemAt(i)->alignment()});
+        for(int i=positions.size()-1;i>=0;--i)delete box->takeAt(positions[i]);
+        for(int i=0;i<desired.size();++i)
+            for(const auto &entry:items)if(entry.widget==desired[i]){
+                box->insertWidget(positions[i],entry.widget,entry.stretch,entry.alignment);break;
+            }
+    }
+    void rememberLayout(QBoxLayout *box){
+        if(!box)return;
+        LayoutBaseline *record=nullptr;
+        for(auto &entry:baselines)if(entry.layout==box){record=&entry;break;}
+        if(!record){baselines.append(LayoutBaseline{box,{}});record=&baselines.last();}
+        for(auto *widget:orderedWidgets(box))
+            if(!record->order.contains(widget))record->order.append(widget);
+    }
+    void applyOrder(){
+        for(int i=baselines.size()-1;i>=0;--i)if(!baselines[i].layout)baselines.removeAt(i);
+        QSet<QBoxLayout*> boxes;
+        for(const auto &row:rows)if(auto *box=channelBox(row.volume))boxes.insert(box);
+        for(auto *box:boxes){
+            rememberLayout(box);
+            if(channelOrder.isEmpty())continue;
+            auto widgets=orderedWidgets(box);
+            // Unknown or ambiguous native rows stay in their original slots.
+            widgets.erase(std::remove_if(widgets.begin(),widgets.end(),[this](QWidget *w){return idFor(w).isEmpty();}),widgets.end());
+            std::stable_sort(widgets.begin(),widgets.end(),[this](QWidget *a,QWidget *b){
+                const int ai=channelOrder.indexOf(idFor(a)),bi=channelOrder.indexOf(idFor(b));
+                return (ai<0?channelOrder.size():ai)<(bi<0?channelOrder.size():bi);
+            });
+            arrange(box,widgets);
+        }
+    }
+    void restoreOrder(){
+        for(auto &entry:baselines){
+            if(!entry.layout)continue;
+            const auto current=orderedWidgets(entry.layout);
+            QList<QWidget*> desired;
+            for(auto &widget:entry.order)if(widget&&current.contains(widget))desired.append(widget);
+            for(auto *widget:current)if(!desired.contains(widget))desired.append(widget);
+            arrange(entry.layout,desired);
+        }
+        baselines.clear();
+    }
+    void updateHandles(){
+        for(auto &row:rows)if(row.nameHandle){
+            if(orderingUnlocked&&channelBox(row.volume))row.nameHandle->setCursor(Qt::OpenHandCursor);
+            else if(row.hadCursor)row.nameHandle->setCursor(row.originalCursor);
+            else row.nameHandle->unsetCursor();
+        }
+    }
+    bool moveChannel(QWidget *from,QWidget *to){
+        auto *box=channelBox(from);
+        if(!box||box!=channelBox(to)||from==to)return false;
+        QStringList visible;
+        for(auto *widget:orderedWidgets(box)){
+            const auto id=idFor(widget);
+            if(!id.isEmpty()&&!visible.contains(id))visible.append(id);
+        }
+        const auto first=idFor(from),second=idFor(to);
+        const int a=visible.indexOf(first),b=visible.indexOf(second);
+        if(a<0||b<0||a==b)return false;
+        const auto previous=channelOrder;
+        for(const auto &id:visible)if(!channelOrder.contains(id))channelOrder.append(id);
+        visible.move(a,b);
+        // Retain slots of hidden / inactive sources.
+        int index=0;
+        for(auto &id:channelOrder)if(visible.contains(id))id=visible[index++];
+        if(!save()){channelOrder=previous;return false;}
+        applyOrder();
+        return true;
+    }
+
     struct NamePolicy {
         QPointer<QWidget> label;
         QSizePolicy original;
@@ -149,22 +282,32 @@ struct FrontAudioControls::State {
     bool load(){
         QFile f(file);
         if(!f.exists())return true;
-        if(!f.open(QIODevice::ReadOnly)||f.size()>4096)return false;
+        if(!f.open(QIODevice::ReadOnly)||f.size()>65536)return false;
         const auto document=QJsonDocument::fromJson(f.readAll());
         if(!document.isObject())return false;
         const auto object=document.object();
         if(object.value("version").toInt()!=1||!object.value("knobs").isBool())return false;
         useKnobs=object.value("knobs").toBool();
+        for(const auto &value:object.value("channelOrder").toArray()){
+            const auto id=value.toString();
+            if(!id.isEmpty()&&!channelOrder.contains(id))channelOrder.append(id);
+        }
         return true;
     }
     bool save(){
         QSaveFile f(file);
         if(!f.open(QIODevice::WriteOnly))return false;
-        const auto bytes=QJsonDocument(QJsonObject{{"version",1},{"knobs",useKnobs}})
+        QJsonArray order;
+        for(const auto &id:channelOrder)order.append(id);
+        const auto bytes=QJsonDocument(QJsonObject{{"version",1},{"knobs",useKnobs},{"channelOrder",order}})
             .toJson(QJsonDocument::Indented);
         return f.write(bytes)==bytes.size()&&f.commit();
     }
     void remove(Row &r){
+        if(r.nameHandle){
+            if(r.hadCursor)r.nameHandle->setCursor(r.originalCursor);
+            else r.nameHandle->unsetCursor();
+        }
         if(r.controls)delete r.controls.data();
     }
     void findAndHideFooter(){
@@ -308,9 +451,15 @@ bool FrontAudioControls::attach(QWidget *nativeMixer){
 }
 void FrontAudioControls::detach(){
     state->poll.stop();
+    state->orderingUnlocked=false;
+    state->dragHandle.clear();
+    state->restoreOrder();
     state->restoreSourceNameWidths();
     state->restoreFooter(this);
-    for(auto &row:state->rows)state->remove(row);
+    for(auto &row:state->rows){
+        if(row.nameHandle)row.nameHandle->removeEventFilter(this);
+        state->remove(row);
+    }
     state->rows.clear();
     state->native.clear();
 }
@@ -335,6 +484,50 @@ bool FrontAudioControls::eventFilter(QObject *watched,QEvent *event){
     if(watched==state->menuButton&&
        (event->type()==QEvent::Show||event->type()==QEvent::Hide)){
         QTimer::singleShot(0,this,[this]{state->syncFooterVisibility();});
+    }
+    if(state->orderingUnlocked){
+        QWidget *volume=nullptr;
+        for(const auto &row:state->rows)if(row.nameHandle==watched&&row.volume){
+            volume=row.volume;break;
+        }
+        if(volume&&State::channelBox(volume)){
+            auto *handle=static_cast<QWidget*>(watched);
+            if(event->type()==QEvent::MouseButtonPress){
+                auto *mouse=static_cast<QMouseEvent*>(event);
+                if(mouse->button()==Qt::LeftButton){
+                    state->dragHandle=handle;
+                    state->dragStart=mouse->globalPosition().toPoint();
+                    state->dragging=false;
+                    return true;
+                }
+            }
+            if(state->dragHandle==handle&&event->type()==QEvent::MouseMove){
+                auto *mouse=static_cast<QMouseEvent*>(event);
+                if((mouse->globalPosition().toPoint()-state->dragStart).manhattanLength()>=QApplication::startDragDistance()){
+                    state->dragging=true;handle->setCursor(Qt::ClosedHandCursor);
+                }
+                return true;
+            }
+            if(state->dragHandle==handle&&event->type()==QEvent::MouseButtonRelease){
+                auto *mouse=static_cast<QMouseEvent*>(event);
+                if(mouse->button()==Qt::LeftButton){
+                    const bool moved=state->dragging;
+                    state->dragHandle.clear();state->dragging=false;
+                    handle->setCursor(Qt::OpenHandCursor);
+                    if(moved){
+                        const auto point=mouse->globalPosition().toPoint();
+                        for(const auto &row:state->rows){
+                            auto *target=row.volume.data();
+                            if(target&&target!=volume&&target->isVisible()&&
+                               target->rect().contains(target->mapFromGlobal(point))){
+                                state->moveChannel(volume,target);break;
+                            }
+                        }
+                    }
+                    return true;
+                }
+            }
+        }
     }
     return QObject::eventFilter(watched,event);
 }
@@ -362,6 +555,23 @@ void FrontAudioControls::populateSettingsMenu(QMenu *menu){
         }else addProxy("Mixer options",state->optionsButton);
         menu->addSeparator();
     }
+    auto *unlock=menu->addAction("Unlock channel ordering");
+    unlock->setCheckable(true);
+    unlock->setChecked(state->orderingUnlocked);
+    unlock->setToolTip("Drag a channel name onto another channel; lock again to prevent changes.");
+    connect(unlock,&QAction::triggered,this,[this](bool enabled){
+        state->orderingUnlocked=enabled;
+        state->dragHandle.clear();state->dragging=false;
+        state->updateHandles();
+    });
+    auto *reset=menu->addAction("Reset channel order");
+    reset->setEnabled(!state->channelOrder.isEmpty());
+    connect(reset,&QAction::triggered,this,[this]{
+        const auto before=state->channelOrder;
+        state->channelOrder.clear();
+        if(state->save())state->restoreOrder();
+        else state->channelOrder=before;
+    });
     auto *channels=menu->addMenu("Channel settings");
     channels->setObjectName("aftermarket-channel-settings");
     const auto sources=state->query();
@@ -443,6 +653,7 @@ void FrontAudioControls::refresh(){
             break;
         }
         if(existing&&existing->id!=src.id){
+            if(existing->nameHandle)existing->nameHandle->removeEventFilter(this);
             state->remove(*existing);
             existing->controls.clear();
         }
@@ -537,6 +748,12 @@ void FrontAudioControls::refresh(){
             });
             State::Row row;
             row.volume=widget;row.controls=controls;row.id=id;
+            row.nameHandle=sourceNameLabel(widget);
+            if(row.nameHandle){
+                row.originalCursor=row.nameHandle->cursor();
+                row.hadCursor=row.nameHandle->testAttribute(Qt::WA_SetCursor);
+                row.nameHandle->installEventFilter(this);
+            }
             row.panSlider=pan;row.panDial=panDial;row.offsetSpin=offset;
             row.offsetDial=offsetDial;row.panLabel=panLabel;row.offsetLabel=offsetLabel;
             if(existing)*existing=row;else state->rows.append(row);
@@ -548,9 +765,12 @@ void FrontAudioControls::refresh(){
     }
     for(int i=state->rows.size()-1;i>=0;--i)
         if(!state->rows[i].volume||!seen.contains(state->rows[i].volume)){
+            if(state->rows[i].nameHandle)state->rows[i].nameHandle->removeEventFilter(this);
             state->remove(state->rows[i]);
             state->rows.removeAt(i);
         }
+    state->applyOrder();
+    if(!state->dragHandle)state->updateHandles();
     state->busy=false;
 }
 }

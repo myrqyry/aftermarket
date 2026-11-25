@@ -476,6 +476,8 @@ Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket →
 
 ![Native Audio Mixer: Live Latent TTS shown in full, very long name truncated, both channels equally wide](screenshots/readme/mixer-name-independent-width.webp)
 
+**Manual channel order:** Open the mixer title's three-dot menu and enable **Unlock channel ordering**. Drag a source name onto another channel to move the complete native channel, in either mixer orientation. Disable the same option to lock the saved positions. Order is saved by OBS source UUID (not display name), retained across temporarily hidden channels and reapplied when native channel widgets are rebuilt. New channels follow the saved channels; **Reset channel order** clears the saved order and restores the original native layout. Ordering starts locked on restart. This changes presentation only, never gain, routing, or the OBS Sources list. The AudioBus routing view retains its own ordering for now. Unsupported native layouts are left untouched.
+
 **AudioBus (alternate routing view)** is a compact source-to-output patchbay:
 
 - **Click a source node to select it**, then click a numbered destination to toggle its route or drag the source to connect. Clicking an already-connected track toggles it off; repeating a drag never disconnects it. **Show all wires is enabled by default**, showing every source connection immediately. You can turn it off in the dock menu for a selected-only view. Hovering a source or output highlights related paths without modifying routing or hiding unrelated wires while the all-wires view is enabled.

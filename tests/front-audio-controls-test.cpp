@@ -17,6 +17,7 @@
 #include <QToolBar>
 #include <QPushButton>
 #include <QAction>
+#include <QMouseEvent>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 int main(int argc,char **argv){
@@ -93,6 +94,30 @@ int main(int argc,char **argv){
  findEntry("Advanced")->trigger();
  REQUIRE(hiddenClicks==1&&orientationClicks==1&&advancedClicks==1);
  REQUIRE(findEntry("Options")); // original OBS options remain reachable
+ // Manual order mode is opt-in; dragging the name moves the original channel.
+ auto *unlock=findEntry("Unlock channel ordering");
+ REQUIRE(unlock&&unlock->isCheckable()&&!unlock->isChecked());
+ unlock->trigger();app.processEvents();
+ auto drag=[&](QWidget *handle,QWidget *target){
+     const QPointF start=handle->mapToGlobal(handle->rect().center());
+     const QPointF end=target->mapToGlobal(target->rect().center());
+     QMouseEvent press(QEvent::MouseButtonPress,handle->mapFromGlobal(start.toPoint()),start,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+     QApplication::sendEvent(handle,&press);
+     QMouseEvent move(QEvent::MouseMove,handle->mapFromGlobal(end.toPoint()),end,Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
+     QApplication::sendEvent(handle,&move);
+     QMouseEvent release(QEvent::MouseButtonRelease,handle->mapFromGlobal(end.toPoint()),end,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+     QApplication::sendEvent(handle,&release);app.processEvents();
+ };
+ drag(twoName,one);
+ REQUIRE(layout->itemAt(0)->widget()==two&&layout->itemAt(1)->widget()==one);
+ REQUIRE(layout->itemAt(2)->widget()==footer);
+ unlock->trigger(); // lock positions without resetting them
+ drag(oneName,two);
+ REQUIRE(layout->itemAt(0)->widget()==two);
+ // OBS may rebuild/reinsert widgets in native order; refresh reapplies saved order.
+ layout->removeWidget(one);layout->insertWidget(0,one);
+ ui.refresh();REQUIRE(layout->itemAt(0)->widget()==two);
+
  auto *pan=one->findChild<QSlider*>("aftermarket-pan-slider");
  auto *offset=one->findChild<QSpinBox*>("aftermarket-offset-ms");
  auto *panDial=one->findChild<QDial*>("aftermarket-pan-dial");
@@ -146,12 +171,15 @@ int main(int argc,char **argv){
  REQUIRE(ui.rowCount()==0);
  REQUIRE(!two->findChild<QWidget*>("aftermarket-source-adjustments"));
  REQUIRE(one->layout()->count()==2&&two->layout()->count()==2);
+ REQUIRE(layout->itemAt(0)->widget()==one&&layout->itemAt(1)->widget()==two);
  REQUIRE(original->value()==52&&secondOriginal->value()==65);
  // State survives a restart without requiring OBS's own rules or mixer state.
  augment::FrontAudioControls restored(file,[&]{return current;},{},{});
  REQUIRE(!restored.knobs());
  REQUIRE(restored.attach(&native));
  REQUIRE(restored.rowCount()==1);
+ oneName->setText("Renamed TTS");restored.refresh();
+ REQUIRE(layout->itemAt(0)->widget()==two&&layout->itemAt(1)->widget()==one);
  restored.detach();
  // Real OBS has narrow side-by-side VolumeControl columns. Both
  // adjustment rows must have an actual hit target at 90px column width.
@@ -188,6 +216,23 @@ int main(int argc,char **argv){
  REQUIRE(visiblePan->height()>=14);
  REQUIRE(visibleOffset->height()>=20);
  REQUIRE(visiblePan->mapTo(&narrow,QPoint(visiblePan->width(),0)).x()<=narrow.width());
+ // Side-by-side strips reorder without changing their original stretch.
+ auto *left=columns->itemAt(0)->widget(),*right=columns->itemAt(1)->widget();
+ QMenu narrowOrder;
+ narrowUi.populateSettingsMenu(&narrowOrder);
+ QAction *narrowUnlock=nullptr;
+ for(auto *a:narrowOrder.actions())if(a->text()=="Unlock channel ordering")narrowUnlock=a;
+ REQUIRE(narrowUnlock);
+ narrowUnlock->trigger();
+ drag(right->findChild<QToolButton*>("VolumeName"),left);
+ REQUIRE(columns->itemAt(0)->widget()==right&&columns->itemAt(1)->widget()==left);
+ REQUIRE(columns->stretch(0)==1&&columns->stretch(1)==1);
+ QMenu resetMenu;narrowUi.populateSettingsMenu(&resetMenu);
+ QAction *reset=nullptr;
+ for(auto *a:resetMenu.actions())if(a->text()=="Reset channel order")reset=a;
+ REQUIRE(reset&&reset->isEnabled());reset->trigger();
+ REQUIRE(columns->itemAt(0)->widget()==left&&columns->itemAt(1)->widget()==right);
+
  // Overflow in the real dock title exposes precise per-channel settings.
  QMenu channelMenu;
  ui.populateSettingsMenu(&channelMenu);

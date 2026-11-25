@@ -46,6 +46,8 @@ Keep the familiar native mixer or customize selected channels:
 - Per-source audio-reactive gradient faders and native meter color modulation.
 - Compact Pan and Sync controls that operate native OBS source properties.
 - Channel widths independent of source-name length, with readable labels.
+- Persistent channel order: unlock in the mixer title menu, drag source names,
+  then lock again. Reset restores native order.
 
 ![Native OBS faders with gradient tracks](docs/screenshots/readme/mixer-faders.png)
 
