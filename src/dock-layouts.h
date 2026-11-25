@@ -5,6 +5,7 @@
 #include <QString>
 #include <QStringList>
 #include <QList>
+#include <functional>
 
 class QMainWindow;
 class QWidget;
@@ -29,7 +30,7 @@ public:
     bool restore(const QString &id);
     bool undo();
     bool canUndo() const { return !undoState_.isEmpty(); }
-    void showManager(QWidget *owner);
+    void showManager(QWidget *owner,std::function<void(QWidget*)> checkpoints={});
 private:
     bool write(const QList<DockLayoutSnapshot> &snapshots) const;
     QStringList dockIds() const;

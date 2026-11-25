@@ -255,6 +255,27 @@ Use **Tools → Aftermarket: Dock Layouts…** to save, rename, update, switch a
 
 ![Dock Layouts manager](screenshots/readme/dock-layouts.webp)
 
+### Workspace checkpoints
+
+Open **Tools → Aftermarket: Dock Layouts… → Workspace checkpoints…**.
+Create a named checkpoint to request a native OBS save, verify that the current collection
+was written, and capture its scene JSON, current native dock state, plus existing
+Aftermarket rules, Action Strip, Cue Deck, layout library, mixer ordering, device
+visibility, dock title and source picker settings. Missing configuration files
+are recorded rather than invented. The manager keeps up to 32 local, checksum-verified
+bundles in `plugin_config/aftermarket/workspace-checkpoints`; it never overwrites an
+existing checkpoint. Invalid bundles remain untouched.
+
+**Restore docks only** is a confirmed native layout change, requiring all saved docks.
+**Export scene** produces an OBS-importable scene JSON. **Export recovery folder**
+exports the scene, captured Aftermarket files, native layout preset and recovery
+instructions without overwriting an existing destination. Import scenes through
+OBS and recover individual settings only with OBS closed, after backing up the current
+configuration. Full live restoration, profile/output settings, media files and
+third-party plugin binaries are not included. Scene JSON may contain private source
+settings; keep exports local. Scene Collection Manager is independent and remains
+available for its own backups.
+
 See the [dock layouts reference](dock-layouts.md) for persistence, missing-dock guards and rollback behavior.
 
 ### Compact hamburger menu bar

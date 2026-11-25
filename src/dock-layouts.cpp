@@ -214,7 +214,7 @@ bool DockLayouts::undo(){
     return true;
 }
 
-void DockLayouts::showManager(QWidget *owner){
+void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> checkpoints){
     if(!main_)return;
     QDialog dialog(owner);
     dialog.setWindowTitle("Aftermarket · Dock layouts");
@@ -252,6 +252,12 @@ void DockLayouts::showManager(QWidget *owner){
     auto *deleteBtn=new QPushButton("Delete",&dialog);
     row2->addWidget(renameBtn);row2->addWidget(replaceBtn);row2->addWidget(deleteBtn);
     root->addLayout(row2);
+    if(checkpoints){
+        auto *checkpointBtn=new QPushButton("Workspace checkpoints…",&dialog);
+        checkpointBtn->setObjectName("aftermarket-workspace-checkpoints");
+        root->addWidget(checkpointBtn);
+        QObject::connect(checkpointBtn,&QPushButton::clicked,&dialog,[&]{checkpoints(&dialog);});
+    }
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);
     root->addWidget(buttons);
     QObject::connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::accept);

@@ -11,6 +11,7 @@
 #include "action-strip.h"
 #include "quick-find.h"
 #include "dock-layouts.h"
+#include "workspace-checkpoints.h"
 #include "cue-deck.h"
 #include "native-action-bridge.h"
 #include "dock-attach-retry.h"
@@ -37,6 +38,9 @@
 #include <QThread>
 #include <QDir>
 #include <QFileInfo>
+#include <QFile>
+#include <QEventLoop>
+#include <util/config-file.h>
 #include "augment.h"
 #include "config-identity.h"
 #include "obs-audio.h"
@@ -66,6 +70,53 @@ static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
 static obs_hotkey_id quickFindHotkey=OBS_INVALID_HOTKEY_ID;
+// OBS frontend_save posts SaveProjectDeferred. Its callback receives module
+// data, not the whole scene JSON, so wait for that save to finish before
+// reading the native scene file. Never derive a filename from the UI label.
+static augment::CheckpointScene captureCheckpointScene(const QString &folder){
+    if(!frontendReady||!uiActive)return {};
+    auto identity=[](){
+        auto *name=obs_frontend_get_current_scene_collection();
+        const QString collection=name?QString::fromUtf8(name):QString{};
+        if(name)bfree(name);
+        auto *config=obs_frontend_get_user_config();
+        const char *file=config?config_get_string(config,"Basic","SceneCollectionFile"):nullptr;
+        return qMakePair(collection,file?QString::fromUtf8(file):QString{});
+    };
+    const auto before=identity();
+    if(before.first.isEmpty()||before.second.isEmpty()||before.second=="."||before.second==".."||
+       before.second.contains('/')||before.second.contains('\\'))return {};
+    const auto filename=before.second.endsWith(".json",Qt::CaseInsensitive)?before.second:before.second+".json";
+    const auto path=QDir(folder).absoluteFilePath("../../basic/scenes/"+filename);
+    const QFileInfo oldFile(path);
+    const auto oldModified=oldFile.lastModified();
+    struct SaveWait {QEventLoop loop;bool observed=false;};
+    SaveWait wait;
+    auto callback=[](obs_data_t *,bool saving,void *opaque){
+        auto *state=static_cast<SaveWait*>(opaque);
+        if(saving){
+            state->observed=true;
+            QTimer::singleShot(0,&state->loop,&QEventLoop::quit);
+        }
+    };
+    obs_frontend_add_save_callback(callback,&wait);
+    QTimer::singleShot(2000,&wait.loop,&QEventLoop::quit);
+    obs_frontend_save();
+    wait.loop.exec(QEventLoop::ExcludeUserInputEvents);
+    obs_frontend_remove_save_callback(callback,&wait);
+    if(!wait.observed||!frontendReady||!uiActive||identity()!=before)return {};
+    const QFileInfo saved(path);
+    // Fail closed if the callback happened but OBS did not publish a new
+    // file. Native save writes a temporary file then atomically replaces it.
+    if(!saved.isFile()||saved.isSymLink()||saved.size()>32*1024*1024||
+       !saved.lastModified().isValid()||saved.lastModified()==oldModified)return {};
+    QFile file(path);
+    if(!file.open(QIODevice::ReadOnly))return {};
+    const auto bytes=file.read(32*1024*1024+1);
+    if(file.error()!=QFile::NoError)return {};
+    return {before.first,bytes};
+}
+
 static void showQuickFind(){
     if(!uiActive||!frontendReady)return;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -486,7 +537,12 @@ MODULE_EXPORT bool obs_module_load(void) {
         // Wait until the native Tools popup closes before opening a modal UI.
         QPointer<QMainWindow> safeMain=main;
         QTimer::singleShot(0,[safeMain]{
-            if(safeMain&&dockLayouts&&uiActive)dockLayouts->showManager(safeMain);
+            if(safeMain&&dockLayouts&&uiActive)dockLayouts->showManager(safeMain,[safeMain](QWidget *owner){
+                if(!safeMain||!frontendReady||!uiActive)return;
+                const auto folder=QFileInfo(stripConfigPath).absolutePath();
+                augment::WorkspaceCheckpoints checkpoints(folder,safeMain,[folder]{return captureCheckpointScene(folder);});
+                checkpoints.showManager(owner);
+            });
             if(actionStrip)actionStrip->refresh();
         });
     });

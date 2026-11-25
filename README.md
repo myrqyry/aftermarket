@@ -68,6 +68,11 @@ Save complete dock arrangements with **Tools → Aftermarket: Dock Layouts…**.
 Switch between saved arrangements, or undo the last switch. Layout snapshots
 preserve native dock placement, not scene or audio settings.
 
+**Workspace checkpoints** extend the layout manager with named local recovery bundles:
+the freshly saved OBS scene collection, native dock state, and selected Aftermarket settings.
+Restore docks independently or export scene/settings files for deliberate recovery.
+No live scene collection or settings are overwritten.
+
 | Native dock headers | Saved dock arrangements |
 | :---: | :---: |
 | ![Native OBS docks with compact title controls](docs/screenshots/readme/dock-all-overflows.webp) | ![Dock Layouts manager with a saved arrangement](docs/screenshots/readme/dock-layouts.webp) |
