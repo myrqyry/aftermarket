@@ -19,15 +19,16 @@ struct DeviceDestination {
     QString id,name;
     bool operator==(const DeviceDestination &o)const{return id==o.id&&name==o.name;}
 };
-enum class DeviceParameter { Gain, Pan, Delay };
+enum class DeviceParameter { Gain, Pan, Delay, Muted };
 struct DeviceSend {
     QString deviceId;
     bool managed=false,enabled=false;
     double volume=100;
     double balance=0;
     int delayMs=0;
+    bool muted=false;
     bool operator==(const DeviceSend &o)const{
-        return deviceId==o.deviceId&&managed==o.managed&&enabled==o.enabled&&volume==o.volume&&balance==o.balance&&delayMs==o.delayMs;
+        return deviceId==o.deviceId&&managed==o.managed&&enabled==o.enabled&&volume==o.volume&&balance==o.balance&&delayMs==o.delayMs&&muted==o.muted;
     }
 };
 struct RouteSource {
@@ -69,6 +70,7 @@ public:
     using DeviceParameterWriter=std::function<bool(const QString &,const QString &,DeviceParameter,double)>;
     void setDeviceParameterWriter(DeviceParameterWriter writer);
     bool populateDeviceSendMenu(QMenu *menu,const QString &source,const QString &device);
+    void setDeviceVisibilityFile(QString file);
     int deviceDestinationCount() const;
     bool connectDevice(const QString &source,const QString &device);
     bool toggleDevice(const QString &device);
@@ -105,7 +107,11 @@ private:
     DeviceQuery deviceQuery;
     SetDeviceSend setDeviceSend;
     DeviceParameterWriter deviceParameterWriter;
-    QVector<DeviceDestination> destinations;
+    QVector<DeviceDestination> destinations,availableDevices;
+    QString deviceVisibilityFile;
+    QStringList hiddenDevices;
+    void applyDeviceVisibility();
+    bool setDeviceVisible(const QString &id,bool visible);
     void refreshDevices();
     QVector<RouteSource> routes;
     QString selected;

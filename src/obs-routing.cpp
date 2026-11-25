@@ -20,6 +20,15 @@ bool isMonitorFilter(obs_source_t *filter){
     return id&&std::strcmp(id,"audio_monitor")==0;
 }
 constexpr auto ownedKey="aftermarket_device_send";
+constexpr auto muteKey="aftermarket_send_muted";
+constexpr auto savedGainKey="aftermarket_send_gain";
+bool manuallyMuted(obs_data_t *settings){
+    return obs_data_get_bool(settings,ownedKey)&&obs_data_get_bool(settings,muteKey)&&
+           obs_data_get_double(settings,"volume")==0;
+}
+double sendGain(obs_data_t *settings){
+    return manuallyMuted(settings)?obs_data_get_double(settings,savedGainKey):obs_data_get_double(settings,"volume");
+}
 QVector<DeviceSend> sends(obs_source_t *source){
     QVector<DeviceSend> result;
     obs_source_enum_filters(source,[](obs_source_t *,obs_source_t *filter,void *opaque){
@@ -30,8 +39,8 @@ QVector<DeviceSend> sends(obs_source_t *source){
         if(!device.isEmpty()){
             static_cast<QVector<DeviceSend>*>(opaque)->append({
                 device,obs_data_get_bool(settings,ownedKey),obs_source_enabled(filter),
-                obs_data_get_double(settings,"volume"),obs_data_get_double(settings,"balance"),
-                int(obs_data_get_int(settings,"delay"))});
+                sendGain(settings),obs_data_get_double(settings,"balance"),
+                int(obs_data_get_int(settings,"delay")),manuallyMuted(settings)});
         }
         obs_data_release(settings);
     },&result);
@@ -120,8 +129,9 @@ bool ObsRouting::setDeviceParameter(const QString &uuid,const QString &device,De
     case DeviceParameter::Gain:if(value<0||value>100)return false;key="volume";break;
     case DeviceParameter::Pan:if(value< -1||value>1)return false;key="balance";break;
     case DeviceParameter::Delay:if(value<0||value>10000||std::floor(value)!=value)return false;key="delay";break;
+    case DeviceParameter::Muted:if(value!=0&&value!=1)return false;break;
     }
-    if(!key)return false;
+    if(!key&&parameter!=DeviceParameter::Muted)return false;
     auto *source=sourceById(uuid);
     if(!isAudioSource(source)||obs_source_removed(source)){
         if(source)obs_source_release(source);return false;
@@ -143,14 +153,26 @@ bool ObsRouting::setDeviceParameter(const QString &uuid,const QString &device,De
     },&match);
     bool ok=false;
     if(match.count==1&&match.filter){
+        auto *before=obs_source_get_settings(match.filter);
         auto *settings=obs_data_create();
-        if(parameter==DeviceParameter::Delay)obs_data_set_int(settings,key,int(value));
+        if(parameter==DeviceParameter::Muted){
+            const bool muted=value!=0;
+            const double gain=sendGain(before);
+            obs_data_set_bool(settings,muteKey,muted);
+            obs_data_set_double(settings,savedGainKey,gain);
+            obs_data_set_double(settings,"volume",muted?0:gain);
+        }else if(parameter==DeviceParameter::Gain&&manuallyMuted(before)){
+            obs_data_set_double(settings,savedGainKey,value);
+        }else if(parameter==DeviceParameter::Delay)obs_data_set_int(settings,key,int(value));
         else obs_data_set_double(settings,key,value);
+        obs_data_release(before);
         obs_source_update(match.filter,settings);
         obs_data_release(settings);
         auto *current=obs_source_get_settings(match.filter);
         if(current){
-            ok=std::abs(obs_data_get_double(current,key)-value)<.001;
+            if(parameter==DeviceParameter::Muted)ok=manuallyMuted(current)==(value!=0);
+            else if(parameter==DeviceParameter::Gain)ok=std::abs(sendGain(current)-value)<.001;
+            else ok=std::abs(obs_data_get_double(current,key)-value)<.001;
             obs_data_release(current);
         }
     }

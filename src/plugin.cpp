@@ -138,6 +138,7 @@ static bool setAudioMixerBackside(bool enabled) {
             return levels->sample(routes);
         }
     );
+    patchbay->setDeviceVisibilityFile(QDir(QFileInfo(stripConfigPath).absolutePath()).filePath("audio-device-visibility.json"));
     patchbay->setDeviceBackend(
         []{return augment::ObsRouting::deviceDestinations();},
         [](const QString &source,const QString &device,bool connected){

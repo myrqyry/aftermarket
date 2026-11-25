@@ -7,6 +7,7 @@
 #include <QToolButton>
 #include <QLabel>
 #include <QSpinBox>
+#include <QTemporaryDir>
 #include <QMouseEvent>
 #include <QContextMenuEvent>
 #include <QPainter>
@@ -394,6 +395,34 @@ int main(int argc,char **argv){
  sendGain->setValue(25);
  REQUIRE(parameterWrites==1&&sources[0].deviceSends[0].volume==25);
  REQUIRE(trackWrites==1);
+ QTemporaryDir visibilityDir;
+ REQUIRE(visibilityDir.isValid());
+ bay.setDeviceVisibilityFile(visibilityDir.filePath("devices.json"));
+ QMenu deviceMenu;bay.populateRoutingMenu(&deviceMenu);
+ auto *visibility=deviceMenu.findChild<QMenu*>("aftermarket-device-visibility");
+ REQUIRE(visibility&&visibility->actions().size()==1);
+ visibility->actions()[0]->trigger();
+ REQUIRE(bay.deviceDestinationCount()==0&&sends==1);
+ REQUIRE(sources[0].deviceSends.size()==1&&sources[0].deviceSends[0].enabled);
+ REQUIRE(bay.visibleCableCount()==cablesBeforeDevice);
+ augment::AudioPatchbay restored([&]{return sources;},{},{});
+ restored.setDeviceVisibilityFile(visibilityDir.filePath("devices.json"));
+ restored.setDeviceBackend([]{return QVector<augment::DeviceDestination>{{"sink-A","Renamed speakers"}};},{});
+ REQUIRE(restored.deviceDestinationCount()==0);
+ visibility->actions()[0]->trigger();
+ REQUIRE(bay.deviceDestinationCount()==1&&bay.visibleCableCount()==cablesBeforeDevice+1);
+ bay.setDeviceParameterWriter([&](const QString &id,const QString &device,augment::DeviceParameter param,double value){
+     if(id!="browser"||device!="sink-A"||param!=augment::DeviceParameter::Muted)return false;
+     sources[0].deviceSends[0].muted=value!=0;return true;
+ });
+ QMenu muteMenu;REQUIRE(bay.populateDeviceSendMenu(&muteMenu,"browser","sink-A"));
+ auto *mute=muteMenu.findChild<QAction*>("aftermarket-send-muted");
+ REQUIRE(mute&&mute->isCheckable()&&!mute->isChecked());
+ mute->trigger();
+ REQUIRE(sources[0].deviceSends[0].muted&&sources[0].deviceSends[0].volume==25);
+ REQUIRE(bay.visibleCableCount()==cablesBeforeDevice+1);
+ mute->trigger();
+ REQUIRE(!sources[0].deviceSends[0].muted&&sends==1);
 
  REQUIRE(bay.toggleDevice("sink-A")&&sends==2&&!enabled);
  REQUIRE(bay.visibleCableCount()==cablesBeforeDevice);

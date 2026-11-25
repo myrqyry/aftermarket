@@ -114,6 +114,25 @@ int main(int argc,char **argv) {
     REQUIRE(qAbs(record.deviceSends[0].volume-35)<.001);
     REQUIRE(qAbs(record.deviceSends[0].balance+.4)<.001&&record.deviceSends[0].delayMs==125);
     REQUIRE(obs_source_get_volume(source)==nativeGain&&obs_source_muted(source));
+    REQUIRE(augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Muted,1));
+    auto *actual=obs_source_get_settings(managed);
+    REQUIRE(obs_data_get_double(actual,"volume")==0);
+    obs_data_release(actual);
+    record=matches(augment::ObsRouting::list());
+    REQUIRE(record.deviceSends.size()==1&&record.deviceSends[0].muted&&record.deviceSends[0].volume==35);
+    // Scene activity can re-enable a filter, but must not restore muted gain.
+    obs_source_set_enabled(managed,false);obs_source_set_enabled(managed,true);
+    REQUIRE(augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Gain,42));
+    actual=obs_source_get_settings(managed);
+    REQUIRE(obs_data_get_double(actual,"volume")==0);
+    obs_data_release(actual);
+    REQUIRE(augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Muted,0));
+    actual=obs_source_get_settings(managed);
+    REQUIRE(obs_data_get_double(actual,"volume")==42);
+    obs_data_release(actual);
+    REQUIRE(obs_source_muted(source));
+    REQUIRE(!matches(augment::ObsRouting::list()).deviceSends[0].muted);
+    REQUIRE(!augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Muted,.5));
     REQUIRE(augment::ObsRouting::setDeviceSend(uuid,"managed-sink",false));
     REQUIRE(matches(augment::ObsRouting::list()).deviceSends.isEmpty());
     obs_source_release(managed);

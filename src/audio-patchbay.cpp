@@ -17,6 +17,11 @@
 #include <QPainterPathStroker>
 #include <QSpinBox>
 #include <QWidgetAction>
+#include <QFile>
+#include <QSaveFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QMouseEvent>
 #include <QContextMenuEvent>
 #include <QKeyEvent>
@@ -96,7 +101,7 @@ class AudioPatchbay::Canvas final : public QWidget {
             const int i=target-monitorTarget-1;
             if(i>=devices.size())return false;
             return std::any_of(src.deviceSends.begin(),src.deviceSends.end(),[&](const auto &send){
-                return send.deviceId==devices[i].id&&send.enabled;
+                return send.deviceId==devices[i].id;
             });
         }
         return target==monitorTarget?src.monitor!=0:
@@ -315,7 +320,7 @@ protected:
                     // dashed strokes indicate status, not disconnected wiring.
                     const bool healthy=track>monitorTarget?
                         std::any_of(src.deviceSends.begin(),src.deviceSends.end(),[&](const auto &send){
-                            return send.deviceId==deviceId(track)&&send.enabled&&send.volume>0;
+                            return send.deviceId==deviceId(track)&&send.enabled&&!send.muted&&send.volume>0;
                         }):src.enabled&&!src.muted;
                     QColor wire=current?accent:fg;
                     wire.setAlpha(current?(healthy?225:155):(healthy?145:90));
@@ -680,14 +685,62 @@ void AudioPatchbay::populateRoutingMenu(QMenu *menu){
     connect(reload,&QAction::triggered,menu,[safe]{
         if(safe){safe->refreshDevices();safe->refresh();}
     });
+    if(!availableDevices.isEmpty()){
+        auto *devices=menu->addMenu("Device destinations");
+        devices->setObjectName("aftermarket-device-visibility");
+        for(const auto &device:availableDevices){
+            auto *action=devices->addAction(device.name);
+            action->setCheckable(true);
+            action->setChecked(!hiddenDevices.contains(device.id));
+            connect(action,&QAction::toggled,devices,[safe,action,id=device.id](bool visible){
+                if(safe&&!safe->setDeviceVisible(id,visible)){
+                    const QSignalBlocker blocker(action);action->setChecked(!visible);
+                    safe->notify("Could not save device visibility",true);
+                }
+            });
+        }
+    }
 }
 void AudioPatchbay::setDeviceBackend(DeviceQuery devices,SetDeviceSend send){
     deviceQuery=std::move(devices);setDeviceSend=std::move(send);
     refreshDevices();refresh();
 }
 void AudioPatchbay::refreshDevices(){
-    destinations=deviceQuery?deviceQuery():QVector<DeviceDestination>{};
+    availableDevices=deviceQuery?deviceQuery():QVector<DeviceDestination>{};
+    applyDeviceVisibility();
+}
+void AudioPatchbay::applyDeviceVisibility(){
+    destinations.clear();
+    for(const auto &device:availableDevices)
+        if(!hiddenDevices.contains(device.id))destinations.append(device);
     canvas->setDevices(destinations);
+}
+void AudioPatchbay::setDeviceVisibilityFile(QString file){
+    deviceVisibilityFile=std::move(file);hiddenDevices.clear();
+    QFile input(deviceVisibilityFile);
+    if(input.open(QIODevice::ReadOnly)&&input.size()<=65536){
+        auto root=QJsonDocument::fromJson(input.readAll()).object();
+        if(root.value("version").toInt()==1)
+            for(const auto &value:root.value("hidden").toArray()){
+                const auto id=value.toString();
+                if(!id.isEmpty()&&!hiddenDevices.contains(id))hiddenDevices.append(id);
+            }
+    }
+    applyDeviceVisibility();
+}
+bool AudioPatchbay::setDeviceVisible(const QString &id,bool visible){
+    auto next=hiddenDevices;
+    if(visible)next.removeAll(id);
+    else if(!next.contains(id))next.append(id);
+    if(next==hiddenDevices)return true;
+    if(!deviceVisibilityFile.isEmpty()){
+        QJsonArray hidden;
+        for(const auto &item:next)hidden.append(item);
+        const auto bytes=QJsonDocument(QJsonObject{{"version",1},{"hidden",hidden}}).toJson();
+        QSaveFile output(deviceVisibilityFile);
+        if(!output.open(QIODevice::WriteOnly)||output.write(bytes)!=bytes.size()||!output.commit())return false;
+    }
+    hiddenDevices=next;applyDeviceVisibility();return true;
 }
 void AudioPatchbay::setDeviceParameterWriter(DeviceParameterWriter writer){
     deviceParameterWriter=std::move(writer);
@@ -711,6 +764,14 @@ bool AudioPatchbay::populateDeviceSendMenu(QMenu *menu,const QString &id,const Q
         return true;
     }
     if(deviceParameterWriter){
+        auto *mute=menu->addAction("Mute independent send");
+        mute->setObjectName("aftermarket-send-muted");
+        mute->setCheckable(true);mute->setChecked(send->muted);
+        connect(mute,&QAction::toggled,menu,[this,id,device,mute](bool muted){
+            const bool ok=deviceParameterWriter&&deviceParameterWriter(id,device,DeviceParameter::Muted,muted?1:0);
+            if(!ok){const QSignalBlocker blocker(mute);mute->setChecked(!muted);}
+            refresh();notify(ok?"Updated independent send mute":"Send unavailable or linked",!ok);
+        });
         auto addEditor=[this,menu,id,device](const QString &label,const char *name,DeviceParameter parameter,
              int min,int max,int value,int step,const QString &suffix,double factor){
             auto *action=new QWidgetAction(menu);
@@ -752,7 +813,7 @@ bool AudioPatchbay::connectDevice(const QString &id,const QString &device){
     const auto current=query?query():routes;
     const auto source=std::find_if(current.begin(),current.end(),[&](const auto &r){return r.id==id;});
     if(source==current.end())return false;
-    if(std::any_of(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device&&s.enabled;})){
+    if(std::any_of(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device;})){
         refresh();selectSource(id);return true;
     }
     const bool ok=setDeviceSend(id,device,true);
@@ -765,7 +826,7 @@ bool AudioPatchbay::toggleDevice(const QString &device){
     const auto current=query?query():routes;
     const auto source=std::find_if(current.begin(),current.end(),[&](const auto &r){return r.id==selected;});
     if(source==current.end())return false;
-    const auto send=std::find_if(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device&&s.enabled;});
+    const auto send=std::find_if(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device;});
     if(send==source->deviceSends.end())return connectDevice(selected,device);
     if(!send->managed){notify("External Audio Monitor filter: edit it in OBS Filters",true);return false;}
     const bool ok=setDeviceSend(selected,device,false);
