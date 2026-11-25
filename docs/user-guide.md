@@ -169,8 +169,47 @@ Inspired by [CodeYan's Source Defaults](https://obsproject.com/forum/resources/s
 which applies a template source's settings to newly created sources. This
 named-preset implementation uses native OBS APIs independently, requires
 no companion plugin or fork, and does not automatically change new sources.
-Automatic defaults and the upstream filter's broader audio/scene-item
-copy features are separate follow-on work.
+Automatic defaults are intentionally excluded. No settings are applied merely by creating a source.
+
+#### Whole filter chains
+
+Open the native Filters dialog and toggle **Whole filter chain** in the
+preset overflow menu. The same dropdown, Load, Save and management
+actions now operate on the entire chain rather than the selected filter.
+This mode is available even on sources with no filters. Toggle it off
+to return to individual filter presets.
+
+Save captures ordered filter IDs, names, enabled states and user settings.
+Load requires explicit confirmation before replacing the target's filters.
+Chains can be shared across different parent source types; Aftermarket
+checks that every filter type is registered and compatible with the target's
+audio/video capabilities before changing the chain. Missing or incompatible
+types reject the entire load. New filters receive new identities instead of
+copying the source's UUIDs.
+
+**Undo last preset load** restores the previous filter objects (including
+their original identities and order) while the same Filters dialog remains
+open. It refuses to overwrite subsequent edits to the chain. It is not a
+global undo history. The operation uses native filter removal/addition;
+it is not an atomic render transaction, and plugin-specific attach/detach
+side effects are possible. Preflight cannot verify arbitrary plugin
+initialization or external resources. A chain stores settings, not media,
+model files, private plugin state, or hotkey bindings. Filters marked
+nonduplicable cannot be loaded. No automatic defaults or source creation
+hooks are used.
+
+#### Portable presets
+
+Choose **Export selected preset…** or **Import preset…** from the overflow.
+The versioned JSON file identifies the preset scope, name and exact
+settings payload. Import validates the format and scope, and only adds a
+named preset to the library; it never changes the current source or filters.
+If a name already exists, choose another name. Export refuses to overwrite
+an existing file. Files are written with owner-only permissions on Linux;
+they are not encrypted and may contain credentials, private text, local
+paths, or source-specific references. Review them before sharing. Filter
+chain imports can be stored before their plugins are installed, but cannot
+be loaded until the registered filter types are compatible.
 
 Mixer and gradient edits share an explicit Apply changes button; a pending
 indicator and Reload saved settings distinguish the draft from applied

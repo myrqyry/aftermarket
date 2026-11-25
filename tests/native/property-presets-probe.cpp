@@ -16,10 +16,17 @@
 #include <QAction>
 #include <QPointer>
 #include <QFile>
+#include <QFileDialog>
+#include <QStringList>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QLayout>
 OBS_DECLARE_MODULE()
 static obs_source_t *source=nullptr,*other=nullptr,*filter1=nullptr,*filter2=nullptr;
 static QPointer<QDialog> dlg;
+static QStringList oldIds,originalNames;
+static QString exported;
 static void check(const char *name,bool pass){blog(pass?LOG_INFO:LOG_ERROR,"PRESETPROBE %s=%d",name,pass);}
 static QDialog *dialog(const char *cls){
  for(auto *w:QApplication::topLevelWidgets())if(w->isVisible()&&w->inherits(cls))return qobject_cast<QDialog*>(w);
@@ -57,6 +64,43 @@ static bool manage(const QString &name,const QString &newName={}){
    if(auto *yes=prompt->button(QMessageBox::Yes)){yes->click();return true;}
   }
  }
+ return false;
+}
+static QStringList chainNames(obs_source_t *parent){
+ QStringList names;
+ obs_source_enum_filters(parent,[](obs_source_t*,obs_source_t *f,void *data){
+  static_cast<QStringList*>(data)->append(QString::fromUtf8(obs_source_get_name(f)));
+ },&names);return names;
+}
+static QStringList chainIds(obs_source_t *parent){
+ QStringList ids;
+ obs_source_enum_filters(parent,[](obs_source_t*,obs_source_t *f,void *data){
+  static_cast<QStringList*>(data)->append(QString::fromUtf8(obs_source_get_uuid(f)));
+ },&ids);return ids;
+}
+static bool fileAction(const QString &label,const QString &path){
+ auto *a=action(label);if(!a||!a->isEnabled())return false;a->trigger();
+ for(auto *picker:dlg->findChildren<QFileDialog*>())if(picker->isVisible()){
+  picker->selectFile(path);return QMetaObject::invokeMethod(picker,"accept",Qt::DirectConnection);
+ }
+ return false;
+}
+static bool writeChain(const QString &file,const QString &name,const QString &id){
+ QJsonObject row{{"id",id},{"name","New filter"},{"enabled",true},{"settings","{}"}};
+ auto payload=QJsonDocument(QJsonObject{{"filters",QJsonArray{row}}}).toJson(QJsonDocument::Compact);
+ QFile output(file);if(!output.open(QIODevice::WriteOnly|QIODevice::NewOnly))return false;
+ auto bytes=QJsonDocument(QJsonObject{{"format","aftermarket-preset"},{"version",1},{"type","chain"},{"name",name},{"settings",QString::fromUtf8(payload)}}).toJson();
+ return output.write(bytes)==bytes.size();
+}
+static bool dismissWarning(){
+ for(auto *prompt:dlg->findChildren<QMessageBox*>())if(prompt->isVisible()&&prompt->icon()==QMessageBox::Warning){
+  prompt->accept();return true;
+ }
+ return false;
+}
+static bool confirmYes(){
+ for(auto *prompt:dlg->findChildren<QMessageBox*>())if(prompt->isVisible())
+  if(auto *yes=prompt->button(QMessageBox::Yes)){yes->click();return true;}
  return false;
 }
 static void nativeButton(QDialogButtonBox::StandardButton which){
@@ -138,7 +182,70 @@ static void probe(){
   check("updated_load",load("Renamed")&&get(source,"width")==480);
   check("delete",manage("Delete…")&&combo()&&combo()->findData("Renamed")<0);
   nativeButton(QDialogButtonBox::Ok);
-  closeObs();
+  obs_source_set_enabled(filter2,false);
+  originalNames=chainNames(source);
+  obs_frontend_open_source_filters(source);
+ });
+ QTimer::singleShot(5700,qApp,[]{
+  dlg=dialog("OBSBasicFilters");
+  auto *scope=action("Whole filter chain");if(scope)scope->trigger();
+  check("chain_mode",scope&&scope->isChecked()&&combo()&&combo()->itemText(0)=="Chains…");
+  check("chain_save",save("Grade")&&combo()->findData("Grade")>=0);
+  exported=QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/grade.json";
+  check("chain_export",fileAction("Export selected preset…",exported)&&QFileInfo::exists(exported));
+  check("chain_delete",manage("Delete…")&&combo()->findData("Grade")<0);
+  check("chain_import",fileAction("Import preset…",exported)&&combo()->findData("Grade")>=0);
+  check("import_does_not_apply",chainNames(source)==originalNames);
+  nativeButton(QDialogButtonBox::Close);
+  auto *old=obs_source_create_private("color_filter_v2","Original target",nullptr);
+  obs_source_filter_add(other,old);set(old,"gamma",.4);obs_source_release(old);
+  oldIds=chainIds(other);
+  obs_frontend_open_source_filters(other);
+ });
+ QTimer::singleShot(6400,qApp,[]{
+  dlg=dialog("OBSBasicFilters");auto *scope=action("Whole filter chain");if(scope&&!scope->isChecked())scope->trigger();
+  check("chain_visible_other_source",combo()&&combo()->findData("Grade")>=0);
+  const bool started=load("Grade");
+  check("chain_requires_confirmation",started&&chainIds(other)==oldIds);
+  check("chain_confirm",confirmYes());
+ });
+ QTimer::singleShot(7000,qApp,[]{
+  check("chain_order",chainNames(other)==originalNames);
+  auto *a=obs_source_get_filter_by_name(other,"Color first"),*b=obs_source_get_filter_by_name(other,"Color second");
+  check("chain_settings_enabled",a&&b&&get(a,"gamma")==.25&&get(b,"gamma")==.75&&obs_source_enabled(a)&&!obs_source_enabled(b));
+  if(a)obs_source_release(a);if(b)obs_source_release(b);
+  check("new_ids",chainIds(other)!=chainIds(source));
+  check("source_chain_intact",chainNames(source)==originalNames);
+  auto *undo=action("Undo last preset load");if(undo&&undo->isEnabled())undo->trigger();
+ });
+ QTimer::singleShot(7600,qApp,[]{
+  check("chain_undo_identity",chainIds(other)==oldIds&&chainNames(other)==QStringList{"Original target"});
+  auto *old=obs_source_get_filter_by_name(other,"Original target");check("chain_undo_settings",old&&get(old,"gamma")==.4);if(old)obs_source_release(old);
+  const auto bad=QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/missing.json";
+  check("missing_import",writeChain(bad,"Missing","missing_filter_for_test")&&fileAction("Import preset…",bad));
+  check("missing_load_rejected",load("Missing")&&confirmYes()&&dismissWarning()&&chainIds(other)==oldIds);
+  const auto incompatible=QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/audio.json";
+  check("audio_import",writeChain(incompatible,"Audio only","gain_filter")&&fileAction("Import preset…",incompatible));
+  check("incompatible_load_rejected",load("Audio only")&&confirmYes()&&dismissWarning()&&chainIds(other)==oldIds);
+  nativeButton(QDialogButtonBox::Close);
+  obs_frontend_open_source_filters(other);
+ });
+ QTimer::singleShot(8200,qApp,[]{
+  dlg=dialog("OBSBasicFilters");
+  auto *original=obs_source_get_filter_by_name(other,"Original target");
+  if(original){obs_source_filter_remove(other,original);obs_source_release(original);}
+ });
+ QTimer::singleShot(8800,qApp,[]{
+  auto *scope=action("Whole filter chain");
+  if(scope&&!scope->isChecked())scope->trigger();
+  check("empty_target_access",scope&&scope->isChecked()&&combo()&&combo()->isVisible()&&chainIds(other).isEmpty());
+  check("empty_target_load",load("Grade")&&confirmYes());
+ });
+ QTimer::singleShot(9400,qApp,[]{
+  check("empty_target_loaded",chainNames(other)==originalNames);
+  auto *undo=action("Undo last preset load");if(undo&&undo->isEnabled())undo->trigger();
+  check("empty_target_undo",chainIds(other).isEmpty());
+  nativeButton(QDialogButtonBox::Close);closeObs();
  });
 }
 static void frontend(enum obs_frontend_event e,void*){if(e==OBS_FRONTEND_EVENT_FINISHED_LOADING)QTimer::singleShot(1500,qApp,probe);}

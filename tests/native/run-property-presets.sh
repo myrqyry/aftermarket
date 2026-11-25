@@ -10,11 +10,11 @@ cp "$module" "$cfg/plugins/aftermarket/bin/64bit/aftermarket.so"
 printf '[General]\nFirstRun=true\n' >"$cfg/user.ini"
 g++ -std=c++17 -fPIC -shared "$repo/tests/native/property-presets-probe.cpp" -o "$cfg/plugins/preset-probe/bin/64bit/preset-probe.so" $(pkg-config --cflags --libs Qt6Widgets) -I/usr/include/obs -lobs -lobs-frontend-api
 set +e
-timeout 22s xvfb-run -a -s '-screen 0 1600x1000x24' env HOME="$root/home" XDG_CONFIG_HOME="$root/home/.config" XDG_CACHE_HOME="$root/home/.cache" XDG_DATA_HOME="$root/home/.local/share" LIBGL_ALWAYS_SOFTWARE=1 PRESET_ROOT="$root" obs --multi --disable-shutdown-check --no-updater >"$root/obs.log" 2>&1
+timeout 28s xvfb-run -a -s '-screen 0 1600x1000x24' env HOME="$root/home" XDG_CONFIG_HOME="$root/home/.config" XDG_CACHE_HOME="$root/home/.cache" XDG_DATA_HOME="$root/home/.local/share" LIBGL_ALWAYS_SOFTWARE=1 PRESET_ROOT="$root" obs --multi --disable-shutdown-check --no-updater >"$root/obs.log" 2>&1
 rc=$?
 set -e
 echo "OBS_EXIT=$rc"
 grep PRESETPROBE "$root/obs.log" || true
 [[ "$rc" == 0 ]]
-[[ $(grep -c 'PRESETPROBE .*=[1]$' "$root/obs.log") == 18 ]]
+[[ $(grep -c 'PRESETPROBE .*=[1]$' "$root/obs.log") == 41 ]]
 ! grep -q 'PRESETPROBE .*=[0]$' "$root/obs.log"

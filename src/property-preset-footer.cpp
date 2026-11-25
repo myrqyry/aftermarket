@@ -1,5 +1,6 @@
 #include "property-preset-footer.h"
 #include "property-presets.h"
+#include "filter-chain-presets.h"
 #include <obs.hpp>
 #include <obs-frontend-api.h>
 #include <QApplication>
@@ -10,6 +11,8 @@
 #include <QToolButton>
 #include <QMenu>
 #include <QInputDialog>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QListWidget>
 #include <QPointer>
@@ -85,19 +88,26 @@ struct Footer:QWidget {
         menu=new QMenu(more);more->setMenu(menu);
         update=menu->addAction("Update selected preset…");rename=menu->addAction("Rename…");remove=menu->addAction("Delete…");
         menu->addSeparator();undo=menu->addAction("Undo last preset load");
+        menu->addSeparator();importFile=menu->addAction("Import preset…");exportFile=menu->addAction("Export selected preset…");
+        chainMode=menu->addAction("Whole filter chain");chainMode->setCheckable(true);chainMode->setVisible(false);
         layout->addWidget(combo);layout->addWidget(load);layout->addWidget(save);layout->addWidget(more);
         setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
     }
     QPointer<QDialog> dialog;
     QPointer<QWidget> view;
     QPointer<QListWidget> lastList;
-    QComboBox *combo;QToolButton *load,*save,*more;QMenu *menu;QAction *update,*rename,*remove,*undo;
+    QComboBox *combo;QToolButton *load,*save,*more;QMenu *menu;QAction *update,*rename,*remove,*undo,*importFile,*exportFile,*chainMode;
     QString uuid,type,ownerUuid,undoUuid;QByteArray previous,lastApplied;
-    bool filter=false;
+    bool filter=false,chain=false;
+    FilterChain chainBefore,chainAfter;
+    QByteArray beforeBytes,afterBytes;
+    bool chainUndo=false;
     OBSSource target(){
-        if(!dialog||!view||visibleView(dialog)!=view)return {};
+        if(!dialog)return {};
+        if(!chain&&(!view||visibleView(dialog)!=view))return {};
         OBSSource parent=titleTarget(dialog,filter);
         if(!parent||utf8(obs_source_get_uuid(parent))!=ownerUuid)return {};
+        if(chain)return parent;
         if(!filter)return utf8(obs_source_get_uuid(parent))==uuid?parent:OBSSource{};
         auto *a=dialog->findChild<QListWidget*>("asyncFilters");
         auto *b=dialog->findChild<QListWidget*>("effectFilters");
@@ -110,7 +120,7 @@ struct Footer:QWidget {
     }
     void refresh(PropertyPresets &store,const QString &selection={}){
         QString wanted=selection.isEmpty()?combo->currentData().toString():selection;
-        QSignalBlocker block(combo);combo->clear();combo->addItem("Presets…",QString{});
+        QSignalBlocker block(combo);combo->clear();combo->addItem(chain?"Chains…":"Presets…",QString{});
         for(const auto &name:store.names(type))combo->addItem(name,name);
         int i=combo->findData(wanted);combo->setCurrentIndex(i<0?0:i);
         buttons();
@@ -119,8 +129,16 @@ struct Footer:QWidget {
         bool bound=!uuid.isEmpty()&&!type.isEmpty();
         bool chosen=bound&&!combo->currentData().toString().isEmpty();
         combo->setEnabled(bound);save->setEnabled(bound);load->setEnabled(chosen);update->setEnabled(chosen);
-        rename->setEnabled(chosen);remove->setEnabled(chosen);undo->setEnabled(bound&&uuid==undoUuid&&!previous.isEmpty());
+        rename->setEnabled(chosen);remove->setEnabled(chosen);
+        importFile->setEnabled(bound);exportFile->setEnabled(chosen);
+        undo->setEnabled(bound&&(chain?chainUndo:(uuid==undoUuid&&!previous.isEmpty())));
+        chainMode->setChecked(chain);
+        more->setToolTip(chain?"Manage whole filter chain presets":"Manage presets");
+        combo->setToolTip(chain?"Whole filter chain presets":"Presets for selected source or filter type");
+        load->setToolTip(chain?"Replace the whole filter chain with the selected preset":"Apply selected preset");
+        save->setToolTip(chain?"Save the whole filter chain as a new preset":"Save current properties as a new preset");
     }
+    QByteArray snapshot(obs_source_t *s){return chain?encodeFilters(captureFilters(s)):settingsOf(s);}
     bool apply(const QByteArray &bytes){
         auto source=target();if(!source||!supports(source)||typeOf(source)!=type)return false;
         OBSDataAutoRelease data=obs_data_create_from_json(bytes.constData());
@@ -182,7 +200,7 @@ void PropertyPresetFooter::scan(){
         if(!layout||!box->button(filter?QDialogButtonBox::Close:QDialogButtonBox::Ok))continue;
         Footer *f=nullptr;for(auto &item:state->footers)if(item&&item->dialog==dialog){f=item;break;}
         if(!f){
-            f=new Footer(dialog);f->filter=filter;state->footers.append(f);
+            f=new Footer(dialog);f->filter=filter;f->chainMode->setVisible(filter);state->footers.append(f);
             for(auto *list:{dialog->findChild<QListWidget*>("asyncFilters"),dialog->findChild<QListWidget*>("effectFilters")}){
                 if(!list)continue;
                 if(list->hasFocus())f->lastList=list;
@@ -205,18 +223,52 @@ void PropertyPresetFooter::scan(){
                 auto type=f->type,uuid=f->uuid;
                 askName("Save preset",{},[this,f,type,uuid,refreshAll,warn](QString name){
                     auto target=f->target();if(!target||f->uuid!=uuid||f->type!=type)return;
-                    if(!state->store.save(type,name,settingsOf(target),false)){warn();return;}
+                    if(!state->store.save(type,name,f->snapshot(target),false)){warn();return;}
                     refreshAll(name);
                 });
             });
-            connect(f->load,&QToolButton::clicked,f,[this,f,warn]{
+            // Destructive operations require an explicit confirmation; the
+            // callback is disconnected if recovery destroys the footer.
+            auto confirm=[f](QString title,QString message,std::function<void()> callback){
+                auto *prompt=new QMessageBox(QMessageBox::Question,title,message,QMessageBox::Yes|QMessageBox::No,f);
+                prompt->setAttribute(Qt::WA_DeleteOnClose);prompt->setTextFormat(Qt::PlainText);prompt->setDefaultButton(QMessageBox::No);
+                QObject::connect(prompt,&QMessageBox::finished,f,[callback](int result){if(result==QMessageBox::Yes)callback();});
+                prompt->open();
+            };
+            connect(f->load,&QToolButton::clicked,f,[this,f,warn,confirm]{
                 auto target=f->target();if(!target)return;
                 auto data=state->store.read(f->type,f->combo->currentData().toString());
+                if(f->chain){
+                    if(!PropertyPresets::validChain(data)){warn();return;}
+                    const auto old=captureFilters(target);
+                    const auto oldBytes=encodeFilters(old);
+                    const auto uuid=f->ownerUuid;
+                    if(oldBytes.isEmpty()){warn();return;}
+                    confirm("Replace filter chain","Replace every filter on this source? The previous chain can be restored with Undo last preset load while this dialog remains open.",[f,warn,data,old,oldBytes,uuid]{
+                        auto parent=f->target();
+                        if(!f->chain||!parent||f->ownerUuid!=uuid||
+                           captureFilters(parent)!=old||encodeFilters(old)!=oldBytes){warn();return;}
+                        FilterChain next;
+                        if(!prepareFilters(parent,data,next)||!replaceFilters(parent,old,next)){warn();return;}
+                        f->chainBefore=old;f->beforeBytes=oldBytes;f->chainAfter=next;
+                        f->afterBytes=encodeFilters(next);f->chainUndo=!f->afterBytes.isEmpty();
+                        obs_frontend_save();f->buttons();
+                    });
+                    return;
+                }
                 auto previous=settingsOf(target);
                 if(data.isEmpty()||!f->apply(data)){warn();return;}
                 f->undoUuid=f->uuid;f->previous=previous;f->lastApplied=settingsOf(target);f->buttons();
             });
             connect(f->undo,&QAction::triggered,f,[f,warn]{
+                if(f->chain){
+                    auto parent=f->target();
+                    if(!parent||!f->chainUndo||captureFilters(parent)!=f->chainAfter||
+                       encodeFilters(f->chainAfter)!=f->afterBytes||encodeFilters(f->chainBefore)!=f->beforeBytes||
+                       !replaceFilters(parent,f->chainAfter,f->chainBefore)){warn();return;}
+                    f->chainUndo=false;f->chainBefore.clear();f->chainAfter.clear();
+                    obs_frontend_save();f->buttons();return;
+                }
                 if(f->uuid!=f->undoUuid||f->previous.isEmpty())return;
                 auto target=f->target();
                 if(!target||settingsOf(target)!=f->lastApplied){f->previous.clear();f->buttons();warn();return;}
@@ -231,19 +283,11 @@ void PropertyPresetFooter::scan(){
                     refreshAll(name);
                 });
             });
-            // Destructive operations require an explicit confirmation; the
-            // callback is disconnected if recovery destroys the footer.
-            auto confirm=[f](QString title,QString message,std::function<void()> callback){
-                auto *prompt=new QMessageBox(QMessageBox::Question,title,message,QMessageBox::Yes|QMessageBox::No,f);
-                prompt->setAttribute(Qt::WA_DeleteOnClose);prompt->setTextFormat(Qt::PlainText);prompt->setDefaultButton(QMessageBox::No);
-                QObject::connect(prompt,&QMessageBox::finished,f,[callback](int result){if(result==QMessageBox::Yes)callback();});
-                prompt->open();
-            };
             connect(f->update,&QAction::triggered,f,[this,f,confirm,refreshAll,warn]{
                 const auto type=f->type,uuid=f->uuid,name=f->combo->currentData().toString();
                 confirm("Update preset","Replace the saved settings for "+name+"?",[this,f,type,uuid,name,refreshAll,warn]{
                     auto target=f->target();if(!target||f->uuid!=uuid||f->type!=type)return;
-                    if(!state->store.save(type,name,settingsOf(target),true)){warn();return;}
+                    if(!state->store.save(type,name,f->snapshot(target),true)){warn();return;}
                     refreshAll(name);
                 });
             });
@@ -255,6 +299,44 @@ void PropertyPresetFooter::scan(){
                     refreshAll({});
                 });
             });
+            connect(f->chainMode,&QAction::triggered,f,[this,f](bool enabled){
+                f->chain=enabled;f->type.clear();f->uuid.clear();scan();
+            });
+            // Pickers are heap-owned and asynchronous; no nested event loop
+            // can outlive the adapter during emergency recovery.
+            connect(f->importFile,&QAction::triggered,f,[this,f,askName,refreshAll,warn]{
+                const auto type=f->type;
+                auto *picker=new QFileDialog(f,"Import preset");picker->setAttribute(Qt::WA_DeleteOnClose);
+                picker->setOption(QFileDialog::DontUseNativeDialog);picker->setFileMode(QFileDialog::ExistingFile);picker->setNameFilter("Aftermarket presets (*.json)");
+                connect(picker,&QFileDialog::fileSelected,f,[this,f,type,askName,refreshAll,warn](const QString &path){
+                    if(f->type!=type)return;
+                    QString name;QByteArray payload;
+                    if(!PropertyPresets::readPortable(type,path,name,payload)){warn();return;}
+                    if(!state->store.names(type).contains(name)){
+                        if(!state->store.save(type,name,payload,false)){warn();return;}
+                        refreshAll(name);return;
+                    }
+                    askName("Import under a different name",name,[this,f,type,payload,refreshAll,warn](QString name){
+                        if(f->type!=type)return;
+                        if(!state->store.save(type,name,payload,false)){warn();return;}
+                        refreshAll(name);
+                    });
+                });
+                picker->open();
+            });
+            connect(f->exportFile,&QAction::triggered,f,[this,f,warn]{
+                const auto type=f->type,name=f->combo->currentData().toString();
+                auto *picker=new QFileDialog(f,"Export preset (may contain credentials or local paths)");
+                picker->setAttribute(Qt::WA_DeleteOnClose);picker->setOption(QFileDialog::DontUseNativeDialog);picker->setAcceptMode(QFileDialog::AcceptSave);
+                picker->setFileMode(QFileDialog::AnyFile);picker->setNameFilter("Aftermarket presets (*.json)");
+                picker->setDefaultSuffix("json");picker->selectFile("preset.json");
+                picker->setOption(QFileDialog::DontConfirmOverwrite,true);
+                connect(picker,&QFileDialog::fileSelected,f,[this,f,type,name,warn](const QString &path){
+                    if(f->type!=type||!state->store.exportPreset(type,name,path))warn();
+                });
+                picker->open();
+            });
+
         }
         if(layout->indexOf(f)<0){
             QAbstractButton *defaults=box->button(QDialogButtonBox::RestoreDefaults);
@@ -267,7 +349,7 @@ void PropertyPresetFooter::scan(){
         const auto ownerId=target?utf8(obs_source_get_uuid(target)):QString{};
         if(f->ownerUuid.isEmpty())f->ownerUuid=ownerId;
         if(ownerId!=f->ownerUuid)target={};
-        if(filter){
+        if(filter&&!f->chain){
             auto *a=dialog->findChild<QListWidget*>("asyncFilters");
             auto *b=dialog->findChild<QListWidget*>("effectFilters");
             auto x=listTarget(a),y=listTarget(b);OBSSource selected;
@@ -278,10 +360,11 @@ void PropertyPresetFooter::scan(){
         const auto uuid=target?utf8(obs_source_get_uuid(target)):QString{};
         if(f->view!=view||f->uuid!=uuid){
             f->view=view;f->uuid.clear();f->type.clear();
-            if(view&&supports(target)){f->uuid=uuid;f->type=typeOf(target);}
+            if(f->chain&&target){f->uuid=uuid;f->type="chain";}
+            else if(view&&supports(target)){f->uuid=uuid;f->type=typeOf(target);}
             f->refresh(state->store);
         }
-        f->setVisible(!f->uuid.isEmpty());
+        f->setVisible(!f->uuid.isEmpty()||(filter&&!ownerId.isEmpty()&&ownerId==f->ownerUuid));
     }
 }
 }

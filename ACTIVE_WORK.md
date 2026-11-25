@@ -3248,3 +3248,41 @@ and duplication distinction; do not silently apply automatic defaults.
 
 ### Preset scope decision — 2026-11-25
 User explicitly declined automatic defaults. Keep presets named and explicitly loaded by the user; do not apply them automatically on source/filter creation or add Source Defaults template-filter behavior. Earlier automatic-default follow-on is superseded.
+
+## 2026-11-25: whole filter chains and portable preset files
+
+Explicit-load-only scope preserved. Same footer, overflow toggle Whole
+filter chain (available even with no selected filter); dropdown, Save,
+Load, Update/Rename/Delete/Undo and Import/Export operate on active scope.
+Chain namespace shared across parents; exact filter IDs, order, names,
+enabled state, user settings serialized, max 64 entries / existing 1 MiB
+payload bound. No UUID/private/hotkey copying. Validate all registered
+filter types and AV capabilities (same native mask/audio-only exception)
+before constructing; reject nonduplicable filters. Precreate private
+filters, explicit confirmation and compare original objects/settings,
+then remove/add via native APIs and verify order; best-effort rollback
+with retained originals if attachment fails. Undo retains original refs
+until dialog closes, verifies current and detached original snapshots,
+restores identity/order, including empty chain. No native global undo
+or atomic render transaction; plugin-specific attach/detach side effects
+and plugin initialization/external resources not fully verifiable.
+
+Versioned aftermarket-preset JSON envelope stores exact settings string;
+validate scope/name/payload, size and format; import only adds, duplicate
+prompts new name, no automatic application. Export NewOnly, owner-only
+permissions, no clobber, no encryption. Picker/prompts heap-owned by
+footer. Existing corrupt store preserved. No auto defaults.
+
+RED property-presets test missing export/import APIs; GREEN focused
+store tests including exact roundtrip, duplicate, wrong type, malformed
+and empty chain. Full CTest 39/39 /tmp/am-chain-final-ctest.log (10.18s).
+Native OBS 32.2.0 /tmp/am-presets-native.njl9zs/obs.log: 41/41 checks,
+exit0, two unattributed libobs leaks. Prior individual source/filter tests
+remain green; whole chain save/export/delete/import, no auto apply,
+cross-source replacement confirmation, order/settings/disabled state,
+fresh UUIDs, source unchanged, undo original UUID/settings, missing plugin
+and incompatible audio filter rejection preserving target, empty target
+load/undo. Linux/Xvfb only; mixed AV chains and third-party special filter
+initialization not separately qualified. Docs updated. Production OBS
+running untouched; no install/push. Prior unstaged plugin.cpp comment
+preserved.

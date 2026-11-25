@@ -186,7 +186,7 @@ palette. Optional refinements include:
 - Theme-colored transform selection frames and handles.
 - End or middle ellipses for long labels, while preserving actual names.
 - Responsive source/filter property columns (Auto, 1, up to 2, or up to 3) and collapsible native property groups.
-- Named source and filter property presets directly in the native Defaults/OK/Close footer.
+- Named source/filter property and whole filter-chain presets directly in the native Defaults/OK/Close footer, with portable JSON import/export.
 - Animated gradient tracks, menu artwork, dock collapse, and a brief
   AudioBus half-turn. Disable interface animations for immediate transitions.
 
@@ -200,7 +200,7 @@ palette. Optional refinements include:
 
 **Property presets:** choose a saved preset, Load, Save a new preset, or use
 the overflow menu to update, rename, delete, or undo the last load. Presets
-are scoped to the exact source/filter type. Native Defaults and source
+are scoped to the exact source/filter type. In Filters, toggle **Whole filter chain** in the overflow menu to save or replace an ordered chain, including settings and enabled state. Import/export supports both preset scopes. Native Defaults and source
 OK/Cancel remain intact. See [property presets](docs/user-guide.md#named-source-and-filter-presets).
 
 [Appearance and motion guide](docs/user-guide.md#appearance-and-motion)
