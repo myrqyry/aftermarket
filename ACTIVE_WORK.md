@@ -3081,3 +3081,35 @@ Evidence /tmp/source-dock-refresh-native-20261124/obs-final.log; native
 probe source committed in fork. Aftermarket 36/36 CTest passed. No
 production install or publication; HDR cache and broader visual/content
 testing remain open.
+
+
+## Lightweight Source Dock lifecycle and cached resolution — 2026-11-24
+
+Fork ~/loam/obs-source-dock workspace-api commit 0a37ed0. Separate
+persistent previewRequested from actual visibility; balanced showing
+reference via PreviewVisibility, detach render callback before display
+destruction, release cached RGBA texture when inactive; hide/show and
+controls-only resume without duplicate callbacks. Native display destruction
+on hide releases swapchain; tested Linux X11 only. Qt previewVisible and
+previewSupported properties expose Controls only in existing Aftermarket
+overflow; previewResolution property (320–2048, default 2048) caps cached
+SDR viewport dimensions with aspect preserved/no upscale. Cache bytes
+property measures nominal RGBA payload, not total VRAM. Preferences saved
+as native scene settings; no source filter or Program mutation. Freeze
+recaptures on reopening/cache resolution change. Visible previews still
+present at OBS cadence. Shared texture cache deferred: independent zoom,
+crop, background, cadence and freeze semantics need a stronger sharing key.
+
+RED missing visibility and resolution helpers; GREEN standalone visibility
+state transitions and aspect/bounds tests, cadence and ABI tests remain green.
+Final actual isolated OBS 32.2.0 probe (Linux Xvfb) native dock menu 10 FPS,
+320px cached resolution, hide/reopen, controls-only/re-enable. Full cache
+1,295,712 bytes, lowres 211,200 bytes, hidden/controls zero bytes and render
+calls over two seconds while independent Program source rendered 60 times.
+Showing flag false when hidden/controls, true again on resume. RGB solid
+sample unchanged in visible modes. Native scene saved resolution 320,
+preview true; normal OBS exit 0, two unattributed leaks. Collapse uses
+widget hide path; specific Aftermarket collapse menu not independently
+exercised. Logs /tmp/source-dock-lightweight-native-20261124/obs.log.
+Aftermarket 36/36 tests passed. No installation or push; Windows/macOS,
+HDR and complex-source visual fidelity/performance remain unverified.

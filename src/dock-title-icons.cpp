@@ -303,6 +303,20 @@ void DockTitleIcons::refresh(){
             menu->addSeparator();
             owner->appendDockWindowActions(menu,safe);
             if(auto *content=safe->widget();content&&content->inherits("SourceDock")){
+                const int visibleIndex=content->metaObject()->indexOfProperty("previewVisible");
+                if(visibleIndex>=0&&content->metaObject()->property(visibleIndex).isWritable()&&
+                   content->property("previewSupported").toBool()){
+                    auto *controls=menu->addAction("Controls only");
+                    controls->setObjectName("aftermarket-source-controls-only");
+                    controls->setCheckable(true);
+                    controls->setChecked(!content->property("previewVisible").toBool());
+                    QPointer<QWidget> widget=content;
+                    connect(controls,&QAction::triggered,menu,[widget,owner](bool checked){
+                        if(widget&&widget->setProperty("previewVisible",!checked)&&
+                           widget->property("previewVisible").toBool()==!checked&&owner&&owner->sourceDockPreviewSave_)
+                            owner->sourceDockPreviewSave_();
+                    });
+                }
                 const int index=content->metaObject()->indexOfProperty("previewRefreshFps");
                 if(index>=0&&content->metaObject()->property(index).isWritable()&&
                    content->property("previewRefreshAvailable").toBool()){
@@ -322,6 +336,27 @@ void DockTitleIcons::refresh(){
                                widget->property("previewRefreshFps").toInt()==fps&&owner&&owner->sourceDockPreviewSave_)
                                 owner->sourceDockPreviewSave_();
                         });
+                    }
+                    const int qualityIndex=content->metaObject()->indexOfProperty("previewResolution");
+                    if(qualityIndex>=0&&content->metaObject()->property(qualityIndex).isWritable()){
+                        rates->addSeparator();
+                        auto *quality=rates->addMenu("Cached resolution");
+                        quality->setObjectName("aftermarket-source-preview-resolution");
+                        quality->setToolTipsVisible(true);
+                        quality->menuAction()->setToolTip("Longest edge of reduced-rate or frozen previews. Live uses native resolution.");
+                        auto *qualityGroup=new QActionGroup(quality);qualityGroup->setExclusive(true);
+                        const QList<QPair<int,QString>> choices={{2048,"Full (up to 2048 px)"},{1280,"1280 px"},
+                            {640,"640 px"},{320,"320 px"}};
+                        for(const auto &choice:choices){
+                            auto *a=quality->addAction(choice.second);a->setCheckable(true);
+                            a->setChecked(content->property("previewResolution").toInt()==choice.first);
+                            qualityGroup->addAction(a);
+                            connect(a,&QAction::triggered,quality,[widget,owner,limit=choice.first]{
+                                if(widget&&widget->setProperty("previewResolution",limit)&&
+                                   widget->property("previewResolution").toInt()==limit&&owner&&owner->sourceDockPreviewSave_)
+                                    owner->sourceDockPreviewSave_();
+                            });
+                        }
                     }
                     rates->setToolTipsVisible(true);
                     rates->menuAction()->setToolTip("Per-dock SDR preview only; Program and source output are unchanged.");

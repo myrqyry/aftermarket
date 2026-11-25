@@ -286,9 +286,15 @@ displays and Program retain their normal cadence. These settings persist in
 the native scene collection and are included in workspace checkpoints.
 Non-SDR displays fall back to live rendering. A frozen image is captured
 again when the source or cache dimensions change, or when restored from a
-saved scene; it is not a saved screenshot. Display presentation still runs
-at the usual cadence. Use the native Source Docks manager's Preview checkbox
-for controls-only mode. Stock Source Dock does not expose the refresh menu.
+saved scene; it is not a saved screenshot. Hiding or collapsing the preview
+suspends drawing, releases its showing reference and frees its cache; opening
+it restores the saved mode. A frozen preview recaptures after reopening.
+The **Controls only** toggle in the dock overflow disables the preview while
+keeping the source controls. **Preview refresh → Cached resolution** limits
+reduced-rate/frozen previews to a longest edge of 2048, 1280, 640 or 320 pixels
+without altering Live or Program. Display presentation still runs at the
+usual cadence for visible previews. Stock Source Dock does not expose these
+options.
 
 ### Off-air frame limiting
 
