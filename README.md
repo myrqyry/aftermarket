@@ -10,7 +10,7 @@ layout, and presentation.
 
 | Native mixer, reimagined | AudioBus routing |
 | :---: | :---: |
-| ![Native gain controls with integrated peak rings](docs/screenshots/readme/mixer-rings.png) | ![The alternate AudioBus patchbay inside the Audio Mixer dock](docs/screenshots/readme/audiohub-activity-outlines.webp) |
+| ![Compact rotary native mixer with dB readouts, side controls and status icons](docs/screenshots/readme/mixer-rotary-current.png) | ![The alternate AudioBus patchbay inside the Audio Mixer dock](docs/screenshots/readme/audiohub-activity-outlines.webp) |
 
 [Audio and routing](#audio-and-routing) · [Workspace](#workspace) · [Sources and navigation](#sources-and-navigation) · [Menus](#menus) · [Appearance and motion](#appearance-and-motion) · [Install](#install-locally-linux) · [User guide](docs/user-guide.md)
 
@@ -51,7 +51,11 @@ Keep the familiar native mixer or customize selected channels:
 - Persistent channel order: unlock in the mixer title menu, drag source names,
   then lock again. AudioBus follows the same saved order; reset restores native order.
 
-![Native OBS faders with gradient tracks](docs/screenshots/readme/mixer-faders.png)
+| Responsive rotary mixer (wide dock) | Native gradient faders |
+| :---: | :---: |
+| ![Four-column rotary mixer with native channels](docs/screenshots/readme/mixer-rotary-grid.png) | ![Native OBS faders with gradient tracks](docs/screenshots/readme/mixer-faders.png) |
+
+The rotary screenshots use an isolated OBS 32.2.0 test profile with five synthetic audio sources. To adjust sync, drag vertically or scroll (10 ms per pixel or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
 
 **Optional independent device sends:** install [Exeldro's Audio Monitor](https://obsproject.com/forum/resources/audio-monitor.1186/) to expose playback devices below the native track nodes. Drag a source to a device; right-click its wire for independent mute, gain, pan and delay. Choose visible destinations from the mixer title menu. Existing Audio Monitor filters are not taken over by Aftermarket. Without the plugin, the native graph works normally.
 
@@ -248,7 +252,7 @@ DPI configurations, and OBS versions need additional verification.
 The [Linux CI workflow](.github/workflows/ci.yml) targets Ubuntu 24.04 and
 a SHA-256-pinned OBS 32.2.0 SDK. It checks local README links, builds the
 module, runs the native Qt/libobs CTest suite under an isolated X display
-(CI baseline: at least 32 tests, no skips; current local suite: 38), stages the plugin, checks linked libraries
+(CI baseline: at least 32 tests, no skips; current local suite: 39), stages the plugin, checks linked libraries
 and the exact package contents, and verifies the archive checksum.
 It does not install into a user's profile, publish release assets, or
 claim Windows, macOS, or OBS 33 support.
