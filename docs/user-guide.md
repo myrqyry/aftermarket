@@ -1125,14 +1125,21 @@ new UI transitions follow its latest value immediately.
 **Native dock collapsing and page switching:** When Motion is enabled, using
 a dock's **⋮ → Collapse / Expand** (or middle-clicking its native title) eases
 the real QDockWidget height over **165 ms**, with its original min/max size
-constraints restored after expansion. Tabbed, floating and custom-title
+constraints restored after expansion. Layout updates sample elapsed time
+in five steps (up to roughly 30 Hz) instead of resizing on every animation
+tick. Expanding content becomes visible at the final layout; missed steps
+are discarded rather than replayed. Tabbed, floating and custom-title
 docks remain governed by the existing native restrictions. Switching between
 **Audio Mixer and AudioBus** uses a restrained **210 ms horizontal flip**:
 two temporary snapshots turn around the middle of the existing dock, while
 the original OBS mixer and routing widgets stay in place. Nothing is rotated
 or assigned a graphics effect on the live native controls, and no extra
 animation is layered on top. Rapid reversals discard the earlier frame,
-and emergency recovery removes the animation. Both dock movements and
+and emergency recovery removes the animation. The flip skips snapshots
+for panels above 1,048,576 physical pixels or known native/GPU widget
+surfaces; those pages switch immediately. Widget layout, capture and painting
+still use Qt's GUI thread. These bounds reduce optional UI work, not a
+guarantee of frame timing or isolation from the main thread. Both dock movements and
 page switching are instantaneous with Motion off.
 
 These are **OBS interface animations**, not OBS's video scene-transition

@@ -107,6 +107,7 @@ struct DockFaces::State {
         QPointer<QWidget> accessory;
         QPointer<FlipFrame> transition;
         bool wasHidden=false;
+        bool titleUpdatePending=false;
     };
     QHash<QDockWidget*,Entry> entries;
     std::function<bool()> motionEnabled;
@@ -256,9 +257,25 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     // Keep only the latest transition during rapid user reversals.
     if(it->transition)delete it->transition.data();
     it->transition=nullptr;
-    const bool animate=state->motionEnabled&&state->motionEnabled()&&
+    // QWidget snapshots must be painted synchronously on the GUI thread.
+    // Bound their physical pixel cost, and skip decoration for native/GPU
+    // surfaces which cannot reliably be captured by QWidget::grab().
+    const qreal dpr=stack->devicePixelRatioF();
+    const bool withinBudget=qreal(stack->width())*stack->height()*dpr*dpr<=1024*1024;
+    auto capturable=[](QWidget *page){
+        auto nativeSurface=[](QWidget *w){
+            return w->testAttribute(Qt::WA_NativeWindow)||w->testAttribute(Qt::WA_PaintOnScreen)||
+                w->inherits("QOpenGLWidget")||w->inherits("OBSQTDisplay");
+        };
+        if(nativeSurface(page))return false;
+        for(auto *child:page->findChildren<QWidget*>())
+            if(nativeSurface(child))return false;
+        return true;
+    };
+    const bool animate=withinBudget&&state->motionEnabled&&state->motionEnabled()&&
         stack->isVisible()&&stack->width()>0&&stack->height()>0&&
-        stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack);
+        stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack)&&
+        capturable(stack->currentWidget())&&capturable(destination);
     const QPixmap outgoing=animate?stack->grab():QPixmap{};
     stack->setCurrentWidget(destination);
     const QPixmap incoming=animate?stack->grab():QPixmap{};
@@ -310,9 +327,16 @@ bool DockFaces::eventFilter(QObject *watched,QEvent *event){
         case QEvent::WindowTitleChange:
         case QEvent::LayoutDirectionChange:
         case QEvent::LayoutRequest:{
+            auto it=state->entries.find(dock);
+            if(it->titleUpdatePending)break;
+            it->titleUpdatePending=true;
             QPointer<QDockWidget> safe=dock;
             QTimer::singleShot(0,this,[this,safe]{
-                if(safe)positionTitleButtons(safe);
+                if(!safe)return;
+                auto entry=state->entries.find(safe);
+                if(entry==state->entries.end())return;
+                entry->titleUpdatePending=false;
+                positionTitleButtons(safe);
             });
             break;
         }

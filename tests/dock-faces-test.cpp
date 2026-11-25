@@ -130,6 +130,17 @@ int main(int argc,char **argv) {
   QTimer::singleShot(280,&finishLoop,&QEventLoop::quit);
   finishLoop.exec();app.processEvents();
   REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-flip").isEmpty());
+  // A large dock would require large synchronous QWidget snapshots.
+  // Skip decoration, not the real page change, when over the budget.
+  main.resize(2400,1600);app.processEvents();
+  const QSize previousSize=stack->size();
+  stack->resize(1400,1000);
+  REQUIRE(faces.showBack(a,true));
+  REQUIRE(faces.backVisible(a)&&!stack->findChild<QWidget*>("aftermarket-view-flip"));
+  stack->resize(1400,1000);
+  REQUIRE(faces.showBack(a,false));
+  REQUIRE(!stack->findChild<QWidget*>("aftermarket-view-flip"));
+  stack->resize(previousSize);main.resize(920,720);app.processEvents();
   motionOn=false; // reduced-motion mode: immediate switch
   flip->click();app.processEvents();
   REQUIRE(faces.backVisible(a)&&back->isVisible());
@@ -188,6 +199,17 @@ int main(int argc,char **argv) {
   REQUIRE(faces.detach(a));
   REQUIRE(a->widget()==native);
   a->show();app.processEvents();
+ }
+ // A native surface also bypasses synchronous snapshot capture.
+ {
+  augment::DockFaces faces(nullptr,[]{return true;});
+  auto *nativeSurface=new QWidget;
+  nativeSurface->setAttribute(Qt::WA_NativeWindow);
+  REQUIRE(faces.attach(a,nativeSurface));a->raise();app.processEvents();
+  REQUIRE(faces.showBack(a,true));
+  REQUIRE(faces.backVisible(a)&&!a->findChild<QWidget*>("aftermarket-view-flip"));
+  REQUIRE(faces.showBack(a,false));
+  REQUIRE(!a->findChild<QWidget*>("aftermarket-view-flip"));
  }
  // Refuse non-owned/no-native widget dock.
  auto *empty=new QDockWidget("Empty",&main);

@@ -3304,3 +3304,32 @@ settled via native toolbar button passed. Two unattributed shutdown leaks
 and existing source-clear warning in isolated run; other platforms and
 special naming dialogs not independently qualified. Docs updated.
 Preserve preexisting unrelated plugin.cpp comment.
+
+## 2026-11-25: bound native panel animation workload
+
+User wants panel animation not to interrupt main thread. QWidget layout,
+painting and grab must remain on GUI thread. Replaced per-frame dock
+maximumHeight property animation with elapsed-time sampled QVariantAnimation:
+five possible height updates over 165 ms, no replay of missed steps,
+skip unchanged dimensions. Hidden content stays hidden until expansion
+finishes; restore original constraints and show content on completion or
+interruption. Reverse during expansion settles old bounds before recollapse.
+DockFaces coalesces title updates and skips flip snapshot decoration above
+1 Mi physical pixels per image or known native/GPU widget surfaces.
+Regular flips remain two GUI-thread snapshots and paint-only overlay.
+No background QWidget access or hard frame timing guarantee.
+
+RED deterministic height update count and oversized flip tests failed old
+implementation. GREEN bounded count, exact constraints, reverse/recovery,
+native-surface skip and existing face tests. Full 39/39 CTest passed
+(/tmp/am-panel-final2-ctest.log). Actual OBS 32.2.0 isolated Xvfb matched
+probe before /tmp/am-panel-motion.TJVGQ7/obs.log and after
+/tmp/am-panel-motion.iTP5SO/obs.log: collapse resize events 10 -> 5,
+expand 11 -> 8; sampled max heights 11 -> 6 both. Three native checks
+passed each run, exit0, two unattributed leaks each. GUI heartbeat
+largest gap collapse 10 -> 21ms, expand 11 -> 10ms; preview resize
+0 -> 0 collapse, 0 -> 2 expand. Single-run timing mixed, no claim of
+eliminating stutter or reducing overall render latency. Native tests
+predate minor root native-surface guard refinement (unit tested).
+Docs and probe preserved. OBS running, no install or push.
+Existing unstaged plugin.cpp comment preserved.

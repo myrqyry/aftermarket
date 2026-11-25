@@ -190,7 +190,7 @@ palette. Optional refinements include:
 - Responsive source/filter property columns (Auto, 1, up to 2, or up to 3) and collapsible native property groups.
 - Named source/filter property and whole filter-chain presets directly in the native Defaults/OK/Close footer, with portable JSON import/export.
 - Animated gradient tracks, menu artwork, dock collapse, and a brief
-  AudioBus half-turn. Disable interface animations for immediate transitions.
+  AudioBus half-turn. Bounded dock layout steps and snapshot sizes reduce GUI work. Disable interface animations for immediate transitions.
 
 | List backgrounds | Transform selection |
 | :---: | :---: |

@@ -27,7 +27,7 @@
 #include <QScrollBar>
 #include <QStyle>
 #include <QTimer>
-#include <QPropertyAnimation>
+#include <QVariantAnimation>
 #include <QSet>
 #include <QEasingCurve>
 #include <functional>
@@ -53,11 +53,13 @@ struct Panels::State {
         QMetaObject::Connection destroyed,location,floating;
     };
     QHash<QDockWidget*,Entry> entries;
-    QHash<QDockWidget*,QPointer<QPropertyAnimation>> heightMotions;
+    QHash<QDockWidget*,QPointer<QVariantAnimation>> heightMotions;
     QSet<QDockWidget*> observedDocks;
     struct ExpandBounds {
         int minimum,maximum,height,width;
         QPointer<QMainWindow> main;
+        QPointer<QWidget> content;
+        bool showContent=false;
     };
     QHash<QDockWidget*,ExpandBounds> pendingExpansion;
     std::function<bool()> motionEnabled;
@@ -500,7 +502,7 @@ void Panels::restoreExpandedBounds(QDockWidget *dock){
     const auto bounds=state->pendingExpansion.take(dock);
     dock->setMaximumHeight(bounds.maximum);
     dock->setMinimumHeight(bounds.minimum);
-    dock->updateGeometry();
+    if(bounds.showContent&&bounds.content&&dock->widget()==bounds.content)bounds.content->show();
     if(bounds.main&&!dock->isFloating()&&dock->isVisible()){
         bounds.main->resizeDocks({dock},{bounds.height},Qt::Vertical);
         bounds.main->resizeDocks({dock},{bounds.width},Qt::Horizontal);
@@ -525,26 +527,31 @@ void Panels::startHeightMotion(QDockWidget *dock,int start,int finish,
             state->pendingExpansion.remove(dock);
         });
     }
-    auto *animation=new QPropertyAnimation(dock,"maximumHeight",dock);
+    auto *animation=new QVariantAnimation(dock);
     animation->setObjectName("aftermarket-dock-height-motion");
     animation->setDuration(165);
-    animation->setEasingCurve(QEasingCurve::InOutCubic);
-    animation->setStartValue(start);
-    animation->setEndValue(finish);
+    animation->setStartValue(0.0);
+    animation->setEndValue(1.0);
     QPointer<QDockWidget> safe=dock;
     QPointer<QMainWindow> main=owner(dock);
-    connect(animation,&QVariantAnimation::valueChanged,this,[safe,main](const QVariant &value){
-        if(safe){
-            // The native dock's hidden content no longer contributes a
-            // minimum size. Pin both min and max to the current animated
-            // height so QMainWindow cannot snap directly to the endpoint.
-            safe->setMinimumHeight(value.toInt());
-            safe->updateGeometry();
+    // Sample elapsed time rather than replaying missed frames. At most
+    // five native layout updates (including endpoint) over 165 ms, even
+    // when Qt samples the animation at its normal 60 Hz cadence.
+    connect(animation,&QVariantAnimation::valueChanged,this,
+        [safe,main,animation,start,finish,lastStep=0](const QVariant &) mutable {
+            if(!safe)return;
+            const int time=animation->currentTime();
+            const int step=time>=animation->duration()?5:time/33;
+            if(step<=lastStep)return;
+            lastStep=step;
+            const auto progress=QEasingCurve(QEasingCurve::InOutCubic).valueForProgress(step/5.0);
+            const int height=qRound(start+(finish-start)*progress);
+            if(safe->minimumHeight()==height&&safe->maximumHeight()==height)return;
+            safe->setFixedHeight(height);
             if(main&&!safe->isFloating()&&safe->isVisible())
-                main->resizeDocks({safe},{value.toInt()},Qt::Vertical);
-        }
-    });
-    connect(animation,&QPropertyAnimation::finished,this,
+                main->resizeDocks({safe},{height},Qt::Vertical);
+        });
+    connect(animation,&QVariantAnimation::finished,this,
         [this,safe,animation,completed=std::move(completed)]{
             if(safe&&state->heightMotions.value(safe)==animation){
                 state->heightMotions.remove(safe);
@@ -558,7 +565,7 @@ void Panels::startHeightMotion(QDockWidget *dock,int start,int finish,
 bool Panels::collapsed(QDockWidget *dock)const {return state->entries.contains(dock);}
 bool Panels::canCollapse(QDockWidget *dock)const {
     if(!dock)return false;
-    if(collapsed(dock))return true;
+    if(collapsed(dock)||state->pendingExpansion.contains(dock))return true;
     auto *main=owner(dock);
     return main&&dock->isVisible()&&!dock->isFloating()&&dock->widget()&&
         dock->widget()->isVisible()&&!(dock->features()&QDockWidget::DockWidgetVerticalTitleBar)&&
@@ -580,6 +587,7 @@ QAction *Panels::addCollapseAction(QMenu *menu,QDockWidget *dock) {
 }
 bool Panels::toggle(QDockWidget *dock) {
     if(collapsed(dock))return expand(dock);
+    if(state->pendingExpansion.contains(dock))stopHeightMotion(dock);
     if(!canCollapse(dock))return false;
     State::Entry entry{dock->widget(),owner(dock),dock->minimumHeight(),dock->maximumHeight(),
         dock->height(),headerHeight(dock),dock->minimumWidth(),dock->width(),dock->widget()->isHidden(),{},{},{}};
@@ -623,14 +631,14 @@ bool Panels::expand(QDockWidget *dock,bool animate) {
         dock->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,dock);
     dock->setMinimumHeight(motion?current:e.minimum);
     dock->setMaximumHeight(motion?current:e.maximum);
-    if(e.content&&e.content==dock->widget()&&!e.contentWasHidden)e.content->show();
+    if(!motion&&e.content&&e.content==dock->widget()&&!e.contentWasHidden)e.content->show();
     dock->updateGeometry();
     if(motion){
         QPointer<QDockWidget> safe=dock;
         startHeightMotion(dock,current,e.height,[this,safe]{
             if(safe)restoreExpandedBounds(safe);
         });
-        state->pendingExpansion.insert(dock,{e.minimum,e.maximum,e.height,e.width,e.main});
+        state->pendingExpansion.insert(dock,{e.minimum,e.maximum,e.height,e.width,e.main,e.content,!e.contentWasHidden});
     }else if(e.main&&!dock->isFloating()&&dock->isVisible()) {
         e.main->resizeDocks({dock},{e.height},Qt::Vertical);
         e.main->resizeDocks({dock},{e.width},Qt::Horizontal);

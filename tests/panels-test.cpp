@@ -15,7 +15,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QScreen>
-#include <QPropertyAnimation>
+#include <QVariantAnimation>
 #include <QEventLoop>
 #include <QTimer>
 #include <iostream>
@@ -68,42 +68,67 @@ int main(int argc,char **argv) {
  bool animateDocks=true;
  augment::Panels motionPanels(nullptr,[&]{return animateDocks;});
  REQUIRE(motionPanels.canCollapse(a));
+ // Driving the animation clock at 1 ms intervals must not cause
+ // a native dock layout transaction for each sampled value.
+ REQUIRE(motionPanels.toggle(a));
+ auto *bounded=a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion");
+ REQUIRE(bounded);
+ int changed=0,last=a->maximumHeight();
+ for(int t=1;t<165;++t){
+     bounded->setCurrentTime(t);
+     if(a->maximumHeight()!=last){++changed;last=a->maximumHeight();}
+ }
+ REQUIRE(changed<=5);
+ bounded->setCurrentTime(165);QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);app.processEvents();
+ REQUIRE(motionPanels.collapsed(a)&&body->isHidden());
+ REQUIRE(motionPanels.toggle(a));
+ auto *reopen=a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion");
+ REQUIRE(reopen&&body->isHidden());
+ reopen->setCurrentTime(165);QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);app.processEvents();
+ REQUIRE(body->isVisible()&&a->minimumHeight()==min&&a->maximumHeight()==max);
  const int animationStartHeight=a->height();
  REQUIRE(motionPanels.toggle(a));
  REQUIRE(motionPanels.collapsed(a));
- auto *collapseMotion=a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion");
+ auto *collapseMotion=a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion");
  REQUIRE(collapseMotion&&collapseMotion->state()==QAbstractAnimation::Running);
  // Advance the animation clock explicitly rather than depending on timer
  // scheduling under load. Compare against the current single-dock geometry.
- collapseMotion->setCurrentTime(65);app.processEvents();
+ collapseMotion->setCurrentTime(99);app.processEvents();
  REQUIRE(a->maximumHeight()<animationStartHeight);
  REQUIRE(a->height()<animationStartHeight);
  REQUIRE(a->height()>45); // intermediate actual native dock height
  REQUIRE(motionPanels.toggle(a)); // reverse before collapse completes
  REQUIRE(!motionPanels.collapsed(a));
- auto *expandMotion=a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion");
+ auto *expandMotion=a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion");
  REQUIRE(expandMotion&&expandMotion->state()==QAbstractAnimation::Running);
  QEventLoop settle;
  QTimer::singleShot(250,&settle,&QEventLoop::quit);settle.exec();app.processEvents();
  REQUIRE(a->maximumHeight()==max&&a->minimumHeight()==min);
  REQUIRE(body->isVisible());
- REQUIRE(a->findChildren<QPropertyAnimation*>("aftermarket-dock-height-motion").isEmpty());
+ REQUIRE(a->findChildren<QVariantAnimation*>("aftermarket-dock-height-motion").isEmpty());
  // Emergency restore can arrive during the expand half. It must cancel
  // motion AND restore the native dock's exact original size constraints.
  REQUIRE(motionPanels.toggle(a));
- QEventLoop midCollapse;
- QTimer::singleShot(65,&midCollapse,&QEventLoop::quit);midCollapse.exec();
+ auto *midCollapse=a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion");
+ REQUIRE(midCollapse);midCollapse->setCurrentTime(99);app.processEvents();
  REQUIRE(motionPanels.toggle(a));
- REQUIRE(a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion"));
+ REQUIRE(a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion"));
  motionPanels.restoreAll();app.processEvents();
  REQUIRE(!motionPanels.collapsed(a));
  REQUIRE(a->maximumHeight()==max&&a->minimumHeight()==min);
  REQUIRE(a->minimumWidth()==minWidth);
- REQUIRE(!a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion"));
+ REQUIRE(!a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion"));
+ REQUIRE(motionPanels.toggle(a));
+ auto *again=a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion");
+ REQUIRE(again);again->setCurrentTime(165);QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete);app.processEvents();
+ REQUIRE(motionPanels.toggle(a));REQUIRE(body->isHidden());
+ REQUIRE(motionPanels.toggle(a)); // expand interrupted by another collapse
+ motionPanels.restoreAll();app.processEvents();
+ REQUIRE(body->isVisible()&&a->minimumHeight()==min&&a->maximumHeight()==max);
  animateDocks=false;
  REQUIRE(motionPanels.toggle(a));app.processEvents();
  REQUIRE(motionPanels.collapsed(a));
- REQUIRE(!a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion"));
+ REQUIRE(!a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion"));
  motionPanels.restoreAll();app.processEvents();
  REQUIRE(!motionPanels.collapsed(a)&&a->maximumHeight()==max);
  // The same native dock may be destroyed by OBS while a motion is
@@ -111,7 +136,7 @@ int main(int argc,char **argv) {
  animateDocks=true;
  REQUIRE(motionPanels.canCollapse(a));
  REQUIRE(motionPanels.toggle(a));
- REQUIRE(a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion"));
+ REQUIRE(a->findChild<QVariantAnimation*>("aftermarket-dock-height-motion"));
  delete a;app.processEvents();
  motionPanels.restoreAll();app.processEvents();
  // Preview must be the original OBS widget, including its live child
