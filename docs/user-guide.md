@@ -652,12 +652,39 @@ and filter presets and OBS's normal dialog behavior. Selection changes
 coalesce via native source-list selection signals and frontend events, with
 a 750 ms fallback only while the dock is visible. Usage indexing is on demand.
 
-This first inspector slice is informational with native editor entry points:
-embedded editing, property search, transform presets, inline filter-chain
-management and integrated global undo are not yet implemented. The upstream
-Source Inspector Dock project was reviewed as a design reference; no upstream
-code has been copied. Emergency restore removes the field, popup and inspector
-dock without changing source settings.
+**Transform presets:** Select one unlocked top-level scene item (not a
+group), type a new name and click the Save icon. Choose a saved name and
+click Load to explicitly apply its position, rotation, scale, alignment,
+bounds, bounds alignment, crop-to-bounds flag and crop. Presets use the
+existing atomic owner-only preset store under the separate `transform:v1`
+namespace. Duplicate names are rejected; the trash icon deletes a named
+preset only after confirmation. The presets are shared across supported
+items and use absolute OBS transform coordinates; source settings, lock,
+visibility and identity are unchanged. A pinned shared source without an
+item context cannot load a transform. Group children and group transforms
+are excluded until their parent-layout side effects are qualified.
+
+**Inline filters:** Search names, check/uncheck the enabled state, or select
+a filter and use the arrow buttons to move it within its native filter
+category. Existing filter objects remain attached; the inspector does not
+recreate their settings or private state. Add/remove and full filter
+property editing still use the native Filters dialog.
+
+**Undo/redo:** A changed transform preset load, filter toggle or reorder
+creates one nonrepeatable entry in OBS's Edit menu history. Replay resolves
+the original source UUID and scene/item or filter identity, checks the
+collection and expected current transform/chain state, and refuses stale
+or incompatible targets. OBS may consume a skipped history entry even when
+no mutation occurs. Out-of-band edits are not silently overwritten. The
+native history is not a persistent preset library.
+
+Embedded native property editing and property search remain separate
+follow-on work. OBS does not export its property-editor implementation in
+the plugin SDK. The upstream Source Inspector Dock builds a separately
+pinned OBS property-editor source dependency; Aftermarket has not adopted
+that dependency or declared a repository-wide license. No upstream code
+was copied. Emergency restore removes the field, popup and inspector
+dock without changing source settings or undoing completed edits.
 
 ### Quick Find: jump to sources and filters without another dock
 

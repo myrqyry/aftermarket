@@ -158,8 +158,9 @@ Use `@` to find sources, scenes and filters, or `/` for Aftermarket commands
 and registered OBS hotkeys. Hotkeys require explicit confirmation. Source
 results pin the optional native Source Inspector dock without changing scenes.
 Open **Docks → Source Inspector** to follow source selection, see the scene-item
-transform, search filter names and check scene references, or open native
-Properties and Filters. [Command center guide](docs/user-guide.md#command-center-and-source-inspector).
+transform, save/load named transform presets, search/toggle/reorder existing
+filters and check scene references, or open native Properties and Filters.
+Transform loads and filter edits participate in OBS Edit → Undo/Redo. [Command center guide](docs/user-guide.md#command-center-and-source-inspector).
 
 ### Quick Find
 

@@ -3537,3 +3537,51 @@ does not qualify all layouts, custom themes, multi-selection/group
 edge cases, embedded editing or actual native property-dialog opening.
 Docs updated. Production OBS untouched; no install/push. Preserve unrelated
 unstaged sourcePicker comment.
+
+## 2026-11-25: inspector transform presets, inline filters and native history
+
+User approved next inspector editing slice. Independent public SDK
+implementation, no upstream source copied. Reviewed upstream
+cmake/obs-properties.cmake: separately compiles OBS 32.2.1 property
+editor from SHA256-pinned archive with patch and Qt support sources.
+Installed OBS 32.2.0 binary nm -D -C exposes no OBSPropertiesView
+symbols; local source tree is dirty 31.1.1-2-g523ddeec9, not suitable
+as a pinned matching editor dependency. Repo has no declared root
+license. Defer embedded editor/property search until version-qualified
+build and licensing decision; do not substitute a partial property
+renderer or use private ABI offsets.
+
+Use existing PropertyPresets store separate transform:v1 scope.
+Strict bounded versioned transform JSON (position, scale, rotation,
+alignment, bounds type/size/alignment, crop-to-bounds, crop).
+Editable preset name, explicit save/load/delete (confirmation for delete,
+no overwrite); theme icons and accessible names. Only unlocked top-level
+non-group scene items; pinned shared source lacks transform context.
+Read group child transform context using obs_group_from_source but do not
+edit group transforms. Stable scene/source UUID + item ID and actual
+selection revalidation at action time. Preserve source settings and identity.
+Filter list stable UUID, checkbox enable state and native same-category
+up/down using obs_source_filter_set_order. Native add/remove and properties
+still via original dialogs. No periodic disk reads for presets.
+Register one native nonrepeatable undo/redo entry for each changed
+transform load, toggle and reorder, via obs_frontend_add_undo_redo_action.
+Callbacks carry serialized expected/desired states and collection identity,
+resolve live IDs without dock lifetime, refuse stale/locked/missing targets.
+Native history can consume a skipped entry; no mutation on stale replay.
+No audio/video-thread work or new polling. Queue list refresh to avoid
+rebuilding inside itemChanged.
+
+RED inspector-edits test missing implementation; GREEN strict codec
+roundtrip and malformed validation. Full CTest 41/41
+/tmp/am-inspector-final-ctest.log (16.51s).
+Native real OBS 32.2.0 /tmp/am-inspector-edits.aSuur6/obs.log 16/16
+exit0, cross-item preset load, lock refusal, actual Edit-menu native
+undo/redo for all three operations, stale transform undo/redo refused,
+filter identity preserved through native reorder. Initial test used wrong
+actionUndo/actionRedo (secondary); corrected to actionMainUndo/Redo.
+Prior 14/14 /tmp/am-inspector-edits.2bTT5c/obs.log, screenshot inspected,
+then compacted preset buttons and added two stale checks. Two unattributed
+shutdown allocations. Group editing, actual mixed AV reorder, other
+platforms, embedded properties, filter create/delete undo not qualified.
+Docs updated. Built not installed/pushed. Preserve existing unrelated
+plugin.cpp comment.

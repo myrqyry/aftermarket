@@ -7,6 +7,10 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QComboBox>
+#include <QMessageBox>
+#include <QScopedValueRollback>
+#include <QStyle>
 #include <QListWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -37,7 +41,7 @@ void selected(obs_scene_t *scene,Selection &s){
  s.ancestors.remove(scene);
 }
 }
-SourceInspectorDock::SourceInspectorDock(QMainWindow *main):QWidget(main){
+SourceInspectorDock::SourceInspectorDock(QMainWindow *main,QString presetFile):QWidget(main),presets_(std::move(presetFile)){
  setObjectName("aftermarket-source-inspector");
  auto *root=new QVBoxLayout(this);root->setContentsMargins(6,6,6,6);
  auto *header=new QHBoxLayout;heading_=new QLabel("Select one source",this);
@@ -48,8 +52,59 @@ SourceInspectorDock::SourceInspectorDock(QMainWindow *main):QWidget(main){
  filters_=new QPushButton("Filters…",this);filters_->setObjectName("aftermarket-inspect-filters");
  buttons->addWidget(properties_);buttons->addWidget(filters_);root->addLayout(buttons);
  transform_=new QLabel(this);transform_->setTextFormat(Qt::PlainText);transform_->setWordWrap(true);transform_->setObjectName("aftermarket-inspect-transform");root->addWidget(transform_);
+ auto *presetRow=new QHBoxLayout;
+ transformPresets_=new QComboBox(this);transformPresets_->setObjectName("aftermarket-inspect-transform-presets");
+ transformPresets_->setEditable(true);transformPresets_->setInsertPolicy(QComboBox::NoInsert);
+ transformPresets_->lineEdit()->setPlaceholderText("Transform preset name");
+ presetRow->addWidget(transformPresets_,1);
+ saveTransform_=new QPushButton(this);saveTransform_->setObjectName("aftermarket-inspect-transform-save");saveTransform_->setIcon(style()->standardIcon(QStyle::SP_DialogSaveButton));saveTransform_->setToolTip("Save new transform preset");saveTransform_->setAccessibleName("Save transform preset");
+ loadTransform_=new QPushButton(this);loadTransform_->setObjectName("aftermarket-inspect-transform-load");loadTransform_->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));loadTransform_->setToolTip("Load named transform preset");loadTransform_->setAccessibleName("Load transform preset");
+ deleteTransform_=new QPushButton(this);deleteTransform_->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));deleteTransform_->setToolTip("Delete named transform preset");deleteTransform_->setAccessibleName("Delete transform preset");
+ for(auto *button:{saveTransform_,loadTransform_,deleteTransform_})button->setFixedWidth(qMax(button->sizeHint().height(),style()->pixelMetric(QStyle::PM_SmallIconSize)+14));
+ presetRow->addWidget(saveTransform_);presetRow->addWidget(loadTransform_);presetRow->addWidget(deleteTransform_);root->addLayout(presetRow);
+ feedback_=new QLabel(this);feedback_->setTextFormat(Qt::PlainText);feedback_->setWordWrap(true);feedback_->setObjectName("aftermarket-inspect-feedback");root->addWidget(feedback_);
+ refreshPresetNames();
+ connect(saveTransform_,&QPushButton::clicked,this,[this]{
+  if(!currentTargetStillValid())return;
+  const auto name=transformPresets_->currentText().trimmed();
+  const auto data=readItemTransform(target_);
+  if(data.isEmpty()||!presets_.save("transform:v1",name,data,false)){
+   label(feedback_,"Choose a new preset name and an unlocked top-level scene item.");return;
+  }
+  refreshPresetNames();transformPresets_->setCurrentText(name);label(feedback_,"Transform preset saved.");
+ });
+ connect(loadTransform_,&QPushButton::clicked,this,[this]{
+  if(!currentTargetStillValid())return;
+  const auto data=presets_.read("transform:v1",transformPresets_->currentText().trimmed());
+  if(data.isEmpty()||!applyItemTransform(target_,data)){label(feedback_,"Preset unavailable or target changed.");return;}
+  label(feedback_,"Transform loaded. Undo from OBS Edit menu.");refresh();
+ });
+ connect(deleteTransform_,&QPushButton::clicked,this,[this]{
+  const auto name=transformPresets_->currentText().trimmed();
+  if(!presets_.names("transform:v1").contains(name))return;
+  auto *prompt=new QMessageBox(QMessageBox::Question,"Delete transform preset","Delete this named transform preset?",QMessageBox::Yes|QMessageBox::No,this);
+  prompt->setDefaultButton(QMessageBox::No);prompt->setAttribute(Qt::WA_DeleteOnClose);
+  connect(prompt,&QMessageBox::finished,this,[this,name](int result){
+   if(result!=QMessageBox::Yes)return;
+   if(presets_.remove("transform:v1",name)){refreshPresetNames();label(feedback_,"Preset deleted.");}
+  });prompt->open();
+ });
  search_=new QLineEdit(this);search_->setPlaceholderText("Search filters…");search_->setClearButtonEnabled(true);root->addWidget(search_);
  filterList_=new QListWidget(this);filterList_->setObjectName("aftermarket-inspect-filter-list");root->addWidget(filterList_,1);
+ auto *orderRow=new QHBoxLayout;
+ up_=new QPushButton(this);up_->setIcon(style()->standardIcon(QStyle::SP_ArrowUp));up_->setObjectName("aftermarket-inspect-filter-up");up_->setAccessibleName("Move filter up");
+ down_=new QPushButton(this);down_->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));down_->setObjectName("aftermarket-inspect-filter-down");down_->setAccessibleName("Move filter down");
+ orderRow->addWidget(up_);orderRow->addWidget(down_);orderRow->addStretch();root->addLayout(orderRow);
+ connect(up_,&QPushButton::clicked,this,[this]{changeFilterOrder(true);});
+ connect(down_,&QPushButton::clicked,this,[this]{changeFilterOrder(false);});
+ connect(filterList_,&QListWidget::itemChanged,this,[this](QListWidgetItem *item){
+  if(updating_||!item)return;
+  if(!currentTargetStillValid()){schedule();return;}
+  const auto id=item->data(Qt::UserRole).toString();
+  if(!setInspectorFilterEnabled(target_.source,id,item->checkState()==Qt::Checked))label(feedback_,"Filter no longer available.");
+  schedule();
+ });
+ connect(filterList_,&QListWidget::currentItemChanged,this,[this]{const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);});
  usageButton_=new QPushButton("Find scene usage",this);root->addWidget(usageButton_);
  usage_=new QLabel(this);usage_->setWordWrap(true);usage_->setTextFormat(Qt::PlainText);usage_->setObjectName("aftermarket-inspect-usage");root->addWidget(usage_);
  connect(pin_,&QPushButton::toggled,this,[this](bool on){setPinned(on);schedule();});
@@ -74,7 +129,7 @@ void SourceInspectorDock::setPinned(bool pinned){
 }
 void SourceInspectorDock::clearSelection(){
  target_={};setPinned(false);label(heading_,"Select one source");label(detail_,{});label(transform_,{});label(usage_,{});
- if(!filterNames_.isEmpty()||filterList_->count()){filterNames_.clear();filterList_->clear();}pin_->setEnabled(false);properties_->setEnabled(false);filters_->setEnabled(false);usageButton_->setEnabled(false);
+ if(!filterRows_.isEmpty()||filterList_->count()){filterRows_.clear();updateFilterList();}setTransformAvailable(false);pin_->setEnabled(false);properties_->setEnabled(false);filters_->setEnabled(false);usageButton_->setEnabled(false);
 }
 void SourceInspectorDock::schedule(){if(isVisible()&&!coalesce_.isActive())coalesce_.start();}
 void SourceInspectorDock::showEvent(QShowEvent *e){QWidget::showEvent(e);schedule();refreshTimer_.start();}
@@ -102,23 +157,58 @@ void SourceInspectorDock::refresh(){
  pin_->setEnabled(true);properties_->setEnabled(true);filters_->setEnabled(true);usageButton_->setEnabled(true);
  if(target_.item>=0){
   OBSSourceAutoRelease owner=obs_get_source_by_uuid(target_.scene.toUtf8().constData());
-  auto *item=owner&&!obs_source_removed(owner)?obs_scene_find_sceneitem_by_id(obs_scene_from_source(owner),target_.item):nullptr;
+  auto *scene=owner&&!obs_source_removed(owner)?obs_scene_from_source(owner):nullptr;
+  if(!scene&&owner&&!obs_source_removed(owner))scene=obs_group_from_source(owner);
+  auto *item=scene?obs_scene_find_sceneitem_by_id(scene,target_.item):nullptr;
   if(!item||uuid(obs_sceneitem_get_source(item))!=target_.source){clearSelection();return;}
+  setTransformAvailable(!obs_sceneitem_locked(item)&&!obs_sceneitem_is_group(item)&&obs_scene_from_source(owner)!=nullptr);
   vec2 pos,scale;obs_sceneitem_get_pos(item,&pos);obs_sceneitem_get_scale(item,&scale);
   label(transform_,QString("Scene item · %1%2\nPosition %3, %4 · Scale %5, %6 · Rotation %7°")
      .arg(utf(obs_source_get_name(owner)),obs_sceneitem_locked(item)?" · Locked":"")
      .arg(pos.x,0,'f',1).arg(pos.y,0,'f',1).arg(scale.x,0,'f',2).arg(scale.y,0,'f',2).arg(obs_sceneitem_get_rot(item),0,'f',1));
- }else label(transform_,"Shared source · select a scene item for its transform");
- QStringList names;
+ }else{setTransformAvailable(false);label(transform_,"Shared source · select a scene item for its transform");}
+ QList<FilterRow> rows;
  obs_source_enum_filters(source,[](obs_source_t*,obs_source_t *filter,void *p){
-  auto *list=static_cast<QStringList*>(p);
-  if(list->size()<256)list->append(utf(obs_source_get_name(filter))+(obs_source_enabled(filter)?"":" · Disabled"));
- },&names);
- if(names!=filterNames_){filterNames_=names;updateFilterList();}
+  auto *list=static_cast<QList<FilterRow>*>(p);
+  if(list->size()<257)list->append({uuid(filter),utf(obs_source_get_name(filter)),obs_source_enabled(filter)});
+ },&rows);
+ if(rows.size()>256)rows.clear();
+ if(rows!=filterRows_){filterRows_=rows;updateFilterList();}
+}
+bool SourceInspectorDock::currentTargetStillValid()const{
+ if(target_.source.isEmpty())return false;
+ if(pinned_)return true;
+ OBSSourceAutoRelease current=obs_frontend_preview_program_mode_active()?obs_frontend_get_current_preview_scene():obs_frontend_get_current_scene();
+ Selection s;selected(obs_scene_from_source(current),s);
+ return s.count==1&&s.visited<=25000&&s.source==target_.source&&s.scene==target_.scene&&s.item==target_.item;
+}
+void SourceInspectorDock::refreshPresetNames(){
+ const auto current=transformPresets_->currentText();
+ const QSignalBlocker block(transformPresets_);
+ transformPresets_->clear();transformPresets_->addItems(presets_.names("transform:v1"));transformPresets_->setCurrentText(current);
+}
+void SourceInspectorDock::setTransformAvailable(bool available){
+ transformPresets_->setEnabled(available);saveTransform_->setEnabled(available);
+ loadTransform_->setEnabled(available);deleteTransform_->setEnabled(available);
+}
+void SourceInspectorDock::changeFilterOrder(bool up){
+ auto *item=filterList_->currentItem();if(!item||!currentTargetStillValid())return;
+ if(!moveInspectorFilter(target_.source,item->data(Qt::UserRole).toString(),up))label(feedback_,"No further filter in this native category.");
+ else label(feedback_,"Filter reordered. Undo from OBS Edit menu.");
+ refresh();
 }
 void SourceInspectorDock::updateFilterList(){
+ const auto current=filterList_->currentItem()?filterList_->currentItem()->data(Qt::UserRole).toString():QString{};
+ const QScopedValueRollback<bool> guard(updating_,true);
+ const QSignalBlocker blocker(filterList_);
  filterList_->clear();
- for(const auto &name:filterNames_)if(name.contains(search_->text(),Qt::CaseInsensitive))filterList_->addItem(name);
+ for(const auto &row:filterRows_)if(row.name.contains(search_->text(),Qt::CaseInsensitive)){
+  auto *item=new QListWidgetItem(row.name,filterList_);
+  item->setData(Qt::UserRole,row.id);item->setFlags(item->flags()|Qt::ItemIsUserCheckable);
+  item->setCheckState(row.enabled?Qt::Checked:Qt::Unchecked);
+  if(!current.isEmpty()&&current==row.id)filterList_->setCurrentItem(item);
+ }
+ const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);
 }
 void SourceInspectorDock::updateUsage(){
  if(target_.source.isEmpty())return;

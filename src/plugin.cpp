@@ -593,7 +593,7 @@ static bool startCustomUi(){
     }
     uiActive=true;
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()))){
-        auto *dock=new augment::SourceInspectorDock(main);
+        auto *dock=new augment::SourceInspectorDock(main,QFileInfo(stripConfigPath).dir().filePath("property-presets.json"));
         if(obs_frontend_add_dock_by_id("aftermarket-source-inspector-dock","Source Inspector",dock))sourceInspector=dock;
         else delete dock;
     }
