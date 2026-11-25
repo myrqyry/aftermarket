@@ -127,6 +127,7 @@ QList<QuickFindEntry> collectObsQuickFind(){
 }
 
 bool performObsQuickFind(const QuickFindEntry &entry,QuickFind::Action action){
+    if(action==QuickFind::PinSource)return false; // handled by the optional source-dock adapter
     if(action==QuickFind::Default)
         action=entry.kind==QuickFindEntry::Filter?QuickFind::Filters:
             entry.kind==QuickFindEntry::Scene||

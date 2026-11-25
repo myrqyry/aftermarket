@@ -1,8 +1,13 @@
 #include "quick-find.h"
+#include "source-dock-pin.h"
+#include <QGridLayout>
+#include <QComboBox>
+#include <QCheckBox>
 #include <QApplication>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMainWindow>
+#include <QPushButton>
 #include <iostream>
 
 #define REQUIRE(expr) do { if(!(expr)){std::cerr<<"FAIL "<<__LINE__<<" "<<#expr<<"\n";return 1;} }while(false)
@@ -48,5 +53,38 @@ int main(int argc,char**argv){
     REQUIRE(list->item(0)->text().contains("Blur Pass"));
     REQUIRE(palette.activate(augment::QuickFind::Filters));
     REQUIRE(!palette.isVisible());
+    QString pinned;
+    augment::QuickFind pinPalette(&main,[&]{return data;},[&](const QuickFindEntry &hit,augment::QuickFind::Action action){
+        if(action!=augment::QuickFind::PinSource)return false;
+        pinned=hit.id;return true;
+    },true);
+    pinPalette.open();
+    auto *pinInput=pinPalette.findChild<QLineEdit*>("aftermarket-quick-find-input");
+    auto *pin=pinPalette.findChild<QPushButton*>("aftermarket-quick-find-pin");
+    REQUIRE(pin&&pin->isVisible());
+    pinInput->setText("blur");
+    REQUIRE(!pin->isEnabled()&&!pinPalette.activate(augment::QuickFind::PinSource));
+    pinInput->setText("web view");
+    REQUIRE(pin->isEnabled());
+    pin->click();
+    REQUIRE(pinned=="source-b"&&!pinPalette.isVisible());
+    QDialog form;
+    auto *grid=new QGridLayout(&form);
+    auto *combo=new QComboBox;combo->setEditable(true);
+    combo->addItem("",QByteArray{});combo->addItem("Selected",QByteArray("CurrentSelectedSource"));
+    combo->addItem("Camera",QByteArray("Camera"));grid->addWidget(combo,1,0);
+    auto *title=new QLineEdit;grid->addWidget(title,1,1);
+    grid->addWidget(new QLineEdit,1,2);
+    for(int i=3;i<=13;++i)grid->addWidget(new QCheckBox,1,i);
+    auto *add=new QPushButton("Add");grid->addWidget(add,1,14);
+    REQUIRE(!augment::prepareSourceDockPin(&form,"missing","Pinned","Add",{true,true,false,false}));
+    REQUIRE(title->text().isEmpty()&&combo->currentIndex()==0);
+    REQUIRE(!augment::prepareSourceDockPin(&form,"Camera","Pinned","Wrong label",{}));
+    REQUIRE(augment::prepareSourceDockPin(&form,"Camera","Pinned","Add",{true,true,false,false})==add);
+    REQUIRE(combo->currentIndex()==2&&title->text()=="Pinned");
+    REQUIRE(qobject_cast<QCheckBox*>(grid->itemAtPosition(1,4)->widget())->isChecked());
+    REQUIRE(qobject_cast<QCheckBox*>(grid->itemAtPosition(1,5)->widget())->isChecked());
+    REQUIRE(!qobject_cast<QCheckBox*>(grid->itemAtPosition(1,7)->widget())->isChecked());
+    REQUIRE(!augment::prepareSourceDockPin(&form,"Camera","Another","Add",{}));
     std::cout<<"AFTERMARKET_QUICK_FIND_SEARCH_UI_PASS=1\n";
 }

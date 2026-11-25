@@ -10,6 +10,7 @@
 #include "menu-bar-compact.h"
 #include "action-strip.h"
 #include "quick-find.h"
+#include "source-dock-pin.h"
 #include "dock-layouts.h"
 #include "workspace-checkpoints.h"
 #include "cue-deck.h"
@@ -40,6 +41,8 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QEventLoop>
+#include <QPushButton>
+#include <QMessageBox>
 #include <QRegularExpression>
 #include <util/config-file.h>
 #include "augment.h"
@@ -165,6 +168,69 @@ static augment::CompanionBackupResult backupCheckpointCompanion(const QString &f
     });
 }
 
+static QAction *sourceDockManagerAction(){
+    if(!frontendReady||!uiActive)return nullptr;
+    auto *module=obs_get_module("source-dock");
+    auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+    auto *tools=main?main->findChild<QMenu*>("menuTools"):nullptr;
+    const char *label=nullptr;
+    if(!module||!tools||!obs_module_get_locale_string(module,"SourceDock",&label)||!label||!*label)return nullptr;
+    QAction *match=nullptr;
+    for(auto *action:tools->actions())if(action->text()==QString::fromUtf8(label)){
+        if(match)return nullptr;
+        match=action;
+    }
+    return match&&match->isEnabled()?match:nullptr;
+}
+static bool pinSourceDock(const augment::QuickFindEntry &hit){
+    if(hit.kind==augment::QuickFindEntry::Filter||hit.id.isEmpty())return false;
+    auto *action=sourceDockManagerAction();
+    auto *module=obs_get_module("source-dock");
+    auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+    const char *addLabel=nullptr;
+    if(!action||!module||!main||!obs_module_get_locale_string(module,"Add",&addLabel)||!addLabel)return false;
+    auto *source=obs_get_source_by_uuid(hit.id.toUtf8().constData());
+    if(!source)return false;
+    if(obs_source_removed(source)||obs_source_get_type(source)==OBS_SOURCE_TYPE_FILTER){
+        obs_source_release(source);return false;
+    }
+    const QString name=QString::fromUtf8(obs_source_get_name(source));
+    const auto flags=obs_source_get_output_flags(source);
+    const bool scene=obs_source_get_type(source)==OBS_SOURCE_TYPE_SCENE;
+    augment::SourceDockPinOptions opts{bool(flags&OBS_SOURCE_VIDEO),bool(flags&OBS_SOURCE_AUDIO),
+        bool(flags&OBS_SOURCE_CONTROLLABLE_MEDIA),scene};
+    // Source Dock uses the chosen title as its native dock ID. Never replace
+    // another dock, even when its label resembles the requested source.
+    QSet<QString> used;
+    for(auto *w:QApplication::allWidgets())if(auto *dock=qobject_cast<QDockWidget*>(w))used.insert(dock->objectName());
+    QString title=name+" · pinned";
+    for(int suffix=2;used.contains(title)&&suffix<=100;++suffix)title=name+" · pinned "+QString::number(suffix);
+    if(name.isEmpty()||used.contains(title)){obs_source_release(source);return false;}
+    QSet<QDialog*> prior;
+    for(auto *dialog:main->findChildren<QDialog*>())prior.insert(dialog);
+    action->trigger();
+    QList<QDialog*> fresh;
+    for(auto *dialog:main->findChildren<QDialog*>())
+        if(!prior.contains(dialog)&&dialog->inherits("SourceDockSettingsDialog"))fresh.append(dialog);
+    QPointer<QDialog> form=fresh.size()==1?fresh.first():nullptr;
+    auto *add=form?augment::prepareSourceDockPin(form,name,title,QString::fromUtf8(addLabel),opts):nullptr;
+    bool ok=false;
+    if(add&&!obs_source_removed(source)&&QString::fromUtf8(obs_source_get_name(source))==name){
+        add->click();
+        auto *dock=main->findChild<QDockWidget*>(title);
+        ok=dock&&dock->widget()&&dock->widget()->inherits("SourceDock");
+        if(ok){
+            if(form)form->close();
+            obs_frontend_save();
+            if(dockTitleIcons)dockTitleIcons->refresh();
+            dock->show();dock->raise();
+        }
+    }
+    obs_source_release(source);
+    if(!ok)QMessageBox::information(main,"Pin to workspace",
+        "The native Source Dock creation form could not be verified or the dock was not created. Use the Source Dock manager directly.");
+    return ok;
+}
 static void showQuickFind(){
     if(!uiActive||!frontendReady)return;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -173,8 +239,9 @@ static void showQuickFind(){
         quickFind=new augment::QuickFind(main,
             []{return augment::collectObsQuickFind();},
             [](const augment::QuickFindEntry &hit,augment::QuickFind::Action action){
+                if(action==augment::QuickFind::PinSource)return pinSourceDock(hit);
                 return augment::performObsQuickFind(hit,action);
-            });
+            },sourceDockManagerAction()!=nullptr);
     }
     quickFind->open();
 }
@@ -389,20 +456,7 @@ static bool startCustomUi(){
         dockTitleIcons=std::make_unique<augment::DockTitleIcons>(
             main,panels.get(),QDir(QFileInfo(stripConfigPath).absolutePath())
                                .filePath("dock-title-settings.ini"));
-    if(dockTitleIcons)dockTitleIcons->setSourceDockSettingsAction([]()->QAction*{
-        if(!frontendReady||!uiActive)return nullptr;
-        auto *module=obs_get_module("source-dock");
-        auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
-        auto *tools=main?main->findChild<QMenu*>("menuTools"):nullptr;
-        const char *label=nullptr;
-        if(!module||!tools||!obs_module_get_locale_string(module,"SourceDock",&label)||!label||!*label)return nullptr;
-        QAction *match=nullptr;
-        for(auto *action:tools->actions())if(action->text()==QString::fromUtf8(label)){
-            if(match)return nullptr;
-            match=action;
-        }
-        return match;
-    });
+    if(dockTitleIcons)dockTitleIcons->setSourceDockSettingsAction([]{return sourceDockManagerAction();});
     dockFaces=std::make_unique<augment::DockFaces>(nullptr,uiMotion);
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         sourcePicker=std::make_unique<augment::SourcePicker>(

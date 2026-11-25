@@ -265,9 +265,18 @@ menu when the unique localized native Tools action is available. The shortcut
 opens the original manager; no third-party widget is replaced. Their native
 dock IDs participate in saved dock arrangements and the existing Action Strip
 dock selector. Workspace checkpoints include their saved module configuration
-inside the native scene JSON. Full workspace restore and direct source pinning
-are not implemented; use the native manager to create docks. Without the
-optional module no extra Source Dock controls appear.
+inside the native scene JSON.
+
+In Quick Find, select a source or scene and choose **Pin to workspace** to create
+a new dedicated Source Dock without switching the active scene. The adapter
+resolves the selected source by UUID, chooses a unique dock title, and uses
+the installed manager's native Add form, with capability-appropriate preview,
+audio, media and scene controls. It does not replace the renderer or mutate
+existing docks. Source Dock may omit controls unsupported by the chosen source.
+The adapter checks the known 0.5.1 form structure and the native localized Add
+label before creating anything; if incompatible, use the native manager.
+Without the optional module, the pin action is hidden. Full workspace restoration
+and reduced-refresh previews are not implemented.
 
 ### Workspace checkpoints
 

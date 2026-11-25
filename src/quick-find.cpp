@@ -58,7 +58,7 @@ QList<QuickFindEntry> QuickFind::search(const QList<QuickFindEntry> &all,
     return matches;
 }
 
-QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform)
+QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable)
     :QDialog(parent),provider_(std::move(provider)),perform_(std::move(perform)) {
     setObjectName("aftermarket-quick-find");
     setWindowTitle("Aftermarket · Find sources");
@@ -81,9 +81,13 @@ QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform)
     properties_=new QPushButton("Properties",this);
     filters_=new QPushButton("Filters",this);
     jump_=new QPushButton("Go to scene",this);
+    pin_=new QPushButton("Pin to workspace",this);
+    pin_->setObjectName("aftermarket-quick-find-pin");
+    pin_->setVisible(pinAvailable);
+    pin_->setEnabled(false);
     auto *refresh=new QPushButton("Refresh",this);
     actions->addWidget(properties_);actions->addWidget(filters_);
-    actions->addWidget(jump_);actions->addStretch();actions->addWidget(refresh);
+    actions->addWidget(jump_);actions->addWidget(pin_);actions->addStretch();actions->addWidget(refresh);
     layout->addLayout(actions);
     connect(input_,&QLineEdit::textChanged,this,[this]{updateResults();});
     connect(results_,&QListWidget::itemSelectionChanged,this,[this]{
@@ -91,6 +95,7 @@ QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform)
         const int index=item?item->data(Qt::UserRole).toInt():-1;
         const bool found=index>=0&&index<cached_.size();
         const auto kind=found?cached_[index].kind:QuickFindEntry::Source;
+        pin_->setEnabled(found&&kind!=QuickFindEntry::Filter);
         properties_->setEnabled(found&&kind==QuickFindEntry::Source);
         filters_->setEnabled(found&&kind!=QuickFindEntry::Scene);
         jump_->setEnabled(found&&(kind==QuickFindEntry::Scene||
@@ -100,6 +105,7 @@ QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform)
     connect(properties_,&QPushButton::clicked,this,[this]{activate(Properties);});
     connect(filters_,&QPushButton::clicked,this,[this]{activate(Filters);});
     connect(jump_,&QPushButton::clicked,this,[this]{activate(SceneJump);});
+    connect(pin_,&QPushButton::clicked,this,[this]{activate(PinSource);});
     connect(refresh,&QPushButton::clicked,this,[this]{
         cached_=provider_?provider_():QList<QuickFindEntry>{};
         updateResults();
@@ -145,7 +151,7 @@ void QuickFind::updateResults(){
             }
     }
     if(results_->count())results_->setCurrentRow(0);
-    else {properties_->setEnabled(false);filters_->setEnabled(false);jump_->setEnabled(false);}
+    else {pin_->setEnabled(false);properties_->setEnabled(false);filters_->setEnabled(false);jump_->setEnabled(false);}
 }
 
 bool QuickFind::activate(Action action){
@@ -154,6 +160,7 @@ bool QuickFind::activate(Action action){
     const int index=selected->data(Qt::UserRole).toInt();
     if(index<0||index>=cached_.size())return false;
     const QuickFindEntry entry=cached_[index];
+    if(action==PinSource&&(pin_->isHidden()||entry.kind==QuickFindEntry::Filter))return false;
     if(!perform_(entry,action))return false;
     hide();
     return true;

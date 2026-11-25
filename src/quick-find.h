@@ -23,10 +23,10 @@ struct QuickFindEntry {
 
 class QuickFind final: public QDialog {
 public:
-    enum Action { Default, Properties, Filters, SceneJump };
+    enum Action { Default, Properties, Filters, SceneJump, PinSource };
     using Provider=std::function<QList<QuickFindEntry>()>;
     using Performer=std::function<bool(const QuickFindEntry&,Action)>;
-    explicit QuickFind(QWidget *parent,Provider provider,Performer perform);
+    explicit QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable=false);
     static QList<QuickFindEntry> search(const QList<QuickFindEntry> &all,
                                         const QString &query,int limit=80);
     void open();
@@ -38,7 +38,7 @@ private:
     Performer perform_;
     QLineEdit *input_=nullptr;
     QListWidget *results_=nullptr;
-    QPushButton *properties_=nullptr,*filters_=nullptr,*jump_=nullptr;
+    QPushButton *properties_=nullptr,*filters_=nullptr,*jump_=nullptr,*pin_=nullptr;
 };
 
 QList<QuickFindEntry> collectObsQuickFind();
