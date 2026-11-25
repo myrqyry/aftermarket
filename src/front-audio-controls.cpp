@@ -472,6 +472,7 @@ bool FrontAudioControls::setKnobs(bool enabled){
     return true;
 }
 int FrontAudioControls::rowCount()const{return state->rows.size();}
+QStringList FrontAudioControls::channelOrder()const{return state->channelOrder;}
 bool FrontAudioControls::setMenuButton(QToolButton *button){
     if(!state->native||!state->footer||!button)return false;
     if(state->menuButton)state->menuButton->removeEventFilter(this);

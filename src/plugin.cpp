@@ -149,6 +149,11 @@ static bool setAudioMixerBackside(bool enabled) {
         []{if(frontendReady)obs_frontend_save();}
     );
     frontAudio->attach(dockFaces->front(dock));
+    // One order store owned by the native front; the routing view consumes
+    // UUID order without owning or rewriting any channel configuration.
+    patchbay->setSourceOrderProvider([]{
+        return frontAudio?frontAudio->channelOrder():QStringList{};
+    });
     // A single native-title overflow holds the presentation toggle and all
     // advanced per-channel pan/sync editors. No second content header.
     auto *more=new augment::DockHeaderButton(augment::DockHeaderGlyph::More);

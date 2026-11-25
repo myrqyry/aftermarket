@@ -1,4 +1,5 @@
 #include "front-audio-controls.h"
+#include "audio-patchbay.h"
 #include <QApplication>
 #include <QWidget>
 #include <QVBoxLayout>
@@ -111,9 +112,55 @@ int main(int argc,char **argv){
  drag(twoName,one);
  REQUIRE(layout->itemAt(0)->widget()==two&&layout->itemAt(1)->widget()==one);
  REQUIRE(layout->itemAt(2)->widget()==footer);
+ // AudioBus is another view of the same saved UUID order, not a second
+ // order store. The first clickable node must follow the mixer position.
+ QVector<augment::RouteSource> routes={
+     {"uuid-tts","Live Latent: TTS",1,0},
+     {"uuid-media","Media Source",2,0},
+     {"uuid-extra","Hidden or inactive source",4,0}
+ };
+ int orderRoutingWrites=0;
+ augment::AudioPatchbay orderBay([&]{return routes;},
+     [&](const QString&,int){++orderRoutingWrites;return true;},{});
+ orderBay.setSourceOrderProvider([&]{return ui.channelOrder();});
+ orderBay.resize(350,340);orderBay.show();app.processEvents();
+ auto *orderCanvas=orderBay.findChild<QWidget*>("aftermarket-route-canvas");
+ REQUIRE(orderCanvas&&orderBay.routeCount()==3);
+ auto pickFirst=[&]{
+     QPoint local(39,43);
+     QMouseEvent press(QEvent::MouseButtonPress,local,orderCanvas->mapToGlobal(local),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+     QApplication::sendEvent(orderCanvas,&press);
+     QMouseEvent release(QEvent::MouseButtonRelease,local,orderCanvas->mapToGlobal(local),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+     QApplication::sendEvent(orderCanvas,&release);
+ };
+ pickFirst();REQUIRE(orderBay.selectedId()=="uuid-media");
+ REQUIRE(orderRoutingWrites==0&&orderBay.visibleCableCount()==3);
+ // Unlisted routes survive, selection follows UUID, not row number.
+ REQUIRE(orderBay.selectSource("uuid-extra"));
+ routes[1].name="Renamed media";orderBay.refresh();
+ REQUIRE(orderBay.selectedId()=="uuid-extra");
+ orderBay.hide();
+
  unlock->trigger(); // lock positions without resetting them
  drag(oneName,two);
  REQUIRE(layout->itemAt(0)->widget()==two);
+ // Change native order while AudioBus is hidden, then flip back. No timer
+ // tick or duplicate storage should be necessary.
+ unlock->trigger();drag(oneName,two);unlock->trigger();
+ REQUIRE(layout->itemAt(0)->widget()==one);
+ orderBay.show();app.processEvents();
+ REQUIRE(orderBay.selectedId()=="uuid-extra");
+ pickFirst();REQUIRE(orderBay.selectedId()=="uuid-tts");
+ orderBay.hide();
+ QMenu orderReset;ui.populateSettingsMenu(&orderReset);
+ QAction *resetShared=nullptr;
+ for(auto *a:orderReset.actions())if(a->text()=="Reset channel order")resetShared=a;
+ REQUIRE(resetShared&&resetShared->isEnabled());resetShared->trigger();
+ REQUIRE(ui.channelOrder().isEmpty());
+ orderBay.show();app.processEvents();pickFirst();
+ REQUIRE(orderBay.selectedId()=="uuid-tts"&&orderRoutingWrites==0);
+ orderBay.hide();
+ unlock->trigger();drag(twoName,one);unlock->trigger();
  // OBS may rebuild/reinsert widgets in native order; refresh reapplies saved order.
  layout->removeWidget(one);layout->insertWidget(0,one);
  ui.refresh();REQUIRE(layout->itemAt(0)->widget()==two);

@@ -3,6 +3,7 @@
 #include <QVector>
 #include <QHash>
 #include <QString>
+#include <QStringList>
 #include <cstdint>
 #include <functional>
 class QLabel;
@@ -44,6 +45,8 @@ public:
     using SignalProvider=std::function<QHash<QString,SignalReading>(const QVector<RouteSource>&)>;
     AudioPatchbay(Query query,ToggleTrack toggle,ChangeMonitoring monitor,
                   QWidget *parent=nullptr,SetTrack setTrack={},SignalProvider levels={});
+    using SourceOrderProvider=std::function<QStringList()>;
+    void setSourceOrderProvider(SourceOrderProvider provider);
     void refresh();
     void refreshLevels();
     int routeCount() const;
@@ -64,6 +67,8 @@ public:
     bool outputSignal(int track) const; // 1–6 native track; 7 OBS Monitor
     ActivityState sourceActivity(const QString &id) const;
     ActivityState outputActivity(int target) const;
+protected:
+    void showEvent(QShowEvent *event) override;
 private:
     class Canvas;
     Query query;
@@ -71,6 +76,7 @@ private:
     ChangeMonitoring monitor;
     SetTrack setTrack;
     SignalProvider levels;
+    SourceOrderProvider sourceOrder;
     QVector<RouteSource> routes;
     QString selected;
     Canvas *canvas=nullptr;

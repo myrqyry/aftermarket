@@ -47,7 +47,7 @@ Keep the familiar native mixer or customize selected channels:
 - Compact Pan and Sync controls that operate native OBS source properties.
 - Channel widths independent of source-name length, with readable labels.
 - Persistent channel order: unlock in the mixer title menu, drag source names,
-  then lock again. Reset restores native order.
+  then lock again. AudioBus follows the same saved order; reset restores native order.
 
 ![Native OBS faders with gradient tracks](docs/screenshots/readme/mixer-faders.png)
 

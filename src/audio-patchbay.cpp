@@ -199,7 +199,7 @@ public:
     }
     void setRoutes(const QVector<RouteSource> &value,const QString &current){
         if(routes==value&&selected==current)return;
-        if(dragging&&!std::any_of(value.begin(),value.end(),
+        if(pressedSource>=0&&!std::any_of(value.begin(),value.end(),
             [this](const RouteSource &src){return src.id==dragId;}))resetDrag();
         routes=value;
         selected=current;
@@ -292,7 +292,9 @@ protected:
             preview.setAlpha(225);
             p.setPen(QPen(preview,1.25,Qt::DashLine,Qt::RoundCap));
             p.setBrush(Qt::NoBrush);
-            const int sourceIndex=sourceAt(pressPoint);
+            const auto origin=std::find_if(routes.cbegin(),routes.cend(),
+                [this](const RouteSource &src){return src.id==dragId;});
+            const int sourceIndex=origin==routes.cend()?-1:int(origin-routes.cbegin());
             if(sourceIndex>=0){
                 const int y=firstY+sourceIndex*rowStep();
                 if(hoveredTarget>0)p.drawPath(cable(y,trackRect(hoveredTarget).center().y()));
@@ -600,8 +602,27 @@ void AudioPatchbay::populateRoutingMenu(QMenu *menu){
     });
 }
 int AudioPatchbay::visibleCableCount() const{return canvas->visibleCableCount();}
+void AudioPatchbay::setSourceOrderProvider(SourceOrderProvider provider){
+    sourceOrder=std::move(provider);
+    refresh();
+}
+void AudioPatchbay::showEvent(QShowEvent *event){
+    QWidget::showEvent(event);
+    // Refresh before DockFaces captures the incoming face for its animation.
+    refresh();
+}
 void AudioPatchbay::refresh(){
     auto latest=query?query():routes;
+    if(sourceOrder){
+        const auto order=sourceOrder();
+        if(!order.isEmpty()){
+            QHash<QString,int> ranks;
+            for(int i=0;i<order.size();++i)if(!ranks.contains(order[i]))ranks.insert(order[i],i);
+            std::stable_sort(latest.begin(),latest.end(),[&](const RouteSource &a,const RouteSource &b){
+                return ranks.value(a.id,order.size())<ranks.value(b.id,order.size());
+            });
+        }
+    }
     // Audio meter state is refreshed independently; preserve its values
     // across the slower authoritative OBS routing poll. Otherwise every
     // polling tick would otherwise reset measured source activity.

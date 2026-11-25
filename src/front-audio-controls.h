@@ -3,6 +3,7 @@
 #include <QList>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
 #include <memory>
 #include <functional>
 class QWidget;
@@ -32,6 +33,7 @@ public:
     bool setKnobs(bool value);
     bool knobs()const;
     int rowCount()const;
+    QStringList channelOrder()const;
     void populateSettingsMenu(QMenu *menu);
     bool setMenuButton(QToolButton *button);
 private:
