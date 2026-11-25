@@ -1018,7 +1018,14 @@ automatically moved behind another menu. If a list cannot fit within the
 available screen space, native navigation remains available. Expanded columns
 keep the popup anchored to the control that opened it, flipping above or to
 the left when needed rather than inheriting the original narrow menu position.
-The opening monitor and native action hit targets are preserved. Submenus anchor to the actual triggering row and stay on its monitor.
+The opening monitor and native action hit targets are preserved. Submenus
+retain the triggering row's vertical anchor, but open beside the **outer
+edge of a compact multi-column parent** rather than over its next column.
+When both sides fit, the closer edge is preferred. A wide child catalogue
+can use fewer columns when its rows still fit the available monitor height.
+When neither side has enough space, the side with more room is used and
+some overlap may still be unavoidable. Single-column parents retain their
+previous native submenu placement.
 
 | Source menu | Filter picker |
 | --- | --- |

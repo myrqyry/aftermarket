@@ -3710,3 +3710,31 @@ tooltip.png visually inspected. Two unattributed shutdown allocations and
 other plugin shutdown warnings; no production profile launch or other
 platform/multi-monitor setup qualified. Docs updated. Existing unrelated
 plugin.cpp comment preserved.
+
+## 2026-11-25: compact menu submenu placement
+
+User reports only nuisance of compact menus is submenus overlaying the
+next column. Retain compact column layout, native action identities and
+native keyboard handling. Mark actual Aftermarket-reflowed multi-column
+parents during their popup lifetime. Both short native children and
+compact long children align vertically to their triggering row but choose
+the full parent outer edge. Prefer nearest edge if both fit, otherwise
+the fitting side, or greater available space when overlap unavoidable.
+Use actual parent monitor; constrain geometry to available work area.
+For long compact children reduce column count when doing so fits beside
+parent and retains adequate vertical room, or keep native single-column
+layout if suitable. No extra timer, custom menu or action proxy. Existing
+Qt 6.4.2 private-layout ABI guard retained. Single-column parent and
+unsupported Qt behavior remain unchanged.
+
+RED focused menu-augmentation reproduced short child overlap on original
+code (/tmp/am-submenu-red-build.log is build; ctest failed line 274).
+GREEN short/long children on left/right monitor edges, actual Qt keyboard
+opening, parent unchanged, no intersection, child action hit targets
+preserved. Full 42/42 CTest /tmp/am-submenu-full-ctest.log (17.67s).
+Real Qt X11 1600x1000 Xvfb menu-test
+/tmp/am-submenu-final-xcb.log passed. Not a new native OBS integration run;
+mouse-hover traversal between inner-column launcher and far edge, narrow
+no-fit geometry, and multi-monitor placement not independently qualified.
+Docs updated, local commit only; previous installed binary unchanged.
+Existing unrelated src/plugin.cpp comment preserved.

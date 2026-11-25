@@ -249,6 +249,40 @@ int main(int argc, char **argv) {
         REQUIRE(count==101&&rootCount==1&&longMenu.actions()==originals);
         REQUIRE(originals.at(4)->isEnabled()==false);
         REQUIRE(controller.compactMenusEnabled());
+        // An interior-column submenu must not cover another column.
+        // Exercise both a short native child and a long compact child.
+        {
+            const QRect work=QGuiApplication::primaryScreen()->availableGeometry();
+            const QPoint saved=QCursor::pos();
+            for(bool longChild:{false,true})for(bool nearRight:{false,true}){
+                QMenu parent;
+                if(nearRight)for(int n=0;n<28;++n)parent.addAction(QString("Item %1").arg(n));
+                auto *child=parent.addMenu("Options");
+                for(int n=0;n<(longChild?18:3);++n)child->addAction(QString("Choice %1").arg(n));
+                if(!nearRight)for(int n=0;n<28;++n)parent.addAction(QString("Item %1").arg(n));
+                const QPoint anchor(nearRight?work.right()-40:work.left()+40,work.top()+40);
+                QCursor::setPos(anchor);
+                parent.popup(anchor);app.processEvents();
+                QSet<int> cols;
+                for(auto *action:parent.actions())cols.insert(parent.actionGeometry(action).x());
+                REQUIRE(cols.size()>1);
+                const QRect originalParent=parent.geometry();
+                parent.setActiveAction(child->menuAction());
+                QKeyEvent right(QEvent::KeyPress,Qt::Key_Right,Qt::NoModifier);
+                QApplication::sendEvent(&parent,&right);app.processEvents();
+                REQUIRE(child->isVisible());
+                REQUIRE(work.contains(child->geometry()));
+                REQUIRE(!child->geometry().intersects(originalParent));
+                REQUIRE(parent.geometry()==originalParent);
+                REQUIRE(nearRight?child->geometry().right()<originalParent.left():child->geometry().left()>originalParent.right());
+                for(auto *action:child->actions()){
+                    auto rect=child->actionGeometry(action);
+                    REQUIRE(rect.isValid()&&child->actionAt(rect.center())==action);
+                }
+                child->hide();parent.hide();app.processEvents();
+            }
+            QCursor::setPos(saved);
+        }
         // OBS Source context actions should remain a familiar single column,
         // even when their size would otherwise trigger the column adapter.
         QMenu sourceContext;
