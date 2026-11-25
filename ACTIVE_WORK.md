@@ -3147,3 +3147,24 @@ Group packing/collapse verified in Qt fixture only. RTL, other platforms,
 HyperShader-specific forms and complex nested groups not independently
 tested. No production install/push. Existing unrelated src/plugin.cpp
 comment remains unstaged.
+
+
+## Consolidated Tools menu — 2026-11-24
+
+One OBS-registered Tools action "Aftermarket" with owned native submenu;
+seven visible commands in active mode, ordered workspace (Find Sources,
+Dock Layouts, Cue Deck, Action Strip), inspector (Inspector, Panels), recovery
+(Emergency restore). Panels retained as direct inspector panel shortcut.
+Safe mode hides other commands and separators, leaves one Resume UI
+customizations command accessible; same actions preserved across suspend/
+resume. Other plugins' Tools actions untouched, including Source Dock.
+Stable object IDs aftermarket-tools-*; cleanup removes only owned menu/actions.
+Documentation paths updated. RED missing ToolsMenu, GREEN Qt test single
+anchor, native action identity, action dispatch, frontend-ready gating,
+hamburger compatibility, safe mode/resume, destruction. Actual isolated
+OBS 32.2.0 native probe confirmed single top-level entry, seven commands,
+Quick Find opening, emergency marker creation with only Resume visible,
+resume marker removal with seven commands restored, third-party Source
+Dock entry unchanged throughout, normal exit 0, two unattributed memory
+leaks. Evidence /tmp/aftermarket-tools-menu-native-20261124/obs.log.
+No install or push; other plugins not modified.

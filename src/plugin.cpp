@@ -7,6 +7,7 @@
 #include "panels.h"
 #include "property-sections.h"
 #include "property-columns.h"
+#include "tools-menu.h"
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
@@ -59,7 +60,7 @@ static std::unique_ptr<augment::ObsAudio> audio;
 static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
 static QPointer<augment::QuickFind> quickFind;
-static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, findAction, cuesAction, emergencyAction, resumeAction;
+static std::unique_ptr<augment::ToolsMenu> toolsMenu;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::PropertyColumns> propertyColumns;
@@ -457,14 +458,7 @@ static void stopCustomUi(){
     transforms.reset();
     panels.reset(); // return original center preview (if docked)
     uiActive=false;
-    if(toolsAction)toolsAction->setEnabled(false);
-    if(panelsAction)panelsAction->setEnabled(false);
-    if(stripAction)stripAction->setEnabled(false);
-    if(layoutsAction)layoutsAction->setEnabled(false);
-    if(findAction)findAction->setEnabled(false);
-    if(cuesAction)cuesAction->setEnabled(false);
-    if(emergencyAction)emergencyAction->setEnabled(false);
-    if(resumeAction)resumeAction->setVisible(true);
+    if(toolsMenu)toolsMenu->setState(false,frontendReady);
 }
 static bool startCustomUi(){
     if(uiActive)return true;
@@ -567,37 +561,21 @@ static bool startCustomUi(){
             *controller,*dockTitleIcons,std::move(services));
     }
     uiActive=true;
-    if(toolsAction)toolsAction->setEnabled(true);
-    if(panelsAction)panelsAction->setEnabled(true);
-    if(stripAction)stripAction->setEnabled(true);
-    if(layoutsAction)layoutsAction->setEnabled(frontendReady);
-    if(findAction)findAction->setEnabled(frontendReady);
-    if(cuesAction)cuesAction->setEnabled(frontendReady);
-    if(emergencyAction)emergencyAction->setEnabled(true);
-    if(resumeAction)resumeAction->setVisible(false);
+    if(toolsMenu)toolsMenu->setState(true,frontendReady);
     return true;
 }
 static void cleanupUi(){
     stopCustomUi();
     emergency.reset(); // remove key filter before deleting the tool actions
-    delete resumeAction.data();
-    delete emergencyAction.data();
-    delete panelsAction.data();
-    delete stripAction.data();
-    delete layoutsAction.data();
-    delete findAction.data();
-    delete cuesAction.data();
+    toolsMenu.reset();
     cueDeck.reset();
     dockLayouts.reset();
-    delete toolsAction.data();
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
     if(nativeActions&&event!=OBS_FRONTEND_EVENT_EXIT)nativeActions->onFrontendEvent(event);
     if(event==OBS_FRONTEND_EVENT_FINISHED_LOADING){
         frontendReady=true;
-        if(uiActive&&layoutsAction)layoutsAction->setEnabled(true);
-        if(uiActive&&findAction)findAction->setEnabled(true);
-        if(uiActive&&cuesAction)cuesAction->setEnabled(true);
+        if(toolsMenu)toolsMenu->setState(uiActive,frontendReady);
         if(actionStrip)actionStrip->refresh();
         if(uiActive&&controller&&controller->mixerBacksideEnabled()&&mixerRetry)
             mixerRetry->start();
@@ -679,31 +657,33 @@ MODULE_EXPORT bool obs_module_load(void) {
     controller->setAudioProvider([](const QWidget *w){return audio?audio->level(w):std::optional<float>{};},
         []{if(audio)audio->clear();});
     controller->setMeterProvider([](const QWidget *w){return audio?audio->sample(w):std::optional<augment::MeterReading>{};});
-    toolsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket: Inspector"));
-    if(toolsAction)QObject::connect(toolsAction.data(),&QAction::triggered,controller,[]{
+    toolsMenu=std::make_unique<augment::ToolsMenu>(
+        static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket")));
+    using Command=augment::ToolsMenu::Command;
+    auto *toolsAction=toolsMenu->action(Command::Inspector);
+    if(toolsAction)QObject::connect(toolsAction,&QAction::triggered,controller,[]{
         if(!inspector)inspector=new augment::Inspector(*controller,
             static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
         inspector->show();inspector->raise();inspector->activateWindow();
     });
-    panelsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket: Panels"));
-    if(panelsAction)QObject::connect(panelsAction.data(),&QAction::triggered,controller,[]{
+    auto *panelsAction=toolsMenu->action(Command::Panels);
+    if(panelsAction)QObject::connect(panelsAction,&QAction::triggered,controller,[]{
         if(!panels)return;
         if(!inspector)inspector=new augment::Inspector(*controller,
             static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
         inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
     });
-    stripAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket: Action Strip…"));
-    if(stripAction)QObject::connect(stripAction.data(),&QAction::triggered,controller,[]{
+    auto *stripAction=toolsMenu->action(Command::Strip);
+    if(stripAction)QObject::connect(stripAction,&QAction::triggered,controller,[]{
         if(!actionStrip)return;
         auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
         if(main)QTimer::singleShot(0,[main]{
             if(actionStrip)actionStrip->showEditor(main,main->menuBar());
         });
     });
-    layoutsAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
-        "Aftermarket: Dock Layouts…"));
+    auto *layoutsAction=toolsMenu->action(Command::Layouts);
     blog(LOG_INFO,"[aftermarket] AFTERMARKET_LAYOUT_TOOLS_20261123 registered=%d",layoutsAction?1:0);
-    if(layoutsAction)QObject::connect(layoutsAction.data(),&QAction::triggered,controller,[]{
+    if(layoutsAction)QObject::connect(layoutsAction,&QAction::triggered,controller,[]{
         auto *main=qobject_cast<QMainWindow*>(
             static_cast<QWidget*>(obs_frontend_get_main_window()));
         if(!main||!frontendReady)return;
@@ -725,28 +705,24 @@ MODULE_EXPORT bool obs_module_load(void) {
             if(actionStrip)actionStrip->refresh();
         });
     });
-    findAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
-        "Aftermarket: Find Sources…"));
+    auto *findAction=toolsMenu->action(Command::Find);
     blog(LOG_INFO,"[aftermarket] AFTERMARKET_QUICK_FIND_20261123 registered=%d",findAction?1:0);
-    if(findAction)QObject::connect(findAction.data(),&QAction::triggered,controller,[]{
+    if(findAction)QObject::connect(findAction,&QAction::triggered,controller,[]{
         // The tools menu can still be closing when this signal arrives.
         QTimer::singleShot(0,[]{showQuickFind();});
     });
-    cuesAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
-        "Aftermarket: Cue Deck…"));
+    auto *cuesAction=toolsMenu->action(Command::Cues);
     blog(LOG_INFO,"[aftermarket] AFTERMARKET_CUE_DECK_20261123 registered=%d",cuesAction?1:0);
-    if(cuesAction)QObject::connect(cuesAction.data(),&QAction::triggered,controller,[]{
+    if(cuesAction)QObject::connect(cuesAction,&QAction::triggered,controller,[]{
         QTimer::singleShot(0,[]{showCueDeck();});
     });
-    emergencyAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
-        "Aftermarket: Emergency restore (Ctrl+Alt+Shift+F12)"));
-    if(emergencyAction)QObject::connect(emergencyAction.data(),&QAction::triggered,controller,[]{
+    auto *emergencyAction=toolsMenu->action(Command::Emergency);
+    if(emergencyAction)QObject::connect(emergencyAction,&QAction::triggered,controller,[]{
         if(emergency&&!emergency->engage()&&!emergency->active())
             blog(LOG_ERROR,"[aftermarket] emergency marker could not be saved; no UI state changed");
     });
-    resumeAction=static_cast<QAction*>(obs_frontend_add_tools_menu_qaction(
-        "Aftermarket: Resume UI customizations"));
-    if(resumeAction)QObject::connect(resumeAction.data(),&QAction::triggered,controller,[]{
+    auto *resumeAction=toolsMenu->action(Command::Resume);
+    if(resumeAction)QObject::connect(resumeAction,&QAction::triggered,controller,[]{
         // A native Tools menu may still be closing; avoid reparenting it mid-signal.
         QTimer::singleShot(0,[]{
             if(emergency&&!emergency->resume())
@@ -755,14 +731,7 @@ MODULE_EXPORT bool obs_module_load(void) {
     });
     if(emergency->active()){
         // Already suspended before any UI adapters were constructed.
-        if(toolsAction)toolsAction->setEnabled(false);
-        if(panelsAction)panelsAction->setEnabled(false);
-        if(stripAction)stripAction->setEnabled(false);
-        if(layoutsAction)layoutsAction->setEnabled(false);
-        if(findAction)findAction->setEnabled(false);
-        if(cuesAction)cuesAction->setEnabled(false);
-        if(emergencyAction)emergencyAction->setEnabled(false);
-        if(resumeAction)resumeAction->setVisible(true);
+        toolsMenu->setState(false,frontendReady);
         blog(LOG_WARNING,"[aftermarket] safe-mode.flag detected; Aftermarket UI disabled");
     }else startCustomUi();
     obs_frontend_add_event_callback(frontendEvent,nullptr);

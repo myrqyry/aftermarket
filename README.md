@@ -64,7 +64,7 @@ supported collapse, float, and close operations. Roll up a dock without
 destroying its contents. Restore the original preview or make it a movable
 native dock, including responsive Studio Mode.
 
-Save complete dock arrangements with **Tools → Aftermarket: Dock Layouts…**.
+Save complete dock arrangements with **Tools → Aftermarket → Dock Layouts…**.
 Switch between saved arrangements, or undo the last switch. Layout snapshots
 preserve native dock placement, not scene or audio settings.
 
@@ -108,7 +108,7 @@ of being clipped. The optional hamburger menu frees additional space.
 
 ### Cue Deck
 
-Use **Tools → Aftermarket: Cue Deck…** to create named sequences of saved
+Use **Tools → Aftermarket → Cue Deck…** to create named sequences of saved
 dock-layout changes, native OBS or plugin hotkeys, and timed waits. Reorder
 steps, run or stop a cue, and optionally pin it to the Action Strip.
 Existing plugin hotkeys—including Exeldro Move actions when registered by
@@ -137,7 +137,7 @@ remains available in Settings.
 
 ### Quick Find
 
-Open **Tools → Aftermarket: Find Sources…** to search the current scene
+Open **Tools → Aftermarket → Find Sources…** to search the current scene
 collection by source, scene, filter, type, file path, or URL. Open native
 Properties or Filters, or jump to the scene. Studio Mode navigation targets
 the preview rather than the on-air program. Assign an OBS hotkey or add the
@@ -195,7 +195,7 @@ Appearance, Menus, Mixer, Panels, and Action strip.
 
 ![Aftermarket's native OBS Settings page](docs/screenshots/readme/aftermarket-obs-settings.webp)
 
-For advanced per-target rules, open **Tools → Aftermarket: Inspector**.
+All Aftermarket tools are grouped in a single **Tools → Aftermarket** submenu. For advanced per-target rules, open **Tools → Aftermarket → Inspector**.
 Capture an actual menu or widget, browse its native identity, and customize
 supported targets. Detailed gradient and mixer editors are available there too.
 
@@ -244,7 +244,7 @@ archive is for verification, not an authorized distributable release.
 
 ## Recovery and documentation
 
-**Ctrl+Alt+Shift+F12** or **Tools → Aftermarket: Emergency restore** restores
+**Ctrl+Alt+Shift+F12** or **Tools → Aftermarket → Emergency restore** restores
 native UI presentation without deleting your Aftermarket settings, scenes,
 or routing. The safe-mode marker persists across restart. Resume explicitly
 when ready.

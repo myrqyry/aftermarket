@@ -60,7 +60,7 @@ remain in the Inspector; the regular preferences now have their own home.
 
 ### Inspector workspace
 
-Open **Tools → Aftermarket: Inspector** for advanced per-target editing and
+The native Tools menu has one Aftermarket submenu, with workspace commands, inspector shortcuts and recovery separated. In emergency safe mode only Resume UI customizations is visible. Open **Tools → Aftermarket → Inspector** for advanced per-target editing and
 richer visual editors. Its specialized pages remain available for:
 
 - **Menus & widgets:** Pick target with an adjustable 2–10 second delay,
@@ -84,7 +84,7 @@ richer visual editors. Its specialized pages remain available for:
   Toggle **Audio Mixer backside (native routing)** to add a flip button to
   OBS's real Audio Mixer dock. **Alternating list backgrounds** adds separate
   Scenes and Sources switches with native-theme or custom row colors. The
-  Tools → Aftermarket: Panels shortcut opens this page.
+  Tools → Aftermarket → Panels shortcut opens this page.
 
 ![Mixer page in OBS](screenshots/readme/workspace-mixer.png)
 
@@ -183,7 +183,7 @@ extra dock or floating toolbar.
 ### Collapsible panels
 
 Middle-click a visible dock's title bar to collapse it to its header. Middle-click
-again to expand. Alternatively open **Tools → Aftermarket: Panels**, select a
+again to expand. Alternatively open **Tools → Aftermarket → Panels**, select a
 panel, and choose **Collapse / expand**. **Expand all** restores all rolled-up
 panels. The original dock and its contents stay alive; this does not close the
 dock or delete OBS sources.
@@ -210,7 +210,7 @@ restored it. Also verified by Qt dock-layout regression tests.
 ### Dockable video preview
 
 The preview normally stays in the center of OBS. To move it into the native
-dock system, open **Tools → Aftermarket: Panels** (or the **Panels** tab of the
+dock system, open **Tools → Aftermarket → Panels** (or the **Panels** tab of the
 Inspector) and press **Make preview dockable**. The Preview dock can be
 dragged between dock areas, floated, resized, or closed just like the other
 native OBS docks.
@@ -268,7 +268,7 @@ contents are preserved, not their exact pixel geometry.
 
 ### Saved dock arrangements
 
-Use **Tools → Aftermarket: Dock Layouts…** to save, rename, update, switch and undo native dock arrangements. Add a saved layout to the Action Strip for one-click switching.
+Use **Tools → Aftermarket → Dock Layouts…** to save, rename, update, switch and undo native dock arrangements. Add a saved layout to the Action Strip for one-click switching.
 
 ![Dock Layouts manager](screenshots/readme/dock-layouts.webp)
 
@@ -333,7 +333,7 @@ optional backend is unavailable. Native scene saves retain the settings.
 
 ### Workspace checkpoints
 
-Open **Tools → Aftermarket: Dock Layouts… → Workspace checkpoints…**.
+Open **Tools → Aftermarket → Dock Layouts… → Workspace checkpoints…**.
 Create a named checkpoint to request a native OBS save, verify that the current collection
 was written, and capture its scene JSON, current native dock state, plus existing
 Aftermarket rules, Action Strip, Cue Deck, layout library, mixer ordering, device
@@ -366,7 +366,7 @@ See the [dock layouts reference](dock-layouts.md) for persistence, missing-dock 
 
 ### Compact hamburger menu bar
 
-**Tools → Aftermarket: Inspector → Menus & widgets → ☰ Menu bar** replaces OBS's
+**Tools → Aftermarket → Inspector → Menus & widgets → ☰ Menu bar** replaces OBS's
 top-level File/Edit/View/Docks/Profile/Scene Collection/Tools/Help labels
 with one hamburger entry, using **the same native Qt menus and actions**.
 Click it to access every original submenu, including items registered by other
@@ -388,7 +388,7 @@ The remaining menu-bar space can hold the optional Action Strip described below.
 ### Action Strip
 
 **OBS Settings → Aftermarket → Action strip** controls visibility and
-opens the button editor. The **Tools → Aftermarket: Action Strip…** shortcut
+opens the button editor. The **Tools → Aftermarket → Action Strip…** shortcut
 is still available for editing. Choose
 **Show OBS action strip** to place your configured items at the
 right of the *existing* native menu bar, including when the hamburger is off.
@@ -440,7 +440,7 @@ dock late, and stops retrying on emergency recovery. It does not copy Timeline's
 
 ### Cue Deck
 
-**Tools → Aftermarket: Cue Deck…** opens a temporary, theme-aware cue manager.
+**Tools → Aftermarket → Cue Deck…** opens a temporary, theme-aware cue manager.
 Cues are named ordered action sequences—not new OBS scenes or copies of any
 third-party animation engine. Use **New cue**, enter a name, then add steps:
 
@@ -465,7 +465,7 @@ action disappears **during** a sequence, dispatch stops at that step; earlier
 steps are not rolled back. Cue definitions remain stored so temporarily
 unavailable plugins do not erase your work.
 
-To add one-click playback, use **Tools → Aftermarket: Action Strip… → Add…
+To add one-click playback, use **Tools → Aftermarket → Action Strip… → Add…
 → cue**, select the saved cue, and enable the Action Strip if necessary.
 Renaming a cue updates its button caption; deleting it disables that button.
 
@@ -516,7 +516,7 @@ source or scene files.
 
 ### Quick Find: jump to sources and filters without another dock
 
-Open **Tools → Aftermarket: Find Sources…** to search the current OBS scene
+Open **Tools → Aftermarket → Find Sources…** to search the current OBS scene
 collection in a compact, temporary palette. The search matches **source,
 scene, and filter names**, OBS source types, and common source file paths or
 URLs. Results show a parent-scene context when known. Filtering is local to
@@ -530,7 +530,7 @@ OBS; it doesn't send content elsewhere.
   Typing in the search box does not change the live scene or source settings.
   **Refresh** rebuilds the source index if something changed while it was open.
 - For one-click entry, add **Find sources** in the existing
-  **Aftermarket: Action Strip… → Add… → search** editor.
+  **Aftermarket → Action Strip… → Add… → search** editor.
 - For keyboard entry, assign a shortcut to
   **Aftermarket: Quick Find sources and filters** under
   **OBS Settings → Hotkeys**. No conflicting shortcut is assigned by default.
@@ -560,7 +560,7 @@ It uses the existing theme's colors unless you explicitly choose custom
 ones; selection, hover and source-specific coloring remain native.
 
 The Strength slider is available in **OBS Settings → Aftermarket → Appearance**
-and **Tools → Aftermarket: Inspector → Panels → Alternating list backgrounds**.
+and **Tools → Aftermarket → Inspector → Panels → Alternating list backgrounds**.
 The Inspector previews changes while you drag and saves on release. Native
 OBS Settings stages the value until you choose Apply or OK; Cancel discards
 unapplied edits. The settings are stored atomically as listRows.strength in
@@ -638,7 +638,7 @@ inspect or modify atkAudio PluginHost2 graphs or VST chains. Independent device 
 
 ### Rotary mixer knobs
 
-Open **Tools → Aftermarket: Inspector → Mixer** and check
+Open **Tools → Aftermarket → Inspector → Mixer** and check
 **Replace mixer faders with knobs**. Enable All mixer sources to replace every
 mixer fader, or select specific sources in the checklist (e.g.
 `Mic; Music`). Apply without restarting OBS. For now this is limited to mixer
@@ -691,7 +691,7 @@ one-second peak marker, clip flash and 30 dB/s release.
 The native meter is hidden only when paired with the supported knob and
 source can be resolved. It is restored if the binding is unavailable or
 the effect is disabled. Disable **Integrate peak meter into knob** in
-Tools → Aftermarket: Inspector → Mixer to retain the full native meter.
+Tools → Aftermarket → Inspector → Mixer to retain the full native meter.
 The corresponding JSON key is `gradient.knobMeters` (default true).
 The compact control requests a 68-pixel minimum and 76-pixel maximum height
 subject to native constraints. The OBS setting for sample/true peak is used.
@@ -709,7 +709,7 @@ The meter scale remains visible at silence and mute, using dimmed native zone co
 
 ### Audio-reactive mixer effects
 
-In **Tools → Aftermarket: Inspector**, enable gradient tracks on Gradients, then open Mixer and enable
+In **Tools → Aftermarket → Inspector**, enable gradient tracks on Gradients, then open Mixer and enable
 **Audio-reactive mixer gradients**, and optionally **Pulse native meter colors**.
 Enable Motion in the inspector. The effects are opt-in and can be toggled live.
 
@@ -753,7 +753,7 @@ inside meter bars remain future work.
 
 ### Animated gradient tracks
 
-Open **Tools → Aftermarket: Inspector → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+Open **Tools → Aftermarket → Inspector → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
 
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
@@ -802,7 +802,7 @@ The opening monitor and native action hit targets are preserved. Submenus anchor
 | --- | --- |
 | ![Compact single-column source context menu](screenshots/readme/menu-source-single.png) | ![All 18 effect filters in two columns](screenshots/readme/filter-columns.png) |
 
-Use **Tools → Aftermarket: Inspector → Compact menus** to enable or disable
+Use **Tools → Aftermarket → Inspector → Compact menus** to enable or disable
 the layout (enabled by default). Pick a particular action and check
 **Move to More actions** only if you want that specific command tucked
 away. Placement rules are stored independently in the root-level
@@ -829,7 +829,7 @@ theme supplies colors and type.
 ### Context-menu actions
 
 Aftermarket can now customize the **contents** of a native context menu,
-rather than only its appearance. Open **Tools → Aftermarket: Inspector**, pick
+rather than only its appearance. Open **Tools → Aftermarket → Inspector**, pick
 the target menu, then use the **Menus & widgets** page:
 
 - **Hide this default entry** removes that selected command only from
@@ -888,7 +888,7 @@ layout for safety.
 
 ### Submenu inspection and selected choices
 
-In **Tools → Aftermarket: Inspector → Menus & widgets**, check **List submenu
+In **Tools → Aftermarket → Inspector → Menus & widgets**, check **List submenu
 items** to expand a captured menu into a browsable tree. It includes
 currently available nested actions, checked states, disabled rows,
 separators, and OBS's color-preset buttons. Leave it unchecked for the
@@ -965,7 +965,7 @@ widgets, menus and source list selection remain owned by OBS and its theme.**
 
 OBS's native selection frame normally uses red borders with square resize
 handles. Aftermarket now offers **Modern transform frame and handles** in
-**Tools → Aftermarket: Inspector → Gradients → Preview selection**.
+**Tools → Aftermarket → Inspector → Gradients → Preview selection**.
 This option is **off by default**, applies immediately, and is independent
 of gradient tracks and the Motion toggle.
 
@@ -1004,7 +1004,7 @@ settings are not changed by installation.
 ### Motion
 
 Enable **Motion** in **OBS → Settings → Aftermarket → Menus** or from
-**Tools → Aftermarket: Inspector**. The same global control governs menu artwork,
+**Tools → Aftermarket → Inspector**. The same global control governs menu artwork,
 dock collapse/expand, AudioBus page switching, and existing reactive gradients.
 Motion is off by default, preserving the native immediate behavior until enabled.
 For individual menu artwork rules, pick a preset and duration in the inspector.
@@ -1069,7 +1069,7 @@ rule, and captured changing icon pixels during both entrance and hover.
 **Ctrl+Alt+Shift+F12**, while OBS is focused, immediately activates
 **Aftermarket safe mode**. This shortcut is captured even when an Aftermarket
 popup has keyboard focus. A second path is always available under
-**Tools → Aftermarket: Emergency restore** (including inside the hamburger).
+**Tools → Aftermarket → Emergency restore** (including inside the hamburger).
 Recovery disables Aftermarket's menu decorations, hamburger, gradient/rotary
 effects, audio meter tinting, source/scene row colors, collapsible property
 groups, dock backsides, and dock/preview layout enhancements. Original OBS
@@ -1082,7 +1082,7 @@ Before changing the UI, recovery writes a separate
 On the next OBS startup, the plugin checks this marker and does not apply
 customizations, **even if** the settings file is unreadable. Repeated use of
 the emergency shortcut cannot accidentally re-enable a broken interface.
-After the issue is corrected, choose **Tools → Aftermarket: Resume UI
+After the issue is corrected, choose **Tools → Aftermarket → Resume UI
 customizations**. Only successful explicit resume removes the marker; the
 original `rules.json` is never rewritten by emergency mode.
 
@@ -1136,6 +1136,6 @@ Recent real OBS checks include the split compact source picker, single-click cre
 
 ### Disable/remove
 
-Use **Tools → Aftermarket: Emergency restore** for reversible suspension of the plugin UI. Setting `"enabled": false` in rules.json disables rule-driven augmentation; it is not a complete plugin unload. To completely unload,
+Use **Tools → Aftermarket → Emergency restore** for reversible suspension of the plugin UI. Setting `"enabled": false` in rules.json disables rule-driven augmentation; it is not a complete plugin unload. To completely unload,
 close OBS and remove just `plugins/aftermarket/bin/64bit/aftermarket.so`
 from its user config directory. The rules file can be preserved.
