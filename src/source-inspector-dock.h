@@ -33,7 +33,7 @@ private:
  QPushButton *pin_,*properties_,*filters_,*usageButton_;
  QLineEdit *search_;
  QListWidget *filterList_;
- struct FilterRow{QString id,name;bool enabled;bool operator==(const FilterRow &o)const{return id==o.id&&name==o.name&&enabled==o.enabled;}};
+ struct FilterRow{QString id,name,type;bool enabled;bool operator==(const FilterRow &o)const{return id==o.id&&name==o.name&&type==o.type&&enabled==o.enabled;}};
  QList<FilterRow> filterRows_;
  QComboBox *transformPresets_;
  QPushButton *saveTransform_,*loadTransform_,*deleteTransform_,*up_,*down_,*addFilter_,*removeFilter_;

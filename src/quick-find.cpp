@@ -1,4 +1,6 @@
 #include "quick-find.h"
+#include "plugin-theme-icons.h"
+#include <QHash>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -154,6 +156,8 @@ void QuickFind::open() {
 
 void QuickFind::updateResults(){
     const auto filtered=search(cached_,input_->text());
+    const PluginThemeIcons pluginIcons;
+    QHash<QString,QIcon> iconCache;
     results_->clear();
     for(int i=0;i<filtered.size();++i){
         const auto &entry=filtered[i];
@@ -161,6 +165,15 @@ void QuickFind::updateResults(){
             (entry.location.isEmpty()?"":"   ·   "+entry.location);
         const QString secondary=entry.detail.isEmpty()?entry.type:entry.detail;
         auto *item=new QListWidgetItem(label,results_);
+        if(entry.kind!=QuickFindEntry::Scene){
+            const bool filter=entry.kind==QuickFindEntry::Filter;
+            const auto key=(filter?QStringLiteral("filter:"):QStringLiteral("source:"))+entry.type;
+            if(!iconCache.contains(key)){
+                const auto glyph=filter?pluginIcons.filter(entry.type):pluginIcons.source(entry.type);
+                iconCache.insert(key,glyph.itemIcon(results_->palette()));
+            }
+            if(!iconCache.value(key).isNull())item->setIcon(iconCache.value(key));
+        }
         item->setToolTip(secondary);
         // Rows refer to the current catalog by their stable identities.
         for(int j=0;j<cached_.size();++j)

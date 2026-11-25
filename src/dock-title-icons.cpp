@@ -1,4 +1,5 @@
 #include "dock-title-icons.h"
+#include "plugin-theme-icons.h"
 #include "app-text-elision.h"
 #include "dock-header-button.h"
 #include "panels.h"
@@ -41,12 +42,27 @@ public:
         kind_=kind;
         update();
     }
+    void setPluginGlyph(const PluginThemeIcons::Glyph &glyph){
+        if(pluginGlyph_==glyph)return;
+        pluginGlyph_=glyph;
+        light_=QIcon();dark_=QIcon();
+        if(glyph.valid()){
+            light_=QIcon(glyph.light);
+            dark_=QIcon(glyph.dark);
+        }
+        update();
+    }
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        p.scale(width()/20.0,height()/20.0);
         const QColor stroke=palette().color(QPalette::Active,QPalette::WindowText);
+        const auto &pluginIcon=qGray(stroke.rgb())>=128?light_:dark_;
+        if(!pluginIcon.isNull()){
+            pluginIcon.paint(&p,rect());
+            return;
+        }
+        p.scale(width()/20.0,height()/20.0);
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(stroke,1.8,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
         auto line=[&](qreal x1,qreal y1,qreal x2,qreal y2){
@@ -106,6 +122,8 @@ protected:
     }
 private:
     DockTitleIcons::Kind kind_;
+    PluginThemeIcons::Glyph pluginGlyph_;
+    QIcon light_,dark_;
 };
 }
 DockTitleIcons::Kind DockTitleIcons::classify(const QString &objectName,const QString &title,const QString &contentClass){
@@ -273,12 +291,15 @@ void DockTitleIcons::setSourceDockSettingsAction(std::function<QAction*()> actio
 void DockTitleIcons::refresh(){
     if(!window_)return;
     const auto docks=window_->findChildren<QDockWidget*>();
+    const PluginThemeIcons pluginIcons;
     for(auto *dock:docks){
         if(!dock)continue;
         const auto kind=classify(dock->objectName(),originalTitle(dock),
             dock->widget()&&dock->widget()->inherits("SourceDock")?"SourceDock":QString{});
         if(icons_.contains(dock)&&icons_.value(dock)){
-            static_cast<TitleGlyph*>(icons_.value(dock).data())->setKind(kind);
+            auto *glyph=static_cast<TitleGlyph*>(icons_.value(dock).data());
+            glyph->setKind(kind);
+            glyph->setPluginGlyph(pluginIcons.dock(dock->objectName()));
             continue;
         }
         auto *more=new DockHeaderButton(DockHeaderGlyph::More,dock);
@@ -377,6 +398,7 @@ void DockTitleIcons::refresh(){
         });
         moreButtons_.insert(dock,more);
         auto *icon=new TitleGlyph(kind,dock);
+        icon->setPluginGlyph(pluginIcons.dock(dock->objectName()));
         const bool registered=icons_.contains(dock);
         icons_.insert(dock,icon);
         originalTitles_.insert(dock,dock->windowTitle());

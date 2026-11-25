@@ -1,4 +1,5 @@
 #include "source-picker.h"
+#include "plugin-theme-icons.h"
 #include <QApplication>
 #include <QDialog>
 #include <QDockWidget>
@@ -279,6 +280,7 @@ void SourcePicker::embed(QDialog *dialog){
     visible->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
     root->addWidget(visible);visible->show();
 
+    const PluginThemeIcons pluginIcons;
     QVector<QListWidgetItem*> typeItems;
     int recentIndex=0;
     for(int i=0;i<list->count();++i){
@@ -289,6 +291,8 @@ void SourcePicker::embed(QDialog *dialog){
             item->flags().testFlag(Qt::ItemIsSelectable);
         item->setHidden(!selectable||id=="_recent"||id=="scene");
         if(!selectable)continue;
+        const auto pluginIcon=pluginIcons.source(id).itemIcon(list->palette());
+        if(!pluginIcon.isNull())item->setIcon(pluginIcon);
         if(item->data(DeprecatedRole).toBool())item->setToolTip(item->text()+" (Deprecated)");
         if(id=="_recent")recentIndex=types->count();
         types->addItem(item->icon(),id=="_recent"?QStringLiteral("Recent sources"):item->text(),id);

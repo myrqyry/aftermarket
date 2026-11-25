@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 #include <QTimer>
 #include <QTemporaryDir>
+#include "plugin-theme-fixture.h"
 #include <QLabel>
 #include <QToolButton>
 #include <QComboBox>
@@ -85,11 +86,28 @@ int main(int argc,char **argv){
  main.setCentralWidget(preview);
  auto *sources=new QDockWidget("Sources",&main);sources->setObjectName("sourcesDock");sources->setWidget(new QListWidget);
  main.addDockWidget(Qt::LeftDockWidgetArea,sources);main.show();app.processEvents();
+ CHECK(writePluginThemeFixture(temp.path()));
  augment::SourcePicker picker(&main,temp.filePath("source-picker.ini"));
  CHECK(picker.enabled());
  {
   Native n(&main);bool valid=true;
+  auto *clone=new QListWidgetItem("Localized clone",n.types);
+  clone->setData(Qt::UserRole+1,"source-clone");
+  auto *unknown=new QListWidgetItem("Source Clone",n.types);
+  unknown->setData(Qt::UserRole+1,"not-a-clone");
+  auto colors=n.types->palette();
+  colors.setColor(QPalette::Text,Qt::black);
+  colors.setColor(QPalette::HighlightedText,Qt::white);
+  n.types->setPalette(colors);
   QTimer::singleShot(40,&n.dialog,[&]{
+   EXPECT(!clone->icon().isNull());
+   if(!clone->icon().isNull()){
+    EXPECT(clone->icon().pixmap(16,16,QIcon::Normal).toImage().pixelColor(8,8)==QColor("#191724"));
+    EXPECT(clone->icon().pixmap(16,16,QIcon::Selected).toImage().pixelColor(8,8)==QColor("#e0def4"));
+   }
+   EXPECT(unknown->icon().isNull());
+   auto *chooser=n.dialog.findChild<QComboBox*>("aftermarket-existing-type");
+   EXPECT(chooser&&!chooser->itemIcon(chooser->findData("source-clone")).isNull());
    // Native graphics widgets can punch through an ordinary alien child.
    // The compact chooser must be its own frameless, modal transient surface.
    EXPECT(n.dialog.isWindow());

@@ -1,4 +1,6 @@
 #include "quick-find.h"
+#include "plugin-theme-fixture.h"
+#include <QTemporaryDir>
 #include "source-dock-pin.h"
 #include <QGridLayout>
 #include <QComboBox>
@@ -18,13 +20,15 @@
 int main(int argc,char**argv){
     QApplication app(argc,argv);
     using augment::QuickFindEntry;
+    QTemporaryDir theme;
+    REQUIRE(theme.isValid()&&writePluginThemeFixture(theme.path()));
     QList<QuickFindEntry> data{
         {QuickFindEntry::Scene,"scene-one",{},"Starting Soon","Scene",{}, {},{}},
         {QuickFindEntry::Source,"source-a",{},"Game Capture","game_capture", "/home/videos/game.mp4",
             "Starting Soon","scene-one"},
         {QuickFindEntry::Source,"source-b",{},"Web View","browser_source","https://example.com/chat",
             "Starting Soon","scene-one"},
-        {QuickFindEntry::Filter,"filter-a","source-b","Blur Pass","blur_filter",{},
+        {QuickFindEntry::Filter,"filter-a","source-b","Blur Pass","source_record_filter",{},
             "Web View",{}},
         {QuickFindEntry::Source,"source-c",{},"Game Capture","game_capture", "/home/videos/game2.mp4",
             "Other Scene","scene-two"}
@@ -54,6 +58,7 @@ int main(int argc,char**argv){
     input->setText("blur");
     REQUIRE(list->count()==1);
     REQUIRE(list->item(0)->text().contains("Blur Pass"));
+    REQUIRE(!list->item(0)->icon().isNull());
     REQUIRE(palette.activate(augment::QuickFind::Filters));
     REQUIRE(!palette.isVisible());
     palette.open();

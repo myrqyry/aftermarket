@@ -10,6 +10,7 @@
 #include <QMenu>
 #include <QSettings>
 #include <QTemporaryDir>
+#include "plugin-theme-fixture.h"
 #include <QStyleOptionDockWidget>
 #include <QStyle>
 #include <QFontMetrics>
@@ -68,6 +69,7 @@ int main(int argc,char **argv){
  main.resize(1350,720);main.show();app.processEvents();
  QTemporaryDir tmp;
  REQUIRE(tmp.isValid());
+ REQUIRE(writePluginThemeFixture(tmp.path()));
  const QString settingsPath=tmp.filePath("dock-titles.ini");
  {
    augment::Panels panels;
@@ -191,6 +193,21 @@ int main(int argc,char **argv){
    REQUIRE(!(custom->features() & QDockWidget::DockWidgetClosable));
    REQUIRE(icons.decoratedCount()==6);
    const auto genericGlyph=icons.glyph(custom)->grab().toImage();
+   custom->setObjectName("AudioMonitorDock");
+   icons.refresh();app.processEvents();
+   auto *pluginGlyph=icons.glyph(custom);
+   REQUIRE(pluginGlyph);
+   auto pluginPalette=pluginGlyph->palette();
+   pluginPalette.setColor(QPalette::WindowText,Qt::black);
+   pluginGlyph->setPalette(pluginPalette);app.processEvents();
+   auto renderedPlugin=pluginGlyph->grab().toImage();
+   REQUIRE(renderedPlugin.pixelColor(renderedPlugin.width()/2,renderedPlugin.height()/2)==QColor("#191724"));
+   pluginPalette.setColor(QPalette::WindowText,Qt::white);
+   pluginGlyph->setPalette(pluginPalette);app.processEvents();
+   renderedPlugin=pluginGlyph->grab().toImage();
+   REQUIRE(renderedPlugin.pixelColor(renderedPlugin.width()/2,renderedPlugin.height()/2)==QColor("#e0def4"));
+   custom->setObjectName("newPluginDock");
+   icons.refresh();app.processEvents();
    custom->setWindowTitle("Twitch Chat");
    app.processEvents();
    REQUIRE(icons.glyph(custom)->isVisible());

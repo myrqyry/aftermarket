@@ -1,4 +1,5 @@
 #include "source-inspector-dock.h"
+#include "plugin-theme-icons.h"
 #include <obs.hpp>
 #include <obs-frontend-api.h>
 #include <QMainWindow>
@@ -176,7 +177,7 @@ void SourceInspectorDock::refresh(){
  QList<FilterRow> rows;
  obs_source_enum_filters(source,[](obs_source_t*,obs_source_t *filter,void *p){
   auto *list=static_cast<QList<FilterRow>*>(p);
-  if(list->size()<257)list->append({uuid(filter),utf(obs_source_get_name(filter)),obs_source_enabled(filter)});
+  if(list->size()<257)list->append({uuid(filter),utf(obs_source_get_name(filter)),utf(obs_source_get_unversioned_id(filter)),obs_source_enabled(filter)});
  },&rows);
  addFilter_->setEnabled(rows.size()<256);
  if(rows.size()>256)rows.clear();
@@ -218,6 +219,13 @@ void SourceInspectorDock::openFilterPicker(){
  auto *picker=new QInputDialog(this);
  picker->setObjectName("aftermarket-inspect-filter-picker");picker->setWindowTitle("Add OBS filter");picker->setLabelText("Filter type");
  picker->setComboBoxItems(choices.keys());picker->setComboBoxEditable(false);
+ if(auto *combo=picker->findChild<QComboBox*>()){
+  const PluginThemeIcons pluginIcons;
+  for(int i=0;i<combo->count();++i){
+   const auto icon=pluginIcons.filter(choices.value(combo->itemText(i))).itemIcon(combo->palette());
+   if(!icon.isNull())combo->setItemIcon(i,icon);
+  }
+ }
  picker->setAttribute(Qt::WA_DeleteOnClose);
  connect(picker,&QInputDialog::accepted,this,[this,picker,source,choices]{
   if(!isVisible()||target_.source!=source||!currentTargetStillValid())return;
@@ -245,8 +253,11 @@ void SourceInspectorDock::updateFilterList(){
  const QScopedValueRollback<bool> guard(updating_,true);
  const QSignalBlocker blocker(filterList_);
  filterList_->clear();
+ const PluginThemeIcons pluginIcons;
  for(const auto &row:filterRows_)if(row.name.contains(search_->text(),Qt::CaseInsensitive)){
   auto *item=new QListWidgetItem(row.name,filterList_);
+  const auto icon=pluginIcons.filter(row.type).itemIcon(filterList_->palette());
+  if(!icon.isNull())item->setIcon(icon);
   item->setData(Qt::UserRole,row.id);item->setFlags(item->flags()|Qt::ItemIsUserCheckable);
   item->setCheckState(row.enabled?Qt::Checked:Qt::Unchecked);
   if(!current.isEmpty()&&current==row.id)filterList_->setCurrentItem(item);
