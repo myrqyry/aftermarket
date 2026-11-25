@@ -9,6 +9,10 @@ struct CheckpointScene {
     QString collection;
     QByteArray bytes;
 };
+struct CompanionBackupResult {
+    bool verified=false;
+    QString filename,message;
+};
 struct WorkspaceCheckpoint {
     QString id,name,collection;
     QDateTime created;
@@ -27,7 +31,10 @@ public:
     bool restoreLayout(const QString &id,QString *error=nullptr);
     bool exportScene(const QString &id,const QString &destination,QString *error=nullptr)const;
     QString exportRecovery(const QString &id,const QString &parent,QString *error=nullptr)const;
-    void showManager(QWidget *owner);
+    using CompanionBackup=std::function<CompanionBackupResult(const WorkspaceCheckpoint&)>;
+    static CompanionBackupResult verifyCompanionBackup(const QString &directory,const QByteArray &scene,
+                                                         std::function<bool()> dispatch);
+    void showManager(QWidget *owner,CompanionBackup companion={});
 private:
     QString directory_,storage_;
     QPointer<QMainWindow> main_;

@@ -273,8 +273,18 @@ instructions without overwriting an existing destination. Import scenes through
 OBS and recover individual settings only with OBS closed, after backing up the current
 configuration. Full live restoration, profile/output settings, media files and
 third-party plugin binaries are not included. Scene JSON may contain private source
-settings; keep exports local. Scene Collection Manager is independent and remains
-available for its own backups.
+settings; keep exports local. When [Scene Collection Manager](https://obsproject.com/forum/resources/scene-collection-manager.1434/)
+is loaded, the checkpoint dialog offers **Also create a Scene Collection Manager backup**.
+This is unchecked by default and invokes the manager's registered backup hotkey only after
+the Aftermarket checkpoint is safely saved. Its configured backup folder and retention rules
+apply; Aftermarket does not change them. A new backup is reported as verified only when its
+scene data matches the saved checkpoint (excluding the manager's timestamp name).
+If dispatch or verification fails, the independent workspace checkpoint remains intact.
+The adapter conservatively skips collection names whose sanitized filename cannot be matched
+to OBS's actual collection file, and avoids known same-second backup filename collisions.
+The **Open Scene Collection Manager…** shortcut in Dock Layouts opens the real third-party
+manager after closing the layout dialog. No automatic restore hotkeys are invoked.
+If the plugin or a unique registered hotkey is unavailable, the associated controls are omitted.
 
 See the [dock layouts reference](dock-layouts.md) for persistence, missing-dock guards and rollback behavior.
 

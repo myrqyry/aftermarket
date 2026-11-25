@@ -23,6 +23,8 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QTemporaryDir>
+#include <QCheckBox>
+#include <QRegularExpression>
 #include <algorithm>
 
 namespace augment {
@@ -223,7 +225,29 @@ QString WorkspaceCheckpoints::exportRecovery(const QString &id,const QString &pa
     stage.setAutoRemove(false);
     return target;
 }
-void WorkspaceCheckpoints::showManager(QWidget *owner){
+CompanionBackupResult WorkspaceCheckpoints::verifyCompanionBackup(const QString &directory,const QByteArray &scene,
+                                                                   std::function<bool()> dispatch){
+    const QDir dir(directory);
+    auto expected=QJsonDocument::fromJson(scene).object();
+    if(directory.isEmpty()||QFileInfo(directory).isSymLink()||expected.isEmpty()||
+       !expected.value("sources").isArray()||!dispatch)
+        return {false,{},"Backup destination or scene unavailable."};
+    expected.remove("name");
+    const auto existing=dir.entryList({"*.json"},QDir::Files|QDir::NoSymLinks);
+    if(!dispatch())return {false,{},"Scene Collection Manager backup action unavailable."};
+    QStringList matching;
+    for(const auto &name:dir.entryList({"*.json"},QDir::Files|QDir::NoSymLinks)){
+        if(existing.contains(name))continue;
+        QByteArray raw;
+        if(!readBounded(dir.filePath(name),raw,maxScene))continue;
+        auto actual=QJsonDocument::fromJson(raw).object();
+        actual.remove("name");
+        if(actual==expected)matching.append(name);
+    }
+    if(matching.size()!=1)return {false,{},"Backup requested, but a new matching file could not be verified. Workspace checkpoint is still safe."};
+    return {true,matching.first(),"Scene Collection Manager backup verified: "+matching.first()};
+}
+void WorkspaceCheckpoints::showManager(QWidget *owner,CompanionBackup companion){
     QDialog dialog(owner);dialog.setWindowTitle("Aftermarket · Workspace checkpoints");dialog.resize(560,450);
     auto *root=new QVBoxLayout(&dialog);
     auto *help=new QLabel("Capture a named scene collection, dock arrangement and Aftermarket settings. "
@@ -232,6 +256,12 @@ void WorkspaceCheckpoints::showManager(QWidget *owner){
     auto *list=new QListWidget(&dialog);list->setObjectName("aftermarket-checkpoint-list");root->addWidget(list,1);
     auto *details=new QLabel(&dialog);details->setWordWrap(true);root->addWidget(details);
     auto *status=new QLabel(&dialog);status->setWordWrap(true);root->addWidget(status);
+    auto *alsoBackup=new QCheckBox("Also create a Scene Collection Manager backup",&dialog);
+    alsoBackup->setObjectName("aftermarket-companion-backup");
+    alsoBackup->setVisible(bool(companion));alsoBackup->setChecked(false);
+    alsoBackup->setToolTip("Uses the installed plugin and its configured backup retention. Optional; the workspace checkpoint is independent.");
+    root->addWidget(alsoBackup);
+
     auto *actions=new QHBoxLayout;root->addLayout(actions);
     auto *captureBtn=new QPushButton("Create checkpoint…",&dialog);captureBtn->setObjectName("aftermarket-create-checkpoint");
     auto *restoreBtn=new QPushButton("Restore docks only",&dialog);
@@ -266,7 +296,13 @@ void WorkspaceCheckpoints::showManager(QWidget *owner){
         bool ok=false;const auto name=QInputDialog::getText(&dialog,"Create checkpoint","Checkpoint name:",QLineEdit::Normal,{},&ok);
         if(!ok)return;
         QString error;const auto id=capture(name,&error);
-        refresh();status->setText(id.isEmpty()?error:"Checkpoint saved.");
+        QString result=id.isEmpty()?error:"Checkpoint saved.";
+        if(!id.isEmpty()&&companion&&alsoBackup->isChecked()){
+            const auto saved=read(id,&error);
+            if(!saved.id.isEmpty())result+=" "+companion(saved).message;
+            else result+=" Companion backup skipped: "+error;
+        }
+        refresh();status->setText(result);
         for(int i=0;i<list->count();++i)if(list->item(i)->data(Qt::UserRole).toString()==id)list->setCurrentRow(i);
     });
     QObject::connect(restoreBtn,&QPushButton::clicked,&dialog,[&]{

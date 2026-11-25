@@ -214,7 +214,7 @@ bool DockLayouts::undo(){
     return true;
 }
 
-void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> checkpoints){
+void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> checkpoints,std::function<void()> openCollectionManager){
     if(!main_)return;
     QDialog dialog(owner);
     dialog.setWindowTitle("Aftermarket · Dock layouts");
@@ -257,6 +257,15 @@ void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> check
         checkpointBtn->setObjectName("aftermarket-workspace-checkpoints");
         root->addWidget(checkpointBtn);
         QObject::connect(checkpointBtn,&QPushButton::clicked,&dialog,[&]{checkpoints(&dialog);});
+    }
+    bool openManager=false;
+    if(openCollectionManager){
+        auto *managerBtn=new QPushButton("Open Scene Collection Manager…",&dialog);
+        managerBtn->setObjectName("aftermarket-open-collection-manager");
+        root->addWidget(managerBtn);
+        QObject::connect(managerBtn,&QPushButton::clicked,&dialog,[&]{
+            openManager=true;dialog.accept();
+        });
     }
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);
     root->addWidget(buttons);
@@ -321,5 +330,6 @@ void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> check
     });
     refresh();undoBtn->setEnabled(canUndo());
     dialog.exec();
+    if(openManager&&openCollectionManager)openCollectionManager();
 }
 } // namespace augment

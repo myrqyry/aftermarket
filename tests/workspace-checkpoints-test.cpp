@@ -63,6 +63,22 @@ int main(int argc,char **argv){
     REQUIRE(QFile::exists(recovery+"/dock-layout.json")&&QFile::exists(recovery+"/RECOVERY.txt"));
     REQUIRE(reopened.exportRecovery(id,dir,&error).isEmpty());
 
+    // A companion backup must be newly created and match the checkpoint scene
+    // apart from the upstream timestamp name. A dispatched hotkey is not proof.
+    REQUIRE(QDir(dir).mkdir("native-backups"));
+    const auto backupDir=dir+"/native-backups";
+    int dispatched=0;
+    auto backup=augment::WorkspaceCheckpoints::verifyCompanionBackup(backupDir,scene,[&]{
+        ++dispatched;
+        return write(backupDir+"/20261124_221501.json",R"({"name":"2026-11-24 22:15:01","sources":[{"name":"Microphone"}],"scene_order":[]})");
+    });
+    REQUIRE(backup.verified&&dispatched==1&&backup.filename=="20261124_221501.json");
+    auto unchanged=augment::WorkspaceCheckpoints::verifyCompanionBackup(backupDir,scene,[&]{++dispatched;return true;});
+    REQUIRE(!unchanged.verified&&dispatched==2);
+    auto mismatch=augment::WorkspaceCheckpoints::verifyCompanionBackup(backupDir,scene,[&]{
+        return write(backupDir+"/20261124_221502.json",R"({"name":"wrong","sources":[],"scene_order":[]})");
+    });
+    REQUIRE(!mismatch.verified);
     REQUIRE(reopened.read("../outside",&error).id.isEmpty());
     const auto checkpoint=dir+"/workspace-checkpoints/"+id+".json";
     QFile raw(checkpoint);REQUIRE(raw.open(QIODevice::ReadOnly));auto bytes=raw.readAll();raw.close();

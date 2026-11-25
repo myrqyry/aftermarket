@@ -72,6 +72,9 @@ preserve native dock placement, not scene or audio settings.
 the freshly saved OBS scene collection, native dock state, and selected Aftermarket settings.
 Restore docks independently or export scene/settings files for deliberate recovery.
 No live scene collection or settings are overwritten.
+If [Scene Collection Manager](https://obsproject.com/forum/resources/scene-collection-manager.1434/)
+is loaded, optionally create a verified companion backup in its native backup library and open
+its manager directly from Dock Layouts.
 
 | Native dock headers | Saved dock arrangements |
 | :---: | :---: |

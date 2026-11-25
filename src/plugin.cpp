@@ -40,6 +40,7 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QEventLoop>
+#include <QRegularExpression>
 #include <util/config-file.h>
 #include "augment.h"
 #include "config-identity.h"
@@ -115,6 +116,53 @@ static augment::CheckpointScene captureCheckpointScene(const QString &folder){
     const auto bytes=file.read(32*1024*1024+1);
     if(file.error()!=QFile::NoError)return {};
     return {before.first,bytes};
+}
+
+static bool collectionManagerActionAvailable(const QString &name){
+    if(!frontendReady||!uiActive||!nativeActions||!obs_get_module("scene-collection-manager"))return false;
+    const auto binding=augment::NativeActionBridge::binding("frontend","",name);
+    const auto choices=nativeActions->enumerateHotkeys();
+    return std::any_of(choices.begin(),choices.end(),[&](const auto &item){return item.binding==binding;});
+}
+static augment::CompanionBackupResult backupCheckpointCompanion(const QString &folder,
+                                                               const augment::WorkspaceCheckpoint &saved){
+    using Result=augment::CompanionBackupResult;
+    if(!collectionManagerActionAvailable("backup_scene_collection"))
+        return Result{false,{},"Scene Collection Manager backup action is unavailable."};
+    auto *name=obs_frontend_get_current_scene_collection();
+    const QString current=name?QString::fromUtf8(name):QString{};
+    if(name)bfree(name);
+    if(current!=saved.collection)return Result{false,{},"Active scene collection changed; companion backup skipped."};
+    // The installed manager derives its source filename from the collection
+    // name, rather than OBS's actual file identifier. Fail closed on collisions
+    // and names whose platform-dependent sanitization we cannot verify.
+    if(!QRegularExpression("^[ -~]+$").match(current).hasMatch())
+        return Result{false,{},"Collection filename cannot be safely resolved by this manager integration."};
+    QString safe=current;
+    safe.replace(QRegularExpression("\\s"),"_");
+    safe.remove(QRegularExpression("[^A-Za-z0-9_]"));
+    auto *config=obs_frontend_get_user_config();
+    const auto *rawFile=config?config_get_string(config,"Basic","SceneCollectionFile"):nullptr;
+    QString filename=rawFile?QString::fromUtf8(rawFile):QString{};
+    if(filename.endsWith(".json",Qt::CaseInsensitive))filename.chop(5);
+    if(safe.isEmpty()||safe!=filename)return Result{false,{},"Manager filename differs from OBS; companion backup skipped."};
+    const auto *custom=config_get_string(config,"SceneCollectionManager","BackupDir");
+    const QString root=custom&&*custom?QString::fromUtf8(custom):QDir(folder).absoluteFilePath("../../basic/scenes");
+    if(!QDir::isAbsolutePath(root))return Result{false,{},"Manager backup folder is not an absolute path."};
+    const auto directory=QDir(root).filePath(safe);
+    const QDir dir(directory);
+    // Manager writes timestamp filenames with one-second resolution. Avoid
+    // dispatch near an existing timestamp, including a possible second tick.
+    const auto now=QDateTime::currentDateTime();
+    for(int seconds=-1;seconds<=2;++seconds){
+        const auto candidate=now.addSecs(seconds).toString("yyyyMMdd_HHmmss")+".json";
+        const QFileInfo info(dir.filePath(candidate));
+        if(info.exists()||info.isSymLink())return Result{false,{},"A recent manager backup already exists; companion skipped to avoid overwriting it."};
+    }
+    return augment::WorkspaceCheckpoints::verifyCompanionBackup(directory,saved.scene,[]{
+        return nativeActions&&nativeActions->triggerHotkey(
+            augment::NativeActionBridge::binding("frontend","","backup_scene_collection"));
+    });
 }
 
 static void showQuickFind(){
@@ -541,8 +589,14 @@ MODULE_EXPORT bool obs_module_load(void) {
                 if(!safeMain||!frontendReady||!uiActive)return;
                 const auto folder=QFileInfo(stripConfigPath).absolutePath();
                 augment::WorkspaceCheckpoints checkpoints(folder,safeMain,[folder]{return captureCheckpointScene(folder);});
-                checkpoints.showManager(owner);
-            });
+                augment::WorkspaceCheckpoints::CompanionBackup companion;
+                if(collectionManagerActionAvailable("backup_scene_collection"))
+                    companion=[folder](const auto &saved){return backupCheckpointCompanion(folder,saved);};
+                checkpoints.showManager(owner,companion);
+            },collectionManagerActionAvailable("scene_collection_manager")?std::function<void()>([]{
+                if(collectionManagerActionAvailable("scene_collection_manager"))
+                    nativeActions->triggerHotkey(augment::NativeActionBridge::binding("frontend","","scene_collection_manager"));
+            }):std::function<void()>{});
             if(actionStrip)actionStrip->refresh();
         });
     });
