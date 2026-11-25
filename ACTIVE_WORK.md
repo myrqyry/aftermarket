@@ -3454,3 +3454,32 @@ Observed dispatch ~2.8/2.0ms in final probe, not a benchmark: host load
 unattributed shutdown allocations; no other platforms or exact user
 theme qualified. Prior flip screenshot documentation removed as stale.
 Built, not installed or pushed; existing OBS instances untouched.
+
+## 2026-11-25: gradient motion patterns and dock title accents
+
+Extend existing GradientSpec/Layer/shared 33ms clock with flow (default),
+reverse, bounce (cosine ping-pong), breathe (brightness modulation),
+shimmer (narrow highlight from first two palette colors), static. Shared
+linear/conical pattern rendering for tracks, progress and rotary gain
+rings. Optional 2px native dock title underline, default off; use actual
+content geometry, skip floating/custom/vertical/unsupported title
+geometry. No replacement titlebar or input interception. Global pattern
+and period shared across enabled targets, not per-target. Static stops
+decorative phase updates while integrated meter and separate native meter
+color consumers remain independent. Both Workspace and native settings
+use validated pattern selection and titlebars toggle, existing transaction
+semantics. Older settings retain Flow. Docs updated.
+
+RED new gradient/title fixture and native settings tests failed old
+implementation. GREEN all six patterns tested for changing/stable pixels
+on progress/title overlays, geometry and identity, invalid pattern,
+reduced motion, float/redock and removal. Existing slider native thumb
+seam and input tests retained; both editor persistence tests passed.
+Full 39/39 CTest /tmp/am-pattern-full-ctest.log (19.52s).
+Real isolated OBS 32.2.0 /tmp/am-title-gradient.kCGIgs/obs.log 8/8,
+exit0: native Sources dock shimmer pixels, title/content identity,
+live Motion off and title accent off via rules watcher. Screenshot
+title-gradient.png in evidence directory. Two unattributed shutdown
+allocations. Other title layouts, all patterns on real OBS slider
+hardware and cross-platform behavior not individually qualified.
+Built not installed/pushed. Existing unrelated plugin.cpp comment retained.

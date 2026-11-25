@@ -40,7 +40,7 @@ struct ObsSettingsPage::Entry {
     QPointer<QStackedWidget> pages;
     QPointer<QWidget> page;
     QPointer<QLabel> message;
-    QPointer<QComboBox> ellipsis,propertyColumns;
+    QPointer<QComboBox> ellipsis,propertyColumns,gradientPattern;
     int columnsBaseline=0;
     QPointer<QPushButton> applyButton;
     QHash<QString,QPointer<QCheckBox>> flags;
@@ -213,9 +213,15 @@ void ObsSettingsPage::attach(QDialog *dialog){
     checkbox("gradients","Enable gradient tracks",mixer.second,mixer.first,spec.enabled);
     checkbox("slider-gradients","Sliders and rotary rings",mixer.second,mixer.first,spec.sliders);
     checkbox("progress-gradients","Progress bars",mixer.second,mixer.first,spec.progress);
+    checkbox("title-gradients","Dock titlebar accents",mixer.second,mixer.first,spec.titlebars);
     checkbox("reactive","Audio-reactive mixer gradients",mixer.second,mixer.first,spec.audioReactive);
     checkbox("meter-pulse","Pulse native meter colors",mixer.second,mixer.first,spec.meters);
     auto *mixerForm=new QFormLayout;
+    entry->gradientPattern=new QComboBox(mixer.first);
+    entry->gradientPattern->setObjectName("aftermarket-setting-gradient-pattern");
+    for(const auto &id:GradientSpec::patterns())entry->gradientPattern->addItem(GradientSpec::patternLabel(id),id);
+    entry->gradientPattern->setCurrentIndex(entry->gradientPattern->findData(spec.pattern));
+    mixerForm->addRow("Gradient animation",entry->gradientPattern);
     entry->gradientPeriod=new QSpinBox(mixer.first);
     entry->gradientPeriod->setObjectName("aftermarket-setting-gradient-period");
     entry->gradientPeriod->setRange(400,12000);
@@ -290,6 +296,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
         GradientSpec::parse(entry->gradientBaseline,spec);
         QStringList originalColors;
         for(const auto &color:spec.colors)originalColors.append(color.name());
+        if(entry->gradientPattern&&entry->gradientPattern->currentData().toString()!=spec.pattern)changed=true;
         if(entry->gradientPeriod&&entry->gradientPeriod->value()!=spec.period)
             changed=true;
         if(entry->gradientColors&&entry->gradientColors->text()!=originalColors.join(", "))
@@ -323,6 +330,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
                                      [updateDirty](bool){updateDirty();});
     QObject::connect(entry->stripeStrength,&QSlider::valueChanged,page,
                      [updateDirty](int){updateDirty();});
+    QObject::connect(entry->gradientPattern,&QComboBox::currentIndexChanged,page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->gradientPeriod,qOverload<int>(&QSpinBox::valueChanged),
                      page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->gradientColors,&QLineEdit::textChanged,
@@ -455,7 +463,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
         {"knobs","knobs"},{"knob-meters","knobMeters"},
         {"gradients","enabled"},{"slider-gradients","sliders"},
         {"progress-gradients","progress"},{"reactive","audioReactive"},
-        {"meter-pulse","meters"}
+        {"meter-pulse","meters"},{"title-gradients","titlebars"}
     };
     for(const auto &field:fields){
         const bool before=entry->baseline.value(field.first,false);
@@ -464,6 +472,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     }
     GradientSpec originalSpec;
     GradientSpec::parse(entry->gradientBaseline,originalSpec);
+    if(entry->gradientPattern->currentData().toString()!=originalSpec.pattern)updatedGradient["pattern"]=entry->gradientPattern->currentData().toString();
     if(entry->gradientPeriod->value()!=originalSpec.period)
         updatedGradient["period"]=entry->gradientPeriod->value();
     const QStringList sources=entry->knobSources->text()

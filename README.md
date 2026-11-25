@@ -195,7 +195,8 @@ palette. Optional refinements include:
 - End or middle ellipses for long labels, while preserving actual names.
 - Responsive source/filter property columns (Auto, 1, up to 2, or up to 3) and collapsible native property groups.
 - Named source/filter property and whole filter-chain presets directly in the native Defaults/OK/Close footer, with portable JSON import/export.
-- Animated gradient tracks, menu artwork (soft, pop, spin, fade and lift), dock collapse, and a snapshot-free AudioBus folding reveal. Aftermarket-owned dock, Studio and Action Strip toggle controls have subtle animated state feedback. Bounded elapsed-time steps, partial repaint regions and idle timers reduce GUI work. Disable Motion for immediate transitions.
+- Gradient tracks and optional native dock titlebar accents: Flow, Reverse, Ping-pong, Breathing, Shimmer and Static, using one shared palette, loop and clock.
+- Animated menu artwork (soft, pop, spin, fade and lift), dock collapse, and a snapshot-free AudioBus folding reveal. Aftermarket-owned dock, Studio and Action Strip toggle controls have subtle animated state feedback. Bounded elapsed-time steps, partial repaint regions and idle timers reduce GUI work. Disable Motion for immediate transitions.
 
 | List backgrounds | Transform selection |
 | :---: | :---: |

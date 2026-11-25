@@ -1,5 +1,6 @@
 #include "gradient.h"
 #include <QApplication>
+#include <QDockWidget>
 #include <QSlider>
 #include <QProgressBar>
 #include <QStyleOption>
@@ -20,13 +21,27 @@
 #include <QtMath>
 #include <cmath>
 namespace augment {
+QStringList GradientSpec::patterns(){return {"flow","reverse","bounce","breathe","shimmer","static"};}
+QString GradientSpec::patternLabel(const QString &id){
+    if(id=="reverse")return "Reverse flow";
+    if(id=="bounce")return "Ping-pong";
+    if(id=="breathe")return "Breathing";
+    if(id=="shimmer")return "Shimmer";
+    if(id=="static")return "Static";
+    return "Flow";
+}
 bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     GradientSpec next;
     if(value.isUndefined()) {out=next;return true;}
     if(!value.isObject())return false;
     const auto o=value.toObject();
-    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs","knobMeters"})
+    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs","knobMeters","titlebars"})
         if(o.contains(k)&&!o.value(k).isBool())return false;
+    next.titlebars=o.value("titlebars").toBool(false);
+    if(o.contains("pattern")){
+        if(!o.value("pattern").isString()||!patterns().contains(o.value("pattern").toString()))return false;
+        next.pattern=o.value("pattern").toString();
+    }
     next.enabled=o.value("enabled").toBool(false);
     next.sliders=o.value("sliders").toBool(true);
     next.progress=o.value("progress").toBool(true);
@@ -90,7 +105,7 @@ bool eligible(const QWidget *w,const GradientSpec &spec) {
     for(auto *p=w;p;p=p->parentWidget())
         if(p->objectName()=="aftermarket-overlay"||p->objectName()=="aftermarket-gradient"||
            p->objectName()=="aftermarket-inspector"||p->objectName()=="aftermarket-panels")return false;
-    return knobTarget(w,spec)||(spec.enabled&&((spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
+    return knobTarget(w,spec)||(spec.enabled&&((spec.titlebars&&qobject_cast<const QDockWidget*>(w))||(spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
 }
 }
 namespace {
@@ -198,8 +213,41 @@ SliderTrack sliderTrack(const QSlider *s) {
     return track;
 }
 }
+namespace {
+QRect titleAccent(const QDockWidget *dock){
+    if(!dock||dock->isFloating()||dock->titleBarWidget()||!dock->widget()||
+       (dock->features()&QDockWidget::DockWidgetVerticalTitleBar))return {};
+    const auto body=dock->widget()->geometry();
+    const int top=body.top();
+    if(top<16||top>48||body.width()<32)return {};
+    return QRect(body.left()+2,top-3,body.width()-4,2).intersected(dock->rect());
+}
+double patternOffset(const QString &pattern,double phase){
+    if(pattern=="reverse")return -phase;
+    if(pattern=="bounce")return .5-.5*std::cos(phase*2*M_PI);
+    if(pattern=="breathe"||pattern=="static")return 0;
+    return phase;
+}
+void setPatternStops(QGradient &g,QVector<QColor> colors,const QString &pattern,double phase){
+    if(pattern=="breathe"){
+        const double pulse=.5-.5*std::cos(phase*2*M_PI);
+        for(auto &c:colors)c=c.lighter(100+qRound(pulse*35));
+    }
+    if(pattern=="shimmer"){
+        const auto base=colors.first();
+        const auto glint=colors.at(1).lighter(135);
+        g.setColorAt(0,base);g.setColorAt(.36,base);
+        g.setColorAt(.5,glint);g.setColorAt(.64,base);g.setColorAt(1,base);
+        return;
+    }
+    if(colors.first()!=colors.last())colors.append(colors.first());
+    // A completely uniform palette is valid (including a pair of equal colors).
+    for(int i=0;i<colors.size();++i)g.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+}
+}
 QRect gradientFill(const QWidget *w) {
     if(!w||!w->isEnabled())return {};
+    if(auto *dock=qobject_cast<const QDockWidget*>(w))return titleAccent(dock);
     if(auto *s=qobject_cast<const QSlider*>(w))return sliderTrack(s).fill;
     if(auto *p=qobject_cast<const QProgressBar*>(w)) {
         if(p->maximum()<=p->minimum()||p->value()<=p->minimum())return {};
@@ -455,10 +503,9 @@ public:
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(pal.color(group,QPalette::Mid),3.,Qt::SolidLine,Qt::RoundCap));
         p.drawArc(arc,225*16,-270*16);
-        QConicalGradient g(center,225+phase*360);
+        QConicalGradient g(center,225+patternOffset(spec.pattern,phase)*360);
         if(spec.enabled&&spec.sliders) {
-            if(colors.first()!=colors.last())colors.append(colors.first());
-            for(int i=0;i<colors.size();++i)g.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+            setPatternStops(g,colors,spec.pattern,phase);
         } else {auto c=pal.color(group,QPalette::Highlight);g.setColorAt(0,c);g.setColorAt(1,c);}
         p.setPen(QPen(QBrush(g),3.5,Qt::SolidLine,Qt::RoundCap));
         if(f>0)p.drawArc(arc,225*16,int(-270*16*f));
@@ -477,7 +524,7 @@ public:
         }
     }
     explicit Layer(QWidget *w):QWidget(w) {
-        setObjectName("aftermarket-gradient");
+        setObjectName(qobject_cast<QDockWidget*>(w)?"aftermarket-title-gradient":"aftermarket-gradient");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setAttribute(Qt::WA_NoSystemBackground);
         setFocusPolicy(Qt::NoFocus);
@@ -499,11 +546,11 @@ public:
         if(colors.first()!=colors.last())colors.append(colors.first());
         const bool h=horizontal(parentWidget());
         const qreal wavelength=qBound(48.,(h?parentWidget()->width():parentWidget()->height())*.8,200.);
-        const qreal offset=phase*wavelength;
+        const qreal offset=patternOffset(spec.pattern,phase)*wavelength;
         QLinearGradient gradient(h?QPointF(-offset,0):QPointF(0,-offset),
                                  h?QPointF(wavelength-offset,0):QPointF(0,wavelength-offset));
         gradient.setSpread(QGradient::RepeatSpread);
-        for(int i=0;i<colors.size();++i)gradient.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+        setPatternStops(gradient,colors,spec.pattern,phase);
         if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
             const auto track=sliderTrack(s);
             if(!track.fill.isValid())return;
@@ -594,7 +641,7 @@ void GradientController::setAudioProvider(AudioProvider provider,AudioReset rese
 void GradientController::configure(const GradientSpec &spec,bool motion) {
     const auto &old=state->spec;
     if(old.enabled==spec.enabled&&old.sliders==spec.sliders&&old.progress==spec.progress&&
-       old.period==spec.period&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
+       old.period==spec.period&&old.pattern==spec.pattern&&old.titlebars==spec.titlebars&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
     state->spec=spec;state->motion=motion;
     if((!motion||!spec.enabled||!spec.audioReactive)&&!(spec.knobs&&spec.knobMeters))if(state->reset)state->reset();
     for(auto *w:state->meters.keys())if(!motion||!eligibleMeter(w,spec))removeMeter(w);
@@ -618,6 +665,12 @@ void GradientController::reconcile(QWidget *w) {
         auto *layer=new Layer(w);
         state->layers.insert(w,layer);
         connect(w,&QObject::destroyed,this,[this,w]{state->layers.remove(w);refreshClock();});
+        if(auto *dock=qobject_cast<QDockWidget*>(w)){
+            connect(dock,&QDockWidget::topLevelChanged,this,[this,w]{
+                QPointer<QWidget> safe(w);
+                QTimer::singleShot(0,this,[this,safe]{if(safe){sync(safe);refreshClock();}});
+            });
+        }
         if(auto *s=qobject_cast<QSlider*>(w)) {
             connect(s,&QSlider::valueChanged,this,[this,w]{sync(w);if(auto l=state->layers.value(w);l&&l->knob)l->update();refreshClock();});
             connect(s,&QSlider::sliderMoved,this,[this,w]{sync(w);if(auto l=state->layers.value(w);l&&l->knob)l->update();refreshClock();});
@@ -649,7 +702,7 @@ void GradientController::sync(QWidget *w,bool frame) {
     // schedule another animated paint (which would create a busy loop).
     double phase=l->phase;
     float energy=l->energy;
-    if(!state->motion||!state->spec.enabled) {phase=0;energy=0;l->lastFrame=-1;}
+    if(!state->motion||!state->spec.enabled||state->spec.pattern=="static") {phase=0;energy=0;l->lastFrame=-1;}
     else if(frame||newlyVisible) {
         const auto now=state->elapsed.elapsed();
         const double dt=l->lastFrame<0||newlyVisible?0.:std::clamp(double(now-l->lastFrame)/1000.,0.,.25);
@@ -697,8 +750,8 @@ void GradientController::syncMeter(QWidget *w,double dt) {
 }
 void GradientController::refreshClock() {
     bool active=false;
-    if(state->spec.enabled&&state->motion)
-        for(const auto &layer:state->layers)if(layer&&layer->isVisible()){active=true;break;}
+    if(state->spec.enabled&&state->motion&&state->spec.pattern!="static")
+        for(const auto &layer:state->layers)if(layer&&layer->isVisible()&&(!layer->knob||state->spec.sliders)){active=true;break;}
     if(!active&&state->spec.knobs&&state->spec.knobMeters&&state->meterProvider)
         for(const auto &layer:state->layers)if(layer&&layer->knob&&layer->isVisible()){active=true;break;}
     if(!active&&state->motion&&state->spec.enabled&&state->spec.audioReactive)
@@ -710,7 +763,7 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
     if(!state->spec.enabled&&!state->spec.knobs)return false;
     switch(e->type()) {
     case QEvent::Show:case QEvent::Hide:case QEvent::Resize:case QEvent::EnabledChange:
-    case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:
+    case QEvent::LayoutRequest:case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:
     case QEvent::MouseButtonPress:case QEvent::MouseButtonDblClick:case QEvent::MouseMove:case QEvent::MouseButtonRelease:
     case QEvent::UngrabMouse:case QEvent::WindowDeactivate:case QEvent::FocusIn:case QEvent::FocusOut:break;
     default:return false;
@@ -746,7 +799,7 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
         if(auto l=state->layers.value(w))l->hide();
         refreshClock();
         break;
-    case QEvent::Resize:case QEvent::EnabledChange:case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:
+    case QEvent::Resize:case QEvent::LayoutRequest:case QEvent::EnabledChange:case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:
         // Range, text visibility, orientation and upsideDown can change without
         // a dedicated signal. Sync on the native paint; never invalidate an
         // unchanged static layer from this path.

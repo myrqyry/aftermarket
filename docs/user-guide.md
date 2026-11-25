@@ -865,11 +865,15 @@ inside meter bars remain future work.
 
 ### Animated gradient tracks
 
-Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the Workspace's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gradient tracks**, select sliders, progress bars and/or dock titlebar accents, choose an animation, and apply. Enable the Workspace's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
 
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
+- Dock titlebar accents: a two-logical-pixel gradient underline on supported native dock titles. The original title, glyphs, menu controls and drag targets are unchanged. Floating, vertical and custom titlebars are excluded.
 - Colors: leave blank for the native palette, or specify 2–6 opaque colors separated by commas. Loop duration is adjustable from 400–12000 ms.
+- Animation: **Flow** (existing behavior), **Reverse flow**, **Ping-pong**, **Breathing** (stationary gradient with changing brightness), **Shimmer** (a narrow sweeping highlight using the first two palette colors), or **Static** (no decorative animation). The pattern applies to slider fills, progress accents, rotary gain rings and title accents together; it does not change the native meter scale or actual values.
+
+Both Workspace → Gradients and OBS Settings → Aftermarket → Mixer expose the same options. Title accents default off; old configurations keep Flow. The master gradient and Motion switches still apply. Static stops decorative phase updates even with Motion on; integrated peak meters and separately enabled native meter color effects remain independent.
 
 ```json
 {
@@ -879,6 +883,8 @@ Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gra
     "enabled": true,
     "sliders": true,
     "progress": true,
+    "titlebars": true,
+    "pattern": "shimmer",
     "period": 1800,
     "colors": ["#31748f", "#c4a7e7", "#9ccfd8"]
   },
@@ -888,7 +894,7 @@ Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gra
 
 Edit just the gradient and motion fields in an existing file to preserve your menu rules. The Workspace merges settings into the existing file, atomically. Changes apply without a theme reload or restart; the rules watcher also reloads valid external edits. Motion off freezes the gradient; gradient off removes the decoration entirely.
 
-The overlay derives groove, thumb and progress content rectangles from Qt's actual style geometry. Slider gradients extend to the native thumb center, preserving the actual handle silhouette instead of leaving a rounded gap before it. A cached native-paint comparison covers the exposed page around the thumb; solid-color antialiased edges are recomposited over the animated fill. Ambiguous custom handle pixels remain native. It uses a seamless repeated gradient and one shared 30 Hz timer, which stops if there are no visible, nonempty animated tracks. It never writes slider values or changes the stream compositor.
+The overlay derives groove, thumb and progress content rectangles from Qt's actual style geometry. Slider gradients extend to the native thumb center, preserving the actual handle silhouette instead of leaving a rounded gap before it. A cached native-paint comparison covers the exposed page around the thumb; solid-color antialiased edges are recomposited over the animated fill. Ambiguous custom handle pixels remain native. It uses seamless repeated gradients and one shared 30 Hz timer, which stops when no visible animated tracks, title accents or active meter consumers require it. It never writes slider values or changes the stream compositor.
 
 ![Gradient tracks on actual OBS color correction filter sliders](screenshots/readme/gradient-thumb-join.png)
 

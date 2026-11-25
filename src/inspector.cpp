@@ -327,7 +327,11 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto *enable=check("Enable gradient tracks","augment-gradient-enabled",gl,gradient);
     auto *sliders=check("Sliders and rotary rings","augment-gradient-sliders",gl,gradient);
     auto *progress=check("Progress bars","augment-gradient-progress",gl,gradient);
+    auto *titlebars=check("Dock titlebar accents","augment-gradient-titlebars",gl,gradient);
     auto *form=new QFormLayout;
+    auto *pattern=new QComboBox(gradient);pattern->setObjectName("augment-gradient-pattern");
+    for(const auto &id:GradientSpec::patterns())pattern->addItem(GradientSpec::patternLabel(id),id);
+    form->addRow("Animation",pattern);
     auto *colors=new QLineEdit(gradient);colors->setObjectName("augment-gradient-colors");colors->setPlaceholderText("Theme palette (or 2–6 colors, comma-separated)");
     auto *colorRow=new QHBoxLayout;auto *pickColor=new QPushButton("Add color…",gradient);
     auto *theme=new QPushButton("Use theme",gradient);colorRow->addWidget(colors,1);colorRow->addWidget(pickColor);colorRow->addWidget(theme);form->addRow("Colors",colorRow);
@@ -388,7 +392,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto draft=[=]{
         auto next=state->baseline;
         QJsonArray palette;const auto text=colors->text().trimmed();if(!text.isEmpty())for(const auto &c:text.split(','))palette.append(c.trimmed());
-        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();next["progress"]=progress->isChecked();
+        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();next["progress"]=progress->isChecked();next["titlebars"]=titlebars->isChecked();next["pattern"]=pattern->currentData().toString();
         next["knobs"]=knobs->isChecked();next["knobSources"]=QJsonArray::fromStringList(all->isChecked()?QStringList{}:checkedNames());next["knobMeters"]=knobMeters->isChecked();
         next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
         return next;
@@ -403,15 +407,16 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
         state->baseline=controller.gradientSettings();GradientSpec spec;GradientSpec::parse(state->baseline,spec);
         {const QSignalBlocker blocker(modernTransforms);modernTransforms->setChecked(controller.modernTransformFrame());}
         knobs->setChecked(spec.knobs);knobMeters->setChecked(spec.knobMeters);all->setChecked(spec.knobSources.isEmpty());populate(spec.knobSources);
-        reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);
+        reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);titlebars->setChecked(spec.titlebars);pattern->setCurrentIndex(pattern->findData(spec.pattern));
         QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());colors->setText(hex.join(", "));period->setValue(spec.period);
         enablement();updatePreview();*normalized=draft();changed();
     };
-    for(auto *box:{knobs,knobMeters,all,reactive,meters,enable,sliders,progress})
+    for(auto *box:{knobs,knobMeters,all,reactive,meters,enable,sliders,progress,titlebars})
         QObject::connect(box,&QCheckBox::toggled,footer,changed);
     QObject::connect(sources,&QListWidget::itemChanged,footer,changed);
     QObject::connect(colors,&QLineEdit::textChanged,footer,changed);
     QObject::connect(period,&QSpinBox::valueChanged,footer,changed);
+    QObject::connect(pattern,&QComboBox::currentIndexChanged,footer,changed);
     QObject::connect(knobs,&QCheckBox::toggled,mixer,enablement);QObject::connect(all,&QCheckBox::toggled,mixer,enablement);QObject::connect(reactive,&QCheckBox::toggled,mixer,enablement);
     QObject::connect(refresh,&QPushButton::clicked,mixer,[=]{state->refreshSources();changed();});
     QObject::connect(sources,&QListWidget::itemDoubleClicked,mixer,[](QListWidgetItem *item){if(item)item->setCheckState(item->checkState()==Qt::Checked?Qt::Unchecked:Qt::Checked);});

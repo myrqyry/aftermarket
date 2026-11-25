@@ -2,6 +2,9 @@
 #include "gradient.h"
 #include <QApplication>
 #include <QSlider>
+#include <QDockWidget>
+#include <QMainWindow>
+#include <QLabel>
 #include <QProgressBar>
 #include <QStyle>
 #include <QStyleOptionSlider>
@@ -96,6 +99,36 @@ int main(int argc,char **argv) {
     REQUIRE(checkJoin(slider,50,true));
     vertical->setStyleSheet("QSlider::groove:vertical { background:#29233a; width:14px; border-radius:7px; } QSlider::sub-page:vertical { background:#29233a; } QSlider::add-page:vertical { background:#00ffff; border-bottom-left-radius:7px; border-bottom-right-radius:7px; } QSlider::handle:vertical { background:white; width:14px; height:14px; margin:0px; border-radius:7px; }");
     REQUIRE(checkJoin(vertical,55,true));
+    QMainWindow main;main.setCentralWidget(new QLabel("Preview"));
+    auto *dock=new QDockWidget("Sources",&main);dock->setWidget(new QLabel("Native sources"));
+    main.addDockWidget(Qt::LeftDockWidgetArea,dock);main.resize(600,360);main.show();wait(60);
+    const auto title=dock->windowTitle();auto *native=dock->widget();
+    REQUIRE(controller.setMotionEnabled(true));
+    spec["titlebars"]=true;spec["sliders"]=true;spec["progress"]=true;
+    spec["colors"]=QJsonArray{"#ff00ff","#4820c0","#ff00ff"};
+    for(auto pattern:{"flow","reverse","bounce","breathe","shimmer","static"}){
+        spec["pattern"]=pattern;
+        REQUIRE(controller.setGradientSettings(spec));wait(60);
+        auto *stripe=dock->findChild<QWidget*>("aftermarket-title-gradient");
+        REQUIRE(stripe&&stripe->isVisible()&&stripe->height()<=3);
+        REQUIRE(stripe->geometry().bottom()<native->geometry().top());
+        REQUIRE(stripe->testAttribute(Qt::WA_TransparentForMouseEvents)&&stripe->focusPolicy()==Qt::NoFocus);
+        auto a=stripe->grab().toImage(),b=progress->grab().toImage();wait(145);
+        const bool animated=QString(pattern)!="static";
+        REQUIRE((a!=stripe->grab().toImage())==animated);
+        REQUIRE((b!=progress->grab().toImage())==animated);
+        REQUIRE(dock->windowTitle()==title&&dock->widget()==native&&dock->titleBarWidget()==nullptr);
+    }
+    auto invalid=spec;invalid["pattern"]="unknown";
+    REQUIRE(!controller.setGradientSettings(invalid));
+    spec["pattern"]="flow";REQUIRE(controller.setGradientSettings(spec));wait(60);
+    auto *stripe=dock->findChild<QWidget*>("aftermarket-title-gradient");
+    REQUIRE(controller.setMotionEnabled(false));wait(60);
+    auto still=stripe->grab().toImage();wait(150);REQUIRE(still==stripe->grab().toImage());
+    dock->setFloating(true);wait(60);REQUIRE(!stripe->isVisible());
+    dock->setFloating(false);wait(60);REQUIRE(stripe->isVisible());
+    spec["titlebars"]=false;REQUIRE(controller.setGradientSettings(spec));wait(40);
+    REQUIRE(!dock->findChild<QWidget*>("aftermarket-title-gradient"));
     REQUIRE(controller.setGradientSettings(QJsonObject{{"enabled",false}}));wait(40);
     REQUIRE(!slider->findChild<QWidget*>("aftermarket-gradient"));
     REQUIRE(!progress->findChild<QWidget*>("aftermarket-gradient"));
