@@ -1,4 +1,5 @@
 #include "gradient.h"
+#include "rotary-paint.h"
 #include <QApplication>
 #include <QDockWidget>
 #include <QSlider>
@@ -500,24 +501,12 @@ public:
             // The inner arc continues to indicate gain, not signal level.
         }
         const QRectF arc=r.adjusted(integrated?10:2,integrated?10:2,integrated?-10:-2,integrated?-10:-2);
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(pal.color(group,QPalette::Mid),3.,Qt::SolidLine,Qt::RoundCap));
-        p.drawArc(arc,225*16,-270*16);
         QConicalGradient g(center,225+patternOffset(spec.pattern,phase)*360);
         if(spec.enabled&&spec.sliders) {
             setPatternStops(g,colors,spec.pattern,phase);
         } else {auto c=pal.color(group,QPalette::Highlight);g.setColorAt(0,c);g.setColorAt(1,c);}
-        p.setPen(QPen(QBrush(g),3.5,Qt::SolidLine,Qt::RoundCap));
-        if(f>0)p.drawArc(arc,225*16,int(-270*16*f));
         const auto face=r.adjusted(integrated?16:8,integrated?16:8,integrated?-16:-8,integrated?-16:-8);
-        if(face.isValid()) {
-            p.setPen(QPen(pal.color(group,QPalette::Mid),1));
-            p.setBrush(pal.color(group,QPalette::Button));p.drawEllipse(face);
-            const auto rad=(225-270*f)*3.141592653589793/180.;
-            const QPointF direction(std::cos(rad),-std::sin(rad));
-            p.setPen(QPen(pal.color(group,QPalette::ButtonText),2.,Qt::SolidLine,Qt::RoundCap));
-            p.drawLine(center+direction*(face.width()*.13),center+direction*(face.width()*.37));
-        }
+        paintRotaryFace(p,arc,face,pal,group,QBrush(g),225,-270,225,-270*f,225-270*f);
         if(s->hasFocus()) {
             p.setBrush(Qt::NoBrush);p.setPen(QPen(pal.color(group,QPalette::Highlight),1,Qt::DotLine));
             p.drawEllipse(r.adjusted(-2,-2,2,2));

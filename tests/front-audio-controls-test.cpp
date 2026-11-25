@@ -24,6 +24,8 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QKeyEvent>
+#include <QImage>
+#include <QPalette>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 int main(int argc,char **argv){
@@ -192,6 +194,29 @@ int main(int argc,char **argv){
  REQUIRE(ui.setKnobs(true));
  REQUIRE(ui.knobs()&&panDial->isVisible()&&!pan->isVisible());
  REQUIRE(offsetDial->isVisible()&&offset->isVisible()); // precise ms available
+ // Small rotary controls must paint the same theme-accent ring language,
+ // not the platform QDial face. Use an unmistakable palette accent.
+ QPalette rotaryPalette=panDial->palette();
+ rotaryPalette.setColor(QPalette::Highlight,QColor("#ff00ff"));
+ rotaryPalette.setColor(QPalette::Mid,QColor("#303030"));
+ rotaryPalette.setColor(QPalette::Button,QColor("#202020"));
+ rotaryPalette.setColor(QPalette::ButtonText,QColor("#ffffff"));
+ panDial->setPalette(rotaryPalette);offsetDial->setPalette(rotaryPalette);
+ auto accentPixels=[](QDial *dial){
+     const auto img=dial->grab().toImage().convertToFormat(QImage::Format_RGB32);
+     int count=0;
+     for(int y=0;y<img.height();++y)for(int x=0;x<img.width();++x){
+         const auto c=img.pixelColor(x,y);
+         if(c.red()>180&&c.blue()>180&&c.green()<65)++count;
+     }
+     return count;
+ };
+ REQUIRE(accentPixels(panDial)>=5&&accentPixels(offsetDial)>=5);
+ const auto oldFace=offsetDial->grab().toImage();
+ rotaryPalette.setColor(QPalette::Highlight,QColor("#00ff00"));
+ offsetDial->setPalette(rotaryPalette);app.processEvents();
+ REQUIRE(oldFace!=offsetDial->grab().toImage()&&accentPixels(offsetDial)==0);
+ panDial->setPalette(QPalette());offsetDial->setPalette(QPalette());
  panDial->setValue(65);offsetDial->setValue(1000);
  REQUIRE(pans==2&&offsets==2);
  REQUIRE(qAbs(current[0].balance-.65)<.001&&current[0].offsetMs==1000);

@@ -1,4 +1,5 @@
 #include "front-audio-controls.h"
+#include "rotary-paint.h"
 #include <QApplication>
 #include <QWidget>
 #include <QBoxLayout>
@@ -24,8 +25,6 @@
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QKeyEvent>
-#include <QStylePainter>
-#include <QStyleOptionSlider>
 #include <QCursor>
 #include <QStringList>
 #include <QSaveFile>
@@ -42,25 +41,58 @@
 namespace augment {
 namespace {
 constexpr int maxOffsetMs=999999;
+// Paint the two small controls using the same ring, face and pointer as
+// gain. No meter sampling, animated clock or extra overlay widgets.
+class CompactRotary : public QDial {
+public:
+    explicit CompactRotary(QWidget *parent,bool endless=false):QDial(parent),endless_(endless){
+        setNotchesVisible(false);
+        setFocusPolicy(Qt::StrongFocus);
+    }
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);
+        const auto pal=palette();
+        const auto group=isEnabled()?QPalette::Active:QPalette::Disabled;
+        const double side=qMin(width(),height())-4.;
+        if(side<8)return;
+        const QRectF ring((width()-side)/2.,(height()-side)/2.,side,side);
+        const auto face=ring.adjusted(side*.21,side*.21,-side*.21,-side*.21);
+        const QBrush accent(pal.color(group,QPalette::Highlight));
+        p.setOpacity(isEnabled()?1.:.48);
+        if(endless_){
+            // A rotating highlight segment is not a progress bar; offset
+            // values have no meaningful angular minimum or maximum.
+            constexpr int cycle=360;
+            const double angle=90.-((value()%cycle+cycle)%cycle);
+            paintRotaryFace(p,ring,face,pal,group,accent,90,-360,angle+54,-54,angle,.64);
+        }else{
+            const double span=double(maximum())-minimum();
+            const double fraction=span>0?qBound(0.,(sliderPosition()-double(minimum()))/span,1.):.5;
+            const double f=invertedAppearance()?1.-fraction:fraction;
+            const double angle=225.-270.*f;
+            // Balance is bipolar, so the accent grows out from center.
+            paintRotaryFace(p,ring,face,pal,group,accent,225,-270,90,angle-90,angle,.64);
+            p.setPen(QPen(pal.color(group,QPalette::ButtonText),.8,Qt::SolidLine,Qt::RoundCap));
+            p.drawLine(QPointF(ring.center().x(),ring.top()-.5),QPointF(ring.center().x(),ring.top()+1.5));
+        }
+        if(hasFocus()){
+            p.setBrush(Qt::NoBrush);p.setPen(QPen(pal.color(group,QPalette::Highlight),.8,Qt::DotLine));
+            p.drawEllipse(ring.adjusted(-1.5,-1.5,1.5,1.5));
+        }
+    }
+private:
+    bool endless_;
+};
 // Absolute value is the actual sync offset, not the dial's angle. The
 // painted indicator wraps, while input is relative and the value saturates.
-class SyncEncoder final : public QDial {
+class SyncEncoder final : public CompactRotary {
 public:
-    explicit SyncEncoder(QWidget *parent):QDial(parent){
+    explicit SyncEncoder(QWidget *parent):CompactRotary(parent,true){
         setRange(-maxOffsetMs,maxOffsetMs);
         setSingleStep(10);setPageStep(100);setNotchesVisible(false);
     }
 protected:
-    void paintEvent(QPaintEvent *) override {
-        QStyleOptionSlider option;initStyleOption(&option);
-        constexpr int cycle=360;
-        const int phase=((value()%cycle)+cycle)%cycle;
-        option.minimum=0;option.maximum=cycle-1;
-        option.sliderPosition=option.sliderValue=phase;
-        option.dialWrapping=true;option.notchTarget=0;
-        QStylePainter painter(this);
-        painter.drawComplexControl(QStyle::CC_Dial,option);
-    }
     void mousePressEvent(QMouseEvent *e) override {
         if(e->button()!=Qt::LeftButton){e->ignore();return;}
         lastY=e->globalPosition().y();dragging=true;
@@ -1185,7 +1217,7 @@ void FrontAudioControls::refresh(){
             pan->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
             pan->setToolTip("Stereo pan · L 0 · Center 50 · R 100");
             outer->addWidget(pan,1);
-            auto *panDial=new QDial(controls);
+            auto *panDial=new CompactRotary(controls);
             panDial->setObjectName("aftermarket-pan-dial");
             panDial->setRange(0,100);
             panDial->setNotchesVisible(false);

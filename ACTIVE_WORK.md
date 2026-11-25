@@ -3659,3 +3659,25 @@ unattributed shutdown allocations. Screenshot inspected and saved to
 README. Live orientation switch with existing grid and other themes/
 platforms not independently qualified. Production OBS untouched, no
 installation or push. Unrelated src/plugin.cpp comment preserved.
+
+## 2026-11-25: shared compact rotary appearance
+
+User asked small pan/sync knobs to match large gain knobs. Extract common
+ring/face/pointer paint helper into rotary-paint.h and reuse in gain
+Gradient Layer and 24px CompactRotary QDial subclass. Gain retains current
+gradient brush, meter scale and geometry. Pan uses center-out arc and
+center mark; endless sync uses full circular track with 54-degree accent
+segment and modulo-360 indicator, absolute signed offset unchanged.
+Small knobs use active/disabled palette roles, focus ring and scaled
+strokes. Static palette accent by design, no extra gradient timer or
+audio-meter subscription; custom animated gain gradient not replicated.
+Native QDial pan input and existing relative SyncEncoder input unchanged.
+RED palette-accent pixel test fails old platform QDial. GREEN palette
+change/render assertions plus existing native input and gain tests.
+Full CTest 41/41 /tmp/am-small-dial-final-ctest.log. Native OBS 32.2.0
+13/13 side-by-side /tmp/am-mixer-columns.uyvCVs/obs.log and 10/10
+horizontal-fader /tmp/am-mixer-rotary.1eDEIy/obs.log, exit0; real
+screenshot inspected, refreshed three README mixer screenshots. Two
+unattributed shutdown allocations each as before. Production profile
+and other platforms/themes not independently tested. No install or
+push. Existing unrelated plugin.cpp comment untouched.

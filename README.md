@@ -46,7 +46,7 @@ Keep the familiar native mixer or customize selected channels:
 - Per-source audio-reactive gradient faders and native meter color modulation.
 - Compact Pan and Sync controls that operate native OBS source properties.
 - Channel widths independent of source-name length, with readable labels.
-- Compact rotary mixer channels in both orientations: native dB value below gain, aligned mute/monitor and pan/sync controls, status icons in the header. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds.
+- Compact rotary mixer channels in both orientations: native dB value below gain, aligned mute/monitor and pan/sync controls, status icons in the header. Pan and sync share the gain knob’s theme-aware face and accent-ring renderer. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds.
 - Responsive mixer grid: up to four columns for horizontal-fader rows, and automatic wrapping of compact side-by-side rotary strips when all rows fit. Auto mixer grid toggle in the title menu.
 - Persistent channel order: unlock in the mixer title menu, drag source names,
   then lock again. AudioBus follows the same saved order; reset restores native order.
