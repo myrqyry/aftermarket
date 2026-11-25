@@ -47,7 +47,7 @@ The pinned OBS 32.2.0 SDK was downloaded, checksum-verified and built
 from source. A clean Release build of the committed source plus this
 CI change passed all 32 CTest cases, the module-only package allowlist,
 shared-library checks, SHA-256 verification and extraction comparison.
-GitHub-hosted execution is not yet established. The current local regression suite has since grown to 38 tests; the original 32-test SDK/package qualification above is historical, not a claim that the latest package was requalified against that SDK.
+GitHub-hosted success is not yet established. The current local regression suite has since grown to 39 tests; the original 32-test SDK/package qualification above is historical, not a claim that the latest package was requalified against that SDK.
 
 The temporary archives are intentionally not release packages. Public
 redistribution requires the owner to establish licensing, provenance and

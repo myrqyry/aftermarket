@@ -1251,11 +1251,13 @@ Inspector slice verification (same isolated OBS configuration):
 Real OBS testing is limited to Linux/X11 with OBS 32.2.0 and Qt 6.4.2, using native themes and Colorway.
 Additional themes, DPI scaling, RTL, other platforms and unsupported native widgets need validation. See the [verification history](../ACTIVE_WORK.md) for individual runtime receipts and known limitations.
 
-Current local verification: **38/38 CTests passed**. Isolated OBS runs
+Current local verification: **39/39 CTests passed**. Isolated OBS runs
 covered responsive source/filter settings, dynamic property reloads, native
 mixer reorder and optional device sends, checkpoint capture, Source Dock
 pinning and lightweight previews, and the unified Workspace with emergency
-recovery during an open checkpoint dialog. The installed modules were also
+recovery during an open checkpoint dialog. Additional native probes cover
+property presets and portable filter chains, picker dismissal, bounded dock
+motion, mixer reflow and relative sync encoder input. The installed modules were also
 loaded together in a disposable profile; OBS exited normally. No claim is
 made that every combination of plugins, source types, hardware or graphics
 drivers has been exercised. Optional preview caching is SDR-only and total
