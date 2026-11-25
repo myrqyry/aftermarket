@@ -112,6 +112,10 @@ int main(int argc,char **argv){
         auto *picker=dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker");
         REQUIRE(picker&&picker->isChecked());
         REQUIRE(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+        auto *tooltip=dialog->findChild<QComboBox*>("aftermarket-setting-tooltip-width");
+        REQUIRE(tooltip&&tooltip->currentData().toInt()==360);
+        tooltip->setCurrentIndex(tooltip->findData(240));
+        REQUIRE(controller.tooltipWidth()==360);
         picker->setChecked(false);
         REQUIRE(embeddedPickerEnabled&&pickerUpdates==0);
         REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
@@ -132,7 +136,7 @@ int main(int argc,char **argv){
         QApplication::processEvents();
         REQUIRE(titles.ellipsisMode()==Qt::ElideRight);
         REQUIRE(!controller.mixerBacksideEnabled()&&mixerCalls==0);
-        REQUIRE(controller.propertyColumns()==0&&columnUpdates==0);
+        REQUIRE(controller.propertyColumns()==0&&columnUpdates==0&&controller.tooltipWidth()==360);
     }
     {
         auto *dialog=openSettings();
@@ -150,6 +154,9 @@ int main(int argc,char **argv){
         auto *columns=dialog->findChild<QComboBox*>("aftermarket-setting-property-columns");
         REQUIRE(columns&&columns->currentData().toInt()==0);
         columns->setCurrentIndex(columns->findData(2));
+        auto *tooltip=dialog->findChild<QComboBox*>("aftermarket-setting-tooltip-width");
+        REQUIRE(tooltip&&tooltip->currentData().toInt()==360);
+        tooltip->setCurrentIndex(tooltip->findData(240));
         dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker")->setChecked(false);
         dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
@@ -169,7 +176,7 @@ int main(int argc,char **argv){
         REQUIRE(controller.listRowSettings().value("strength").toInt()==175);
         REQUIRE(!embeddedPickerEnabled&&pickerUpdates==1);
         REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
-        REQUIRE(controller.propertyColumns()==2&&columnUpdates==2);
+        REQUIRE(controller.propertyColumns()==2&&columnUpdates==2&&controller.tooltipWidth()==240);
         REQUIRE(!controller.setPropertyColumns(4));
         REQUIRE(stripEnabled&&stripCalls==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
@@ -187,6 +194,7 @@ int main(int argc,char **argv){
         auto *nav=dialog->findChild<QListWidget*>("listWidget");
         nav->setCurrentRow(9);
         REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-property-columns")->currentData().toInt()==2);
+        REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-tooltip-width")->currentData().toInt()==240);
         REQUIRE(dialog->findChild<QComboBox*>("augment-global-ellipsis")
                        ->currentData().toString()=="middle");
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-mixer-back")->isChecked());

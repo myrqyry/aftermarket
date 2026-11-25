@@ -3681,3 +3681,32 @@ screenshot inspected, refreshed three README mixer screenshots. Two
 unattributed shutdown allocations each as before. Production profile
 and other platforms/themes not independently tested. No install or
 push. Existing unrelated plugin.cpp comment untouched.
+
+## 2026-11-25: configurable native tooltip maximum width
+
+User requested enforce maximum tooltip width, implement and install.
+Default 360 logical px; choose Native unlimited (0) or 160–640 in 20px
+increments in Workspace → Menus & widgets and OBS Settings → Aftermarket
+→ Menus. Store tooltipWidth in existing validated/atomic rules.json;
+old configs default 360; settings Apply/Cancel transaction preserved.
+Event-driven Qt QLabel/QTipLabel adapter on existing Controller filter,
+only native Qt::ToolTip class; preserves original source text, native
+palette/font and rich formatting. Fits natural width, wraps long text,
+recalculates height and constrains to monitor width/position. Handles
+native reuse and restores maximum width/wrapping when disabled, hidden,
+safe mode or teardown. No new timers, audio/video path, global stylesheet
+or custom tooltip window. Custom plugin/browser popups excluded; fixed
+width rich content and over-height tooltips not fully qualified.
+
+RED tooltip-width fixture reproduced oversized native tooltip.
+GREEN Qt fixture long ordinary text, short tooltip, reuse, long filename,
+rich text, adjustable width, invalid width, native off and safe mode
+restore/resume; native settings Apply/Cancel persistence checked.
+Full 42/42 CTest /tmp/am-tooltip-full-ctest.log (17.73s).
+Isolated OBS 32.2.0 /tmp/am-tooltip-native.IAkBTW/obs.log 9/9 exit0:
+real native dock QHelpEvent, width and screen bounds, short natural width,
+live 220 setting via rules watcher, rich text, native restored. Actual
+tooltip.png visually inspected. Two unattributed shutdown allocations and
+other plugin shutdown warnings; no production profile launch or other
+platform/multi-monitor setup qualified. Docs updated. Existing unrelated
+plugin.cpp comment preserved.

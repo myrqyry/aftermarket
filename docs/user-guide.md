@@ -986,6 +986,28 @@ Verified in an isolated OBS 32.2.0 session with Colorway Rosé Pine, native medi
 
 ## Menus and rules
 
+### Tooltip width
+
+Under **Workspace → Menus & widgets → Maximum tooltip width**, choose
+160–640 logical pixels (20 px increments), or **Native (unlimited)**.
+The default is 360 px, including older configurations without this setting.
+The same setting is in **OBS Settings → Aftermarket → Menus** (Apply or OK
+to save; Cancel discards changes).
+
+Aftermarket constrains the existing Qt tooltip window and wraps its text,
+keeping native fonts, colors, rich-text formatting, positioning behavior and
+original source tooltip content. Short tooltips remain naturally sized.
+The selected width is also constrained by available monitor width. The
+event-driven adapter uses no polling or new animation clock. Emergency
+restore and disabling the setting release the constraint. Changes saved in
+Workspace or rules.json apply to subsequent tooltips without restarting OBS.
+
+This covers standard Qt widget tooltips, including ordinary native menu and
+item-view hints that use QToolTip. Browser-rendered tooltips and custom
+plugin popup windows are not changed. Fixed-width embedded HTML content
+may not reflow, and very long text can exceed the available screen height.
+The JSON setting is `"tooltipWidth": 360` (0 for native behavior).
+
 ### Compact menus
 
 Long *choice lists*, such as the Add Filter menu, use tighter rows and

@@ -198,6 +198,8 @@ their triggering row, including on offset dual-monitor layouts.
 
 ![A compact Filters Add submenu attached to its actual parent menu](docs/screenshots/readme/filter-submenu-anchored.webp)
 
+Native Qt tooltips have a configurable maximum width (360 logical px by default), with automatic wrapping and a native unlimited option.
+
 Customize specific native menus in Workspace → Menus & widgets: add icons, hide
 unwanted commands, explicitly move entries into More actions, add trusted
 executable commands, and display checked submenu values. The searchable

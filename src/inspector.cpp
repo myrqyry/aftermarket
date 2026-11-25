@@ -1,5 +1,6 @@
 #include "inspector.h"
 #include "augment.h"
+#include "tooltip-width.h"
 #include "menu-layout.h"
 #include <QAction>
 #include <QApplication>
@@ -451,7 +452,7 @@ struct Inspector::Ui {
     QLabel *type=nullptr,*geometry=nullptr,*status=nullptr,*sample=nullptr,*scopeHint=nullptr;
     QPlainTextEdit *ancestry=nullptr,*selector=nullptr;
     QListWidget *actions=nullptr;
-    QComboBox *icons=nullptr,*preset=nullptr;
+    QComboBox *icons=nullptr,*preset=nullptr,*tooltipWidth=nullptr;
     QSpinBox *duration=nullptr;
     QLineEdit *color=nullptr;
     QCheckBox *scope=nullptr,*replace=nullptr,*motion=nullptr,*compactMenus=nullptr,*overflow=nullptr,*hideEntry=nullptr,*includeSubmenus=nullptr,*showValues=nullptr;
@@ -536,6 +537,19 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->tabs=new QTabWidget(this);ui->tabs->setObjectName("augment-workspace");root->addWidget(ui->tabs,1);
     auto *menus=new QWidget(ui->tabs);auto *menuLayout=new QVBoxLayout(menus);menuLayout->setContentsMargins(8,8,8,8);menuLayout->setSpacing(6);
     ui->tabs->addTab(menus,"Menus & widgets");
+    auto *tooltipRow=new QHBoxLayout;
+    tooltipRow->addWidget(new QLabel("Maximum tooltip width",menus));
+    ui->tooltipWidth=new QComboBox(menus);ui->tooltipWidth->setObjectName("augment-tooltip-width");
+    ui->tooltipWidth->setAccessibleName("Maximum tooltip width");
+    populateTooltipWidths(ui->tooltipWidth,controller.tooltipWidth());
+    tooltipRow->addWidget(ui->tooltipWidth);tooltipRow->addStretch();menuLayout->addLayout(tooltipRow);
+    connect(ui->tooltipWidth,&QComboBox::currentIndexChanged,this,[this](int){
+        QString error;
+        if(!ui->controller.setTooltipWidth(ui->tooltipWidth->currentData().toInt(),&error)){
+            populateTooltipWidths(ui->tooltipWidth,ui->controller.tooltipWidth());
+            ui->status->setText(error);
+        }else ui->status->setText("Tooltip width saved.");
+    });
     ui->advanced=new QCheckBox("Show technical details",menus);
     ui->details=new QWidget(menus);auto *detailsLayout=new QVBoxLayout(ui->details);detailsLayout->setContentsMargins(0,0,0,0);
     ui->type=new QLabel("Choose a menu action or inspect a native widget",this);ui->type->setTextFormat(Qt::PlainText);ui->type->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -1047,6 +1061,7 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
     ui->filter->clear();
     {const QSignalBlocker blocker(ui->motion);ui->motion->setChecked(ui->controller.motionEnabled());}
     {const QSignalBlocker blocker(ui->compactMenus);ui->compactMenus->setChecked(ui->controller.compactMenusEnabled());}
+    populateTooltipWidths(ui->tooltipWidth,ui->controller.tooltipWidth());
     {const QSignalBlocker blocker(ui->showValues);ui->showValues->setChecked(ui->controller.showSubmenuSelections());}
     {
         QSignalBlocker blocker(ui->actions);

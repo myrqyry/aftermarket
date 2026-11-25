@@ -42,6 +42,8 @@ public:
     bool setShowSubmenuSelections(bool enabled,QString *error=nullptr);
     bool modernTransformFrame() const;
     bool setModernTransformFrame(bool enabled,QString *error=nullptr);
+    int tooltipWidth() const;
+    bool setTooltipWidth(int width,QString *error=nullptr);
     int propertyColumns() const;
     bool setPropertyColumns(int mode,QString *error=nullptr);
     bool collapsiblePropertyGroups() const;

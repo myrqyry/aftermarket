@@ -1,3 +1,4 @@
+#include "tooltip-width.h"
 #include "obs-settings-page.h"
 #include "augment.h"
 #include "dock-title-icons.h"
@@ -40,8 +41,8 @@ struct ObsSettingsPage::Entry {
     QPointer<QStackedWidget> pages;
     QPointer<QWidget> page;
     QPointer<QLabel> message;
-    QPointer<QComboBox> ellipsis,propertyColumns,gradientPattern;
-    int columnsBaseline=0;
+    QPointer<QComboBox> ellipsis,propertyColumns,gradientPattern,tooltipWidth;
+    int columnsBaseline=0,tooltipBaseline=360;
     QPointer<QPushButton> applyButton;
     QHash<QString,QPointer<QCheckBox>> flags;
     QHash<QString,bool> baseline;
@@ -195,6 +196,15 @@ void ObsSettingsPage::attach(QDialog *dialog){
              controller_->motionEnabled());
     checkbox("selections","Show selected submenu choices",menus.second,menus.first,
              controller_->showSubmenuSelections());
+    auto *tooltipRow=new QHBoxLayout;
+    tooltipRow->addWidget(new QLabel("Maximum tooltip width",menus.first));
+    entry->tooltipWidth=new QComboBox(menus.first);
+    entry->tooltipWidth->setObjectName("aftermarket-setting-tooltip-width");
+    entry->tooltipWidth->setAccessibleName("Maximum tooltip width");
+    entry->tooltipBaseline=controller_->tooltipWidth();
+    populateTooltipWidths(entry->tooltipWidth,entry->tooltipBaseline);
+    tooltipRow->addWidget(entry->tooltipWidth);tooltipRow->addStretch();
+    menus.second->addLayout(tooltipRow);
     menus.second->addStretch(1);
 
     auto mixer=makeTab("Mixer");
@@ -303,6 +313,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
             changed=true;
         if(entry->knobSources&&entry->knobSources->text()!=spec.knobSources.join(", "))
             changed=true;
+        if(entry->tooltipWidth&&entry->tooltipWidth->currentData().toInt()!=entry->tooltipBaseline)changed=true;
         if(entry->propertyColumns&&entry->propertyColumns->currentData().toInt()!=entry->columnsBaseline)
             changed=true;
         if(entry->stripeStrength&&entry->stripeStrength->value()!=
@@ -322,6 +333,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
             // Do not disable native Apply: OBS may have OTHER unsaved fields.
         }
     };
+    QObject::connect(entry->tooltipWidth,&QComboBox::currentIndexChanged,page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->propertyColumns,qOverload<int>(&QComboBox::currentIndexChanged),page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->ellipsis,qOverload<int>(&QComboBox::currentIndexChanged),
                      page,[updateDirty](int){updateDirty();});
@@ -387,6 +399,11 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
                         [target,priorMode]{if(target)target->setEllipsisMode(priorMode);}});
     }
     QPointer<Controller> c=controller_;
+    const int previousTooltip=entry->tooltipBaseline;
+    const int tooltip=entry->tooltipWidth->currentData().toInt();
+    if(tooltip!=previousTooltip)
+        changes.append({[c,tooltip](QString &e){return c&&c->setTooltipWidth(tooltip,&e);},
+                        [c,previousTooltip]{QString ignored;if(c)c->setTooltipWidth(previousTooltip,&ignored);}});
     const int previousColumns=entry->columnsBaseline;
     const int columns=entry->propertyColumns->currentData().toInt();
     if(columns!=previousColumns){
@@ -526,6 +543,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     for(auto it=entry->flags.cbegin();it!=entry->flags.cend();++it)
         if(it.value())entry->baseline[it.key()]=it.value()->isChecked();
     entry->columnsBaseline=controller_->propertyColumns();
+    entry->tooltipBaseline=controller_->tooltipWidth();
     entry->gradientBaseline=controller_->gradientSettings();
     entry->listRowsBaseline=controller_->listRowSettings();
     entry->existingMode=mode==Qt::ElideMiddle?"middle":"end";
