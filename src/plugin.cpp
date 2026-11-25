@@ -47,6 +47,7 @@
 #include <QInputDialog>
 #include <QRegularExpression>
 #include <util/config-file.h>
+#include <util/platform.h>
 #include "augment.h"
 #include "config-identity.h"
 #include "obs-audio.h"
@@ -184,13 +185,21 @@ static QAction *sourceDockManagerAction(){
     }
     return match&&match->isEnabled()?match:nullptr;
 }
+using NativeSourceDockPin=bool (*)(const char *,const char *);
+static NativeSourceDockPin nativeSourceDockPin(){
+    if(!frontendReady||!uiActive)return nullptr;
+    auto *module=obs_get_module("source-dock");
+    auto *library=module?obs_get_module_lib(module):nullptr;
+    return library?reinterpret_cast<NativeSourceDockPin>(os_dlsym(library,"source_dock_pin_v1")):nullptr;
+}
 static bool pinSourceDock(const augment::QuickFindEntry &hit){
     if(hit.kind==augment::QuickFindEntry::Filter||hit.id.isEmpty())return false;
+    const auto nativePin=nativeSourceDockPin();
     auto *action=sourceDockManagerAction();
     auto *module=obs_get_module("source-dock");
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
     const char *addLabel=nullptr;
-    if(!action||!module||!main||!obs_module_get_locale_string(module,"Add",&addLabel)||!addLabel)return false;
+    if(!module||!main||(!nativePin&&(!action||!obs_module_get_locale_string(module,"Add",&addLabel)||!addLabel)))return false;
     auto *source=obs_get_source_by_uuid(hit.id.toUtf8().constData());
     if(!source)return false;
     if(obs_source_removed(source)||obs_source_get_type(source)==OBS_SOURCE_TYPE_FILTER){
@@ -208,6 +217,18 @@ static bool pinSourceDock(const augment::QuickFindEntry &hit){
     QString title=name+" · pinned";
     for(int suffix=2;used.contains(title)&&suffix<=100;++suffix)title=name+" · pinned "+QString::number(suffix);
     if(name.isEmpty()||used.contains(title)){obs_source_release(source);return false;}
+    if(nativePin){
+        const bool created=nativePin(hit.id.toUtf8().constData(),title.toUtf8().constData());
+        obs_source_release(source);
+        auto *dock=created?main->findChild<QDockWidget*>(title):nullptr;
+        if(dock&&dock->widget()&&dock->widget()->inherits("SourceDock")){
+            if(dockTitleIcons)dockTitleIcons->refresh();
+            dock->show();dock->raise();
+            return true;
+        }
+        QMessageBox::information(main,"Pin to workspace","Source Dock declined the creation request.");
+        return false;
+    }
     QSet<QDialog*> prior;
     for(auto *dialog:main->findChildren<QDialog*>())prior.insert(dialog);
     action->trigger();
@@ -268,7 +289,7 @@ static void showQuickFind(){
                 if(action==augment::QuickFind::PinSource)return pinSourceDock(hit);
                 if(action==augment::QuickFind::Performance)return configureSourcePerformance(hit);
                 return augment::performObsQuickFind(hit,action);
-            },sourceDockManagerAction()!=nullptr);
+            },nativeSourceDockPin()!=nullptr||sourceDockManagerAction()!=nullptr);
     }
     quickFind->open();
 }

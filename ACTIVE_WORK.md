@@ -3027,3 +3027,30 @@ Installed official 0.2.0 OBS 32 Ubuntu 24.04 x86_64 release to ~/.config/obs-stu
 RED new backend and UI APIs absent; GREEN real libobs test fixture creates/updates/removes only marked filter, rejects missing backend, invalid range/stale source/external filter; Quick Find dispatch eligibility tested. Final 36/36 CTest passed. Actual isolated OBS 32.2.0 loaded official plugin 0.2.0; synthetic async source, native Quick Find right-click action, dialog set 100 then 500 then 0; actual native filter type/settings/count verified 1/1/0. Runtime /tmp/aftermarket-interleave-native-20261124/obs.log. Frame cadence and GPU reduction not measured. No production scenes changed; Aftermarket not installed/pushed.
 
 User explicitly permits forking shared projects when beneficial. Prefer a maintained, license-compliant fork with real extension points when upstream lacks needed APIs (Source Dock native pin API and independent preview scheduling are promising); not a blanket requirement to fork every dependency. Preserve attribution/license, upstream provenance and separate maintenance boundaries. No fork created in this slice.
+
+
+## Source Dock workspace API fork — 2026-11-24
+
+Local fork at ~/loam/obs-source-dock, branch workspace-api, upstream Exeldro
+0.5.1 (4b80c3e1f503ede990842ef9019879fc1da48901); fork commit 4c55683.
+GPL-2.0 license and module identity/persistence retained; no GitHub publication.
+Versioned source_dock_pin_v1 C ABI accepts UUID and dock title on UI thread,
+rejects stale/duplicate/off-thread calls, uses actual Source Dock widget and
+source-capability defaults. Aftermarket prefers exported API, falls back to
+existing guarded form only if symbol absent, never falls back after API
+rejection. Native source dock creation uses the existing persistence mechanism.
+
+RED exported-symbol test on baseline; GREEN build and symbol check. Actual
+isolated OBS 32.2.0 verified direct creation, invalid UUID, duplicate title and
+worker-thread rejection; Quick Find pinned Color with no manager form, unchanged
+active scene and correct native dock class; saved module data confirmed both
+new docks. Initial normal shutdown crashed (exit 139); gdb located
+SourceDock::DisableShowActive -> QSplitter::replaceWidget ->
+QWidgetPrivate::reparentFocusWidgets during destruction. Fork now skips
+reparenting/layout changes during destruction while disconnecting signals and
+releasing preview callbacks/showing reference. Same native probe with final
+build exited 0; two unattributed OBS memory leaks reported. Logs under
+/tmp/source-dock-workspace-api-native-20261124 (gdb.log, obs-teardown.log).
+Fork retains native integration smoke source and symbol test. Aftermarket full
+36/36 CTest passed. No production install or push; independent preview rates,
+frozen thumbnails and further lifecycle testing remain open.
