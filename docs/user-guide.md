@@ -615,6 +615,50 @@ source or scene files.
 
 ![Compact Add new and Add existing views in real OBS](screenshots/readme/embedded-source-picker.webp)
 
+### Command Center and Source Inspector
+
+Click the centered **Search or run a command…** field in the OBS menu strip.
+The operating-system window titlebar is not replaced. The field uses only
+available space between native menus and corner accessories and hides in
+narrow windows. **Tools → Aftermarket → Command Center…** remains available
+even when the field cannot fit. The native menu bar and Action Strip retain
+their own layout and action identities.
+
+The popup starts with two modes, without enumerating sources or hotkeys:
+
+- `@ camera`: search the current collection with the existing Quick Find
+  catalog and ranking. Bare text also searches sources. Choosing a source
+  pins the inspector without navigating to its scene; choosing a scene
+  navigates to it (preview in Studio Mode), and filters open their owner's
+  native Filters dialog after validating the filter still exists.
+- `/ workspace`, `/ source inspector`, `/ recording`: search Aftermarket
+  commands and registered OBS hotkeys. Every hotkey requires an explicit
+  confirmation; the bridge resolves its current identity again at execution.
+  No shell commands, automatic execution, or new global default shortcut.
+
+Use Up/Down, Enter and Escape, or click a result. The catalog is populated
+once per mode per open and is local to the current popup.
+
+Enable **Docks → Source Inspector** to follow the single selected scene item
+(in the preview scene in Studio Mode). Pin keeps that target while navigating.
+Source search pins the shared source itself, not an arbitrarily chosen scene
+item; unpin to follow selection and see item-specific transform values.
+Multiple selection is not silently resolved to one item. Deleted targets and
+scene-collection changes clear the pin. Source dimensions, native type,
+position, scale, rotation, lock state and filter names/enabled state are
+shown; **Find scene usage** displays bounded scene reference paths (not an
+exhaustive count). The two native editor buttons retain existing property
+and filter presets and OBS's normal dialog behavior. Selection changes
+coalesce via native source-list selection signals and frontend events, with
+a 750 ms fallback only while the dock is visible. Usage indexing is on demand.
+
+This first inspector slice is informational with native editor entry points:
+embedded editing, property search, transform presets, inline filter-chain
+management and integrated global undo are not yet implemented. The upstream
+Source Inspector Dock project was reviewed as a design reference; no upstream
+code has been copied. Emergency restore removes the field, popup and inspector
+dock without changing source settings.
+
 ### Quick Find: jump to sources and filters without another dock
 
 Open **Tools → Aftermarket → Find Sources…** to search the current OBS scene

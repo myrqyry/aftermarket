@@ -3483,3 +3483,57 @@ title-gradient.png in evidence directory. Two unattributed shutdown
 allocations. Other title layouts, all patterns on real OBS slider
 hardware and cross-platform behavior not individually qualified.
 Built not installed/pushed. Existing unrelated plugin.cpp comment retained.
+
+## 2026-11-25: command center and first Source Inspector slice
+
+User approved Source Inspector Dock review direction and requested VS Code-
+style centered command field with @ search and / hotkeys/commands. Implement
+reversible theme-native QLineEdit launcher in actual spare menu bar interval
+(max420px/min180px) between visible actions and corner widgets, not OS window
+decoration. Popup owns editable search and results, native popup outside
+dismiss, arrows/Enter/Escape, no default conflicting shortcut. Tools submenu
+fallback when narrow/native bar. Empty palette no catalog enumeration;
+@ and bare text use existing bounded QuickFind ranking; / named commands
+Workspace, Find, Source Inspector + existing stable NativeActionBridge
+hotkeys, all hotkey executions require nonmodal confirmation default No.
+Callbacks queued after popup closes; revalidate native identity. No shell
+or automatic commands. Search source opens pinned inspector without scene
+switch; scene/filter retain existing QuickFind behavior.
+
+Register native Source Inspector dock via obs_frontend_add_dock_by_id.
+Independent implementation, no imported upstream code. Single selection,
+Studio preview, groups bounded; source UUID plus containing scene UUID/item
+ID for transform context. Explicit source pin from search has no arbitrary
+item transform. Pin, unpin, removed target/collection cleanup, native
+properties/filters buttons, source type/dimensions, read-only transform and
+lock, searchable filter names/enabled, on-demand bounded usage paths using
+existing QuickFind catalog. Native selection model signal coalesced 40ms,
+frontend scene events and 750ms visible-only fallback; hidden timers stop.
+No setting mutation by inspector itself. Recovery removes owned dock/palette.
+Source Inspector Dock upstream reference:
+https://github.com/prgmitchell/source-inspector-dock (GPL-2.0-or-later).
+Accepted follow-on: pinned source property editor from upstream OBS pinned
+shared/properties-view with compatibility/licensing review; property search,
+explicit transform presets with separate scene-item semantics, inline filter
+add/remove/order/enable, native global undo, Quick Find and source context
+menu inspector action. Reuse Aftermarket presets and layouts rather than
+duplicate. Native editor integration/build qualification is not finished;
+repo has no root LICENSE at inspection, settle before incorporating GPL
+code. No upstream dependency or code copied in this slice.
+
+RED command-center test missing implementation; GREEN fixture includes gap,
+narrow fallback, lazy catalogs, query modes, confirmation cancel/accept,
+no-match no-action, teardown. Full 40/40 CTest
+/tmp/am-command-final2-ctest.log (15.15s); prior full run revealed flaky
+two-frame gradient comparison, sampled multiple phases (three repeat
+passes), no production gradient change. Isolated native OBS 32.2.0
+/tmp/am-command-native.wanmJr/obs.log 14/14, exit0, real centered field
+no menu overlap, @ result pinned source, stable across selection, unpin
+follows selection, item context, real registered test hotkey confirm and
+decline, exactly one callback, removed target clears. Screenshot
+/tmp/am-command-native.tv6KMS/command-center.png visually checked from
+first native run. Two unattributed shutdown allocations. Native test
+does not qualify all layouts, custom themes, multi-selection/group
+edge cases, embedded editing or actual native property-dialog opening.
+Docs updated. Production OBS untouched; no install/push. Preserve unrelated
+unstaged sourcePicker comment.

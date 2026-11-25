@@ -25,13 +25,13 @@ int main(int argc,char **argv){
   auto *resume=menu.action(Cmd::Resume);
   int invoked=0;QObject::connect(find,&QAction::triggered,[&]{++invoked;});
   menu.setState(true,false);
-  REQUIRE(!find->isEnabled()&&!resume->isVisible());
+  REQUIRE(!find->isEnabled()&&!resume->isVisible()&&!menu.action(Cmd::CommandCenter)->isEnabled());
   menu.setState(true,true);
   REQUIRE(find->isEnabled()&&find->isVisible());
   REQUIRE(menu.action(Cmd::Workspace)->isEnabled());
   QStringList labels;
   for(auto *a:anchor->menu()->actions())if(a->isVisible()&&!a->isSeparator())labels<<a->text();
-  REQUIRE(labels==QStringList({"Workspace","Find Sources…","Emergency restore (Ctrl+Alt+Shift+F12)"}));
+  REQUIRE(labels==QStringList({"Workspace","Find Sources…","Command Center…","Emergency restore (Ctrl+Alt+Shift+F12)"}));
   find->trigger();REQUIRE(invoked==1);
   augment::MenuBarCompact compact;
   REQUIRE(compact.setEnabled(bar,true));app.processEvents();

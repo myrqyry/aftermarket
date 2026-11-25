@@ -113,10 +113,22 @@ int main(int argc,char **argv) {
         REQUIRE(stripe&&stripe->isVisible()&&stripe->height()<=3);
         REQUIRE(stripe->geometry().bottom()<native->geometry().top());
         REQUIRE(stripe->testAttribute(Qt::WA_TransparentForMouseEvents)&&stripe->focusPolicy()==Qt::NoFocus);
-        auto a=stripe->grab().toImage(),b=progress->grab().toImage();wait(145);
+        const auto a=stripe->grab().toImage(),b=progress->grab().toImage();
         const bool animated=QString(pattern)!="static";
-        REQUIRE((a!=stripe->grab().toImage())==animated);
-        REQUIRE((b!=progress->grab().toImage())==animated);
+        bool stripeChanged=false,progressChanged=false;
+        // Bounce/breathe can revisit the same pixels at symmetric phases.
+        // Sample several points rather than requiring two arbitrary phases
+        // to differ. Static must remain identical throughout.
+        for(int sample=0;sample<6;++sample){
+            wait(117);
+            stripeChanged|=a!=stripe->grab().toImage();
+            progressChanged|=b!=progress->grab().toImage();
+            if(animated&&stripeChanged&&progressChanged)break;
+        }
+        if(stripeChanged!=animated||progressChanged!=animated)
+            std::cerr<<"Pattern "<<pattern<<" title changed="<<stripeChanged<<" progress changed="<<progressChanged<<'\n';
+        REQUIRE(stripeChanged==animated);
+        REQUIRE(progressChanged==animated);
         REQUIRE(dock->windowTitle()==title&&dock->widget()==native&&dock->titleBarWidget()==nullptr);
     }
     auto invalid=spec;invalid["pattern"]="unknown";

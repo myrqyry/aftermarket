@@ -65,7 +65,7 @@ The mixer still belongs to OBS. AudioBus does not implement a second audio engin
 
 The main **Tools → Aftermarket → Workspace** window contains seven tabs:
 Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts and
-Cue Deck. Quick Find and Emergency restore are the only other Tools
+Cue Deck. Quick Find, Command Center and Emergency restore are the other Tools
 commands. Routine preferences remain in OBS Settings.
 
 ### Docks and layouts
@@ -150,6 +150,16 @@ creation, selection, undo, and Properties. The original standalone chooser
 remains available in Settings.
 
 ![Compact Add new and filtered Add existing views](docs/screenshots/readme/embedded-source-picker.webp)
+
+### Command Center and Source Inspector
+
+The centered menu-strip field opens a keyboard-navigable command palette.
+Use `@` to find sources, scenes and filters, or `/` for Aftermarket commands
+and registered OBS hotkeys. Hotkeys require explicit confirmation. Source
+results pin the optional native Source Inspector dock without changing scenes.
+Open **Docks → Source Inspector** to follow source selection, see the scene-item
+transform, search filter names and check scene references, or open native
+Properties and Filters. [Command center guide](docs/user-guide.md#command-center-and-source-inspector).
 
 ### Quick Find
 

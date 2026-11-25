@@ -13,6 +13,8 @@
 #include "menu-bar-compact.h"
 #include "action-strip.h"
 #include "quick-find.h"
+#include "command-center.h"
+#include "source-inspector-dock.h"
 #include "source-dock-pin.h"
 #include "source-performance.h"
 #include "dock-layouts.h"
@@ -61,6 +63,8 @@ static std::unique_ptr<augment::ObsAudio> audio;
 static std::unique_ptr<augment::ObsTransformStyle> transforms;
 static QPointer<augment::Inspector> inspector;
 static QPointer<augment::QuickFind> quickFind;
+static std::unique_ptr<augment::CommandCenter> commandCenter;
+static QPointer<augment::SourceInspectorDock> sourceInspector;
 static std::unique_ptr<augment::ToolsMenu> toolsMenu;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
@@ -432,11 +436,20 @@ static bool setAudioMixerBackside(bool enabled) {
     // Do not stack the entire routing canvas under OBS's native mixer.
     return true;
 }
+static bool showSourceInspector(const augment::QuickFindEntry *entry=nullptr){
+    if(!frontendReady||!uiActive||!sourceInspector)return false;
+    auto *dock=qobject_cast<QDockWidget*>(sourceInspector->parentWidget());
+    if(!dock)return false;
+    if(entry&&!sourceInspector->inspect(*entry))return false;
+    dock->show();dock->raise();sourceInspector->refresh();return true;
+}
 static void stopCustomUi(){
     // The recovery marker is written before this runs. Do not touch the OBS
     // scene collection, audio state, saved dock layout, or rules.json.
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
+    commandCenter.reset();
+    if(sourceInspector){obs_frontend_remove_dock("aftermarket-source-inspector-dock");sourceInspector.clear();}
     delete quickFind.data();
     if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
     nativeSettings.reset(); // remove only plugin page from any open native Settings
@@ -579,6 +592,40 @@ static bool startCustomUi(){
             *controller,*dockTitleIcons,std::move(services));
     }
     uiActive=true;
+    if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()))){
+        auto *dock=new augment::SourceInspectorDock(main);
+        if(obs_frontend_add_dock_by_id("aftermarket-source-inspector-dock","Source Inspector",dock))sourceInspector=dock;
+        else delete dock;
+    }
+    if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
+        commandCenter=std::make_unique<augment::CommandCenter>(main,
+            []{return frontendReady&&uiActive?augment::collectObsQuickFind():QList<augment::QuickFindEntry>{};},
+            [](const auto &hit){
+                if(!frontendReady||!uiActive)return false;
+                if(hit.kind==augment::QuickFindEntry::Source&&sourceInspector)return showSourceInspector(&hit);
+                return augment::performObsQuickFind(hit,augment::QuickFind::Default);
+            },
+            []{
+                QList<augment::CommandChoice> result;
+                if(!frontendReady||!uiActive)return result;
+                result.append({"workspace","Open Workspace","Aftermarket",false});
+                result.append({"find","Find Sources","Aftermarket",false});
+                if(sourceInspector)result.append({"inspect","Source Inspector","Aftermarket",false});
+                if(nativeActions)for(const auto &key:nativeActions->enumerateHotkeys())
+                    result.append({key.binding,key.label,key.group,true});
+                return result;
+            },
+            [](const QString &id){
+                if(!frontendReady||!uiActive)return false;
+                using Command=augment::ToolsMenu::Command;
+                if(id=="inspect")return showSourceInspector();
+                if(id=="workspace"||id=="find"){
+                    auto *action=toolsMenu?toolsMenu->action(id=="workspace"?Command::Workspace:Command::Find):nullptr;
+                    if(!action||!action->isEnabled())return false;
+                    action->trigger();return true;
+                }
+                return nativeActions&&nativeActions->triggerHotkey(id);
+            });
     if(toolsMenu)toolsMenu->setState(true,frontendReady);
     return true;
 }
@@ -591,6 +638,14 @@ static void cleanupUi(){
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
     if(nativeActions&&event!=OBS_FRONTEND_EVENT_EXIT)nativeActions->onFrontendEvent(event);
+    if(sourceInspector){
+        if(event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING||event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP)
+            sourceInspector->clearSelection();
+        else if(event==OBS_FRONTEND_EVENT_SCENE_CHANGED||event==OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED||
+                event==OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED||event==OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED||
+                event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED)
+            sourceInspector->refresh();
+    }
     if(event==OBS_FRONTEND_EVENT_FINISHED_LOADING){
         frontendReady=true;
         if(toolsMenu)toolsMenu->setState(uiActive,frontendReady);
@@ -698,6 +753,10 @@ MODULE_EXPORT bool obs_module_load(void) {
             }):std::function<void()>{});
         inspector->show();inspector->raise();inspector->activateWindow();
     });
+    if(auto *commandAction=toolsMenu->action(Command::CommandCenter))
+        QObject::connect(commandAction,&QAction::triggered,controller,[]{
+            QTimer::singleShot(0,[]{if(frontendReady&&uiActive&&commandCenter)commandCenter->open();});
+        });
     auto *findAction=toolsMenu->action(Command::Find);
     blog(LOG_INFO,"[aftermarket] AFTERMARKET_QUICK_FIND_20261123 registered=%d",findAction?1:0);
     if(findAction)QObject::connect(findAction,&QAction::triggered,controller,[]{

@@ -14,6 +14,7 @@ ToolsMenu::ToolsMenu(QAction *anchor):anchor_(anchor){
     };
     add("Workspace","workspace");
     add("Find Sources…","find");
+    add("Command Center…","command-center");
     separators_.append(menu_->addSeparator());
     add("Emergency restore (Ctrl+Alt+Shift+F12)","emergency");
     add("Resume UI customizations","resume");
@@ -32,7 +33,7 @@ void ToolsMenu::setState(bool active,bool frontendReady){
     for(int i=0;i<actions_.size();++i){
         auto *a=actions_[i].data();if(!a)continue;
         const bool resume=i==static_cast<int>(Command::Resume);
-        const bool needsReady=i==static_cast<int>(Command::Find)||i==static_cast<int>(Command::Workspace);
+        const bool needsReady=i==static_cast<int>(Command::Find)||i==static_cast<int>(Command::Workspace)||i==static_cast<int>(Command::CommandCenter);
         a->setVisible(resume?!active:active);
         a->setEnabled(resume?!active:active&&(!needsReady||frontendReady));
     }
