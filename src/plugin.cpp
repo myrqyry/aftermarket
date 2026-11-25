@@ -7,6 +7,7 @@
 #include "panels.h"
 #include "property-sections.h"
 #include "property-columns.h"
+#include "property-preset-footer.h"
 #include "tools-menu.h"
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
@@ -64,6 +65,7 @@ static std::unique_ptr<augment::ToolsMenu> toolsMenu;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
 static std::unique_ptr<augment::PropertyColumns> propertyColumns;
+static std::unique_ptr<augment::PropertyPresetFooter> propertyPresetFooter;
 static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::MenuBarCompact> compactBar;
 static std::unique_ptr<augment::ActionStrip> actionStrip;
@@ -446,6 +448,7 @@ static void stopCustomUi(){
     dockTitleIcons.reset(); // remove only plugin-painted native title icons
     compactBar.reset(); // return original OBS QAction identities
     rowStripes.reset();
+    propertyPresetFooter.reset();
     propertyColumns.reset();
     propertySections.reset();
     transforms.reset();
@@ -479,6 +482,7 @@ static bool startCustomUi(){
     propertySections->setEnabled(controller->collapsiblePropertyGroups());
     propertyColumns=std::make_unique<augment::PropertyColumns>();
     propertyColumns->setMode(controller->propertyColumns());
+    propertyPresetFooter=std::make_unique<augment::PropertyPresetFooter>(QFileInfo(stripConfigPath).dir().filePath("property-presets.json"));
     rowStripes=std::make_unique<augment::RowStripes>();
     rowStripes->configure(controller->listRowSettings());
     compactBar=std::make_unique<augment::MenuBarCompact>();

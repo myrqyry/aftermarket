@@ -134,6 +134,44 @@ content is the original OBS form, and disabling the feature restores its
 original row visibility. The folded state is session-only; groups rebuilt by
 OBS begin expanded. No settings values are changed by folding.
 
+### Named source and filter presets
+
+Native source Properties and Filters dialogs now have a compact preset
+strip next to **Defaults**:
+
+- **Presets…** lists names saved for the exact native source/filter type
+  and version ID. Source and filter settings are separate.
+- **Load** applies the selected preset to the currently edited source
+  or filter. Selecting a name alone never changes settings.
+- **Save** captures the current properties under a new name.
+- The overflow menu offers **Update selected preset…**, **Rename…**,
+  **Delete…**, and **Undo last preset load**. Update and delete ask for
+  confirmation. Undo is scoped to the same dialog and source identity;
+  it refuses to overwrite settings that have changed since the load.
+
+Source Properties uses the original native OK/Cancel behavior: Cancel
+restores the settings present at dialog opening, and OK commits edits.
+Saved preset files are independent of that dialog transaction. Filter
+settings apply live and are saved through OBS; use the footer's own undo
+action to revert the last preset load, not a promised native global undo
+entry. The native Defaults control is unchanged.
+
+The preset store is `plugin_config/aftermarket/property-presets.json`,
+written atomically with owner-only permissions. It contains source settings,
+which can include sensitive text, local media paths and credentials; it is
+not encrypted. Do not share it without reviewing the contents. Corrupted
+preset files are not overwritten. Presets replace the selected object's
+user settings, not its name, filters, mixer state or scene transforms.
+The footer fails closed for unresolved targets, unsupported dialogs and
+deferred-update editors. Transition properties are not supported yet.
+
+Inspired by [CodeYan's Source Defaults](https://obsproject.com/forum/resources/source-defaults.1628/),
+which applies a template source's settings to newly created sources. This
+named-preset implementation uses native OBS APIs independently, requires
+no companion plugin or fork, and does not automatically change new sources.
+Automatic defaults and the upstream filter's broader audio/scene-item
+copy features are separate follow-on work.
+
 Mixer and gradient edits share an explicit Apply changes button; a pending
 indicator and Reload saved settings distinguish the draft from applied
 settings. No separate editor dialog is needed. Apply preserves unknown

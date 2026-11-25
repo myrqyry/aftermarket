@@ -3208,3 +3208,40 @@ Evidence /tmp/aftermarket-installed-docs-20261124/obs.log. Refreshed seven
 Workspace tab images, Quick Find, actual responsive filter controls; audited
 README, user guide, dock layouts, CI and historical dock design. Relative
 file-link checks passed; historical screenshots not all recaptured. No push.
+
+## 2026-11-25: native source/filter property preset footer
+
+User requested named presets in the blank native Properties and Filters
+footer beside Defaults, inspired by CodeYan/source-defaults (GPL2 upstream
+3ce4850 reviewed; no upstream code copied). Implemented independent
+Aftermarket adapter, no companion dependency. Dropdown, explicit Load,
+Save new, overflow Update/Rename/Delete/Undo last load. Exact native
+source/filter type ID namespace; no automatic defaults, scene transforms,
+audio routing or filter-chain copying. Owner-only atomic JSON store
+property-presets.json; max 1 MiB per preset / 16 MiB file, preserve corrupt
+store, names bounded, explicit update/delete confirmation. Settings may
+contain credentials and media paths; not encrypted; warning in save prompt.
+Native source dialog uses same settings object and native OK/Cancel;
+filters apply live with explicit footer-local undo, guarded against later
+settings changes, not a native global undo entry. Selection uses exact
+localized native dialog title, retained UUID, visible native view, native
+filter list OBSSource QVariant and last active list; ambiguous/unsupported
+and deferred-update editors fail closed. Transition dialogs not supported.
+Footer/prompt teardown owned by adapter, restores native button box.
+Actual Linux OBS 32.2.0 native test first failed because source Defaults
+was not standard Qt button role; corrected using actual ResetRole and
+native button-box layout. Source fixture initially shared settings object
+between sources, fixed separate allocation. RED missing store header;
+GREEN store unit tests including corrupt preservation, permission and
+reopen. Full CTest 39/39 /tmp/am-preset-final-ctest.log 10.23s.
+Native probe /tmp/am-presets-native.dvNEFq/obs.log 18/18 checks and exit0:
+source save/cross-source load/Cancel restore/OK commit, filter type
+isolation/save/load/undo, native rename/update/reload/delete. Two
+unattributed libobs leaks; Xvfb preview rendering artifacts, footer
+positions verified. Mixed audio/video list switching, deferred editor,
+other OS, recovery with preset prompt open and current Colorway theme
+not independently qualified. Native test fixture retained in tests/native.
+README/user guide updated. Existing unstaged plugin.cpp comment preserved.
+User OBS running; no installation or push. Follow-on: explicit opt-in
+new-source default assignment, with native creation vs collection load
+and duplication distinction; do not silently apply automatic defaults.
