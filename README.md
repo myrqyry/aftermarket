@@ -76,6 +76,11 @@ If [Scene Collection Manager](https://obsproject.com/forum/resources/scene-colle
 is loaded, optionally create a verified companion backup in its native backup library and open
 its manager directly from Dock Layouts.
 
+Optional [Source Dock](https://obsproject.com/forum/resources/source-dock.1317/) panels
+receive the native Aftermarket header controls and a shortcut to Source Docks settings.
+Workspace checkpoints capture their scene-collection configuration without replacing
+Source Dock's rendering or controls.
+
 | Native dock headers | Saved dock arrangements |
 | :---: | :---: |
 | ![Native OBS docks with compact title controls](docs/screenshots/readme/dock-all-overflows.webp) | ![Dock Layouts manager with a saved arrangement](docs/screenshots/readme/dock-layouts.webp) |

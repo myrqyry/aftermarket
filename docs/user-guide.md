@@ -255,6 +255,20 @@ Use **Tools → Aftermarket: Dock Layouts…** to save, rename, update, switch a
 
 ![Dock Layouts manager](screenshots/readme/dock-layouts.webp)
 
+### Source Dock integration
+
+Install [Source Dock](https://obsproject.com/forum/resources/source-dock.1317/) separately.
+Use its native Tools → Source Dock manager to create source-specific panels.
+Aftermarket recognizes actual Source Dock widgets regardless of their title, uses
+a source glyph, and adds **Configure source docks…** to their existing three-dot
+menu when the unique localized native Tools action is available. The shortcut
+opens the original manager; no third-party widget is replaced. Their native
+dock IDs participate in saved dock arrangements and the existing Action Strip
+dock selector. Workspace checkpoints include their saved module configuration
+inside the native scene JSON. Full workspace restore and direct source pinning
+are not implemented; use the native manager to create docks. Without the
+optional module no extra Source Dock controls appear.
+
 ### Workspace checkpoints
 
 Open **Tools → Aftermarket: Dock Layouts… → Workspace checkpoints…**.

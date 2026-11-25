@@ -389,6 +389,20 @@ static bool startCustomUi(){
         dockTitleIcons=std::make_unique<augment::DockTitleIcons>(
             main,panels.get(),QDir(QFileInfo(stripConfigPath).absolutePath())
                                .filePath("dock-title-settings.ini"));
+    if(dockTitleIcons)dockTitleIcons->setSourceDockSettingsAction([]()->QAction*{
+        if(!frontendReady||!uiActive)return nullptr;
+        auto *module=obs_get_module("source-dock");
+        auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
+        auto *tools=main?main->findChild<QMenu*>("menuTools"):nullptr;
+        const char *label=nullptr;
+        if(!module||!tools||!obs_module_get_locale_string(module,"SourceDock",&label)||!label||!*label)return nullptr;
+        QAction *match=nullptr;
+        for(auto *action:tools->actions())if(action->text()==QString::fromUtf8(label)){
+            if(match)return nullptr;
+            match=action;
+        }
+        return match;
+    });
     dockFaces=std::make_unique<augment::DockFaces>(nullptr,uiMotion);
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         sourcePicker=std::make_unique<augment::SourcePicker>(

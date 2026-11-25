@@ -33,6 +33,10 @@ int main(int argc,char **argv){
  REQUIRE(augment::DockTitleIcons::classify("thirdPartyDock","Twitch Chat")==Kind::Chat);
  REQUIRE(augment::DockTitleIcons::classify("thirdPartyDock","Browser Widgets")==Kind::Browser);
  REQUIRE(augment::DockTitleIcons::classify("notRecognized","Custom Suite")==Kind::Generic);
+ REQUIRE(augment::DockTitleIcons::classify("Camera A","Camera A","SourceDock")==Kind::Sources);
+ REQUIRE(augment::DockTitleIcons::classify("Audio Camera","Audio Camera","SourceDock")==Kind::Sources);
+ REQUIRE(augment::DockTitleIcons::classify("Camera A","Camera A","QSplitter")==Kind::Generic);
+
  // Native dock title bars can leave a sliver of space beside long labels.
  // Use a smaller glyph only when it fits; never collide with Qt controls.
  REQUIRE(augment::DockTitleIcons::glyphSizeForRoom(21)==14);

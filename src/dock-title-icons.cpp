@@ -106,7 +106,8 @@ private:
     DockTitleIcons::Kind kind_;
 };
 }
-DockTitleIcons::Kind DockTitleIcons::classify(const QString &objectName,const QString &title){
+DockTitleIcons::Kind DockTitleIcons::classify(const QString &objectName,const QString &title,const QString &contentClass){
+    if(contentClass=="SourceDock")return Kind::Sources;
     const QString id=objectName.toLower();
     const QString label=title.toLower();
     const auto has=[&](const QString &part){
@@ -264,12 +265,16 @@ bool DockTitleIcons::setEllipsisMode(Qt::TextElideMode mode){
     refresh();
     return true;
 }
+void DockTitleIcons::setSourceDockSettingsAction(std::function<QAction*()> action){
+    sourceDockSettingsAction_=std::move(action);
+}
 void DockTitleIcons::refresh(){
     if(!window_)return;
     const auto docks=window_->findChildren<QDockWidget*>();
     for(auto *dock:docks){
         if(!dock)continue;
-        const auto kind=classify(dock->objectName(),originalTitle(dock));
+        const auto kind=classify(dock->objectName(),originalTitle(dock),
+            dock->widget()&&dock->widget()->inherits("SourceDock")?"SourceDock":QString{});
         if(icons_.contains(dock)&&icons_.value(dock)){
             static_cast<TitleGlyph*>(icons_.value(dock).data())->setKind(kind);
             continue;
@@ -295,6 +300,17 @@ void DockTitleIcons::refresh(){
             }
             menu->addSeparator();
             owner->appendDockWindowActions(menu,safe);
+            if(safe->widget()&&safe->widget()->inherits("SourceDock")&&owner->sourceDockSettingsAction_){
+                QPointer<QAction> native=owner->sourceDockSettingsAction_();
+                if(native&&native->isEnabled()){
+                    menu->addSeparator();
+                    auto *settings=menu->addAction("Configure source docks…");
+                    settings->setObjectName("aftermarket-source-dock-settings");
+                    connect(settings,&QAction::triggered,menu,[native]{
+                        if(native)QTimer::singleShot(0,native,[native]{if(native&&native->isEnabled())native->trigger();});
+                    });
+                }
+            }
         });
         moreButtons_.insert(dock,more);
         auto *icon=new TitleGlyph(kind,dock);

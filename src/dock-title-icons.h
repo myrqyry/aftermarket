@@ -3,6 +3,7 @@
 #include <QHash>
 #include <QDockWidget>
 #include <memory>
+#include <functional>
 #include <QPointer>
 #include <QString>
 class QMainWindow;
@@ -11,6 +12,7 @@ class QWidget;
 class QToolButton;
 class QMenu;
 class QEvent;
+class QAction;
 
 namespace augment {
 class Panels;
@@ -21,7 +23,8 @@ class DockTitleIcons final : public QObject {
 public:
     enum class Kind { Scenes, Sources, Audio, Transitions, Controls,
                       Preview, Chat, Browser, Generic };
-    static Kind classify(const QString &objectName,const QString &title);
+    static Kind classify(const QString &objectName,const QString &title,const QString &contentClass={});
+    void setSourceDockSettingsAction(std::function<QAction*()> action);
     static int glyphSizeForRoom(int freePixels);
     static constexpr int titleTextInset(){return 20;}
     bool titleIndented(QDockWidget *dock) const;
@@ -56,6 +59,7 @@ private:
     bool adjustingTitle_=false;
     bool adjustingFeatures_=false;
     bool scheduled_=false;
+    std::function<QAction*()> sourceDockSettingsAction_;
     void restoreTitle(QDockWidget *dock);
     QDockWidget::DockWidgetFeatures actualDockFeatures(QDockWidget *dock) const;
     void suppressNativeButtons(QDockWidget *dock);
