@@ -1117,18 +1117,20 @@ settings are not changed by installation.
 
 Enable **Motion** in **OBS → Settings → Aftermarket → Menus** or from
 **Tools → Aftermarket → Workspace**. The same global control governs menu artwork,
-dock collapse/expand, AudioBus page switching, and existing reactive gradients.
+dock collapse/expand, AudioBus page switching, existing reactive gradients, and state feedback on Aftermarket-owned dock header, Studio and Action Strip toggle controls.
 Motion is off by default, preserving the native immediate behavior until enabled.
 For individual menu artwork rules, pick a preset and duration in the Workspace.
 
 - **soft**: fade/slide entrance, modest icon growth on hover.
 - **pop**: fade/slide with a more pronounced scale transition.
 - **spin**: fade/slide with rotation on hover.
+- **fade**: opacity-only entrance, no hover animation.
+- **lift**: fade and a short vertical rise, with a slight lift on hover.
 - **none**: static icon even when global motion is enabled.
 
 The duration is 60–600 ms (default 160 ms); a capped 9 ms stagger separates successive entrances.
 Uncheck Motion for reduced motion. The master switch persists in the rules file;
-new UI transitions follow its latest value immediately.
+new UI transitions use the last validated setting without reading the file during animation. Disabling motion settles active menu icons and dock transitions; owned button feedback stops at its next scheduled update. Qt style reduced-motion hints also apply.
 
 **Native dock collapsing and page switching:** When Motion is enabled, using
 a dock's **⋮ → Collapse / Expand** (or middle-clicking its native title) eases
@@ -1138,22 +1140,34 @@ in five steps (up to roughly 30 Hz) instead of resizing on every animation
 tick. Expanding content becomes visible at the final layout; missed steps
 are discarded rather than replayed. Tabbed, floating and custom-title
 docks remain governed by the existing native restrictions. Switching between
-**Audio Mixer and AudioBus** uses a restrained **210 ms horizontal flip**:
-two temporary snapshots turn around the middle of the existing dock, while
-the original OBS mixer and routing widgets stay in place. Nothing is rotated
-or assigned a graphics effect on the live native controls, and no extra
-animation is layered on top. Rapid reversals discard the earlier frame,
-and emergency recovery removes the animation. The flip skips snapshots
-for panels above 1,048,576 physical pixels or known native/GPU widget
-surfaces; those pages switch immediately. Widget layout, capture and painting
-still use Qt's GUI thread. These bounds reduce optional UI work, not a
-guarantee of frame timing or isolation from the main thread. Both dock movements and
-page switching are instantaneous with Motion off.
+**Audio Mixer and AudioBus** uses a **210 ms folding reveal**. The live
+native destination is selected immediately. A theme-colored paint-only
+overlay opens around the center, with no widget screenshots, perspective
+texture transforms, graphics effects, or new rendering surfaces. The
+overlay is click-through and uses at most six elapsed-time updates; it
+invalidates only the covered areas and never replays missed frames.
+Reversing, hiding, resizing or changing the theme discards the previous
+overlay. Oversized panels (above 1,048,576 physical pixels) and destination pages with native/GPU
+child surfaces switch immediately rather than attempting unreliable
+compositing. Native QWidget page roots are supported by painting inside the
+destination itself, not by adding another native window.
+
+Aftermarket-owned title controls and AudioBus, Studio and Action Strip dock
+toggles use short **132 ms** palette-based hover/press/checked feedback,
+retargeting from the current value. Menu icons repaint only animated regions
+at roughly 30 Hz. The animation clocks stop when settled or hidden. These
+decorations do not resize controls or change their hit targets. Existing OBS
+native state and routing are never animated.
+
+Qt widget layout and painting remain on the GUI thread. This removes the
+synchronous capture and transformation work from the flip, but does not
+guarantee zero GUI latency: the real page switch, native route refresh and
+ordinary widget painting still have a cost. No work is moved to OBS's
+audio or graphics threads. Motion off uses immediate state changes.
+
 
 These are **OBS interface animations**, not OBS's video scene-transition
 effects. Aftermarket never invokes or replaces a streaming transition.
-
-![Native Qt dock collapse and real OBS AudioBus half-turn frames](screenshots/readme/ui-motion-docks-and-audiobus.webp)
 
 ```json
 {
@@ -1257,7 +1271,7 @@ mixer reorder and optional device sends, checkpoint capture, Source Dock
 pinning and lightweight previews, and the unified Workspace with emergency
 recovery during an open checkpoint dialog. Additional native probes cover
 property presets and portable filter chains, picker dismissal, bounded dock
-motion, mixer reflow and relative sync encoder input. The installed modules were also
+motion, mixer reflow and relative sync encoder input. The snapshot-free mixer reveal passed seven native checks, including zero synchronous paint events during both page switches. The installed modules were also
 loaded together in a disposable profile; OBS exited normally. No claim is
 made that every combination of plugins, source types, hardware or graphics
 drivers has been exercised. Optional preview caching is SDR-only and total

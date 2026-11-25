@@ -421,6 +421,7 @@ class Overlay final : public QWidget {
         QColor cachedColor;
         QPixmap cachedIcon;
         qreal cachedDpr=0;
+        bool wasMoving=false;
     };
     struct SubmenuStatus {
         QPointer<QAction> action;
@@ -510,19 +511,21 @@ class Overlay final : public QWidget {
         bool active=false;
         // Repaint the final frame too. Qt repaints the parent backing store for
         // transparent children; the native menu owns all non-icon pixels.
-        for (const auto &s:slots_) {
-            if(!s.motion.enabled())continue;
-            const auto region=iconRegion(s);
-            if(region.isValid())update(region);
-            active|=moving(s,t);
+        QRegion dirty;
+        for (auto &s:slots_) {
+            const bool movingNow=moving(s,t);
+            if(movingNow||s.wasMoving)dirty+=iconRegion(s);
+            s.wasMoving=movingNow;
+            active|=movingNow;
         }
+        if(!dirty.isEmpty())update(dirty);
         if(!active)clock_->stop();
     }
 public:
     explicit Overlay(QMenu *m):QWidget(m),menu(m),layout(m),clock_(new QTimer(this)) {
         clock_->setObjectName("augment-motion-clock");
         clock_->setTimerType(Qt::PreciseTimer);
-        clock_->setInterval(16);
+        clock_->setInterval(motionFrameIntervalMs);
         connect(clock_,&QTimer::timeout,this,[this]{tick();});
         setObjectName("aftermarket-overlay");
         setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -532,6 +535,12 @@ public:
     }
     ~Overlay() override { restore(); }
     bool prepared() const {return prepared_;}
+    void settleMotion(){
+        if(!motionEnabled_)return;
+        motionEnabled_=false;clock_->stop();
+        for(auto &s:slots_)s.wasMoving=false;
+        if(isVisible())update();
+    }
     void restoreLayout(){layout.restore();}
     void layoutVisible(){layout.present();}
     void closePopup(){
@@ -599,7 +608,7 @@ public:
             }
         }
         prepared_ = true;
-        motionEnabled_=rules.motion;
+        motionEnabled_=rules.enabled&&rules.motion&&menu->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,menu);
         const auto actions = menu->actions();
         const auto labels=normalizedLabels(logicalMenuLabels(menu));
         for (auto *a : actions) {
@@ -649,6 +658,7 @@ public:
         raise(); show(); update();
         if(motionEnabled_ && !elapsed_.isValid()) {
             elapsed_.start();
+            for(auto &s:slots_)s.wasMoving=s.motion.enabled();
             if(std::any_of(slots_.begin(),slots_.end(),[](const Slot &s){return s.motion.enabled();}))
                 clock_->start();
         }
@@ -662,8 +672,9 @@ public:
         bool active=false;
         for(auto &s:slots_) {
             if(!s.motion.enabled())continue;
-            s.hover.retarget(s.action==action?1.:0.,t,s.motion.duration);
-            active|=moving(s,t);
+            if(s.motion.preset!="fade")s.hover.retarget(s.action==action?1.:0.,t,s.motion.duration);
+            s.wasMoving|=moving(s,t);
+            active|=s.wasMoving;
         }
         if(active && isVisible() && !clock_->isActive())clock_->start();
         update();
@@ -717,7 +728,7 @@ protected:
                 QSvgRenderer svg(iconSvg(s.icon,color));
                 svg.render(&cache,QRectF(0,0,32,32));
             }
-            qreal alpha=1,scale=1,shift=0,angle=0;
+            qreal alpha=1,scale=1,shift=0,lift=0,angle=0;
             if(motionEnabled_ && s.motion.enabled() && elapsed_.isValid()) {
                 const auto progress=qBound(0.,double(t-s.delay)/s.motion.duration,1.);
                 const auto entrance=QEasingCurve(QEasingCurve::OutCubic).valueForProgress(progress);
@@ -725,7 +736,9 @@ protected:
                 alpha=entrance;
                 shift=-3*(1-entrance);
                 if(menu->layoutDirection()==Qt::RightToLeft)shift=-shift;
-                if(s.motion.preset=="pop")scale=.72+.28*entrance+.18*hover;
+                if(s.motion.preset=="fade"){shift=0;alpha=entrance;}
+                else if(s.motion.preset=="lift"){shift=0;lift=3*(1-entrance)-2*hover;}
+                else if(s.motion.preset=="pop")scale=.72+.28*entrance+.18*hover;
                 else if(s.motion.preset=="spin") {scale=.88+.12*entrance;angle=-18*(1-entrance)+28*hover;}
                 else scale=.90+.10*entrance+.10*hover;
             }
@@ -733,7 +746,7 @@ protected:
             p.setClipRect(region);
             p.setOpacity(alpha);
             p.setRenderHint(QPainter::SmoothPixmapTransform);
-            p.translate(QRectF(target).center()+QPointF(shift,0));
+            p.translate(QRectF(target).center()+QPointF(shift,lift));
             p.rotate(angle);
             p.scale(scale,scale);
             p.drawPixmap(QRectF(-size/2.,-size/2.,size,size),s.cachedIcon,QRectF(s.cachedIcon.rect()));
@@ -761,7 +774,12 @@ struct Controller::State {
     GradientController gradients;
     QFileSystemWatcher watcher;
     QTimer reload;
-    void refreshGradients(){auto spec=rules.gradient;spec.enabled &= rules.enabled&&!suspended;spec.knobs &= rules.enabled&&!suspended;gradients.configure(spec,rules.motion&&!suspended);}
+    void refreshGradients(){
+        auto spec=rules.gradient;spec.enabled &= rules.enabled&&!suspended;spec.knobs &= rules.enabled&&!suspended;
+        const bool motion=rules.enabled&&rules.motion&&!suspended;
+        gradients.configure(spec,motion);
+        if(!motion)for(auto *overlay:menus)if(overlay)overlay->settleMotion();
+    }
     explicit State(QString path, Logger logger):rules(std::move(path), std::move(logger)) {}
 };
 Controller::Controller(QString rulesFile, QObject *parent, Logger logger,bool initialSafeMode):QObject(parent),state(new State(std::move(rulesFile), std::move(logger))) {
@@ -1017,6 +1035,7 @@ bool Controller::setOverflowRule(const QJsonObject &selector,bool enabled,QStrin
     return editRules(state->rules,selector,false,error,nullptr,nullptr,nullptr,nullptr,&enabled);
 }
 bool Controller::motionEnabled() const {state->rules.refresh();return state->rules.motion;}
+bool Controller::cachedMotionEnabled() const {return state->rules.enabled&&state->rules.motion&&!state->suspended;}
 bool Controller::setMotionEnabled(bool enabled, QString *error) {
     if(!editRules(state->rules,{},false,error,&enabled))return false;
     state->refreshGradients();return true;

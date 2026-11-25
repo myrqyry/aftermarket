@@ -12,6 +12,7 @@ class Panels final : public QObject {
 public:
     explicit Panels(QObject *parent=nullptr,std::function<bool()> motionEnabled={});
     ~Panels() override;
+    bool motionAllowed() const;
     bool canCollapse(QDockWidget *) const;
     bool collapsed(QDockWidget *) const;
     bool toggle(QDockWidget *);

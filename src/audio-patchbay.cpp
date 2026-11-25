@@ -841,7 +841,7 @@ void AudioPatchbay::setSourceOrderProvider(SourceOrderProvider provider){
 void AudioPatchbay::showEvent(QShowEvent *event){
     QWidget::showEvent(event);
     refreshDevices();
-    // Refresh before DockFaces captures the incoming face for its animation.
+    // Keep native routing state current when the live page is shown.
     refresh();
 }
 void AudioPatchbay::refresh(){

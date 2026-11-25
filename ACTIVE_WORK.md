@@ -3412,3 +3412,45 @@ drag 12775 -> reset, original gain and geometry retained. Input is
 relative vertical drag/scroll, not cursor warping or angular mouse
 tracking. Production OBS running; no installation or push. Existing
 unrelated plugin.cpp comment preserved.
+
+## 2026-11-25: snapshot-free mixer reveal and shared motion budget
+
+User requested noninterrupting mixer flip and plugin-wide motion upgrades.
+Remove both synchronous QWidget::grab captures and projective texture paint
+from DockFaces; native destination switches immediately, a paint-only
+click-through folding reveal opens over it over 210ms. Six elapsed-time
+updates maximum; dirty old/new curtain regions only, no replay, no graphics
+effects/native overlay surface, cancellation on resize/hide/theme or rapid
+reversal. Native page root supported by parenting decoration inside the
+destination, never over a separate native child; reject GPU/paint-on-screen
+or nested native child surfaces, AA_NativeWindows, and >1 Mi physical
+pixel area. Qt GUI thread remains necessary for live page switch,
+routing refresh, layout and ordinary paint. No assertion of zero GUI
+latency or audio/video timing guarantee.
+
+Shared MotionFrameBudget for dock collapse/expand (five updates) and reveal.
+MotionToolButton shared paint-only 132ms palette feedback for owned dock
+header controls, AudioBus switch, Studio and Action Strip dock toggles.
+Only visible active timers, retarget from current value. Controller cached
+motion policy avoids file reads on animation ticks; rules watcher updates
+policy, safe mode/reduced motion settle or cancel. Menu artwork adds fade
+(opacity only) and lift (vertical rise), 33ms timer, active/final icon
+regions only, no idle hover motion for fade. Existing gradients and OBS
+native actions preserved. No unrelated picker comment staged.
+
+RED /tmp/am-flip-red.log: synchronous destination paint regression exposed
+old snapshot capture. GREEN focused tests incl. exact frame budget, no
+sync paint, native-root/nested-native distinction, cancellation, header
+feedback idle/hide and motion off, fade/lift rendered menu frames.
+Full CTest 39/39 /tmp/am-motion-native-root-ctest.log (16.99s).
+Native OBS 32.2.0 docked mixer /tmp/am-mixer-flip.wUv20R/obs.log:
+7/7, exit0. Both real switches zero synchronous paint events, alien overlay
+inside real native page root, rapid reverse one overlay, settled and
+original widget identities intact. Initial native probes (floating/docked)
+skipped animation because both roots had WA_NativeWindow; diagnosed and
+corrected by parenting inside destination; final native test docked only.
+Observed dispatch ~2.8/2.0ms in final probe, not a benchmark: host load
+~112 on 16 logical CPUs with multiple preexisting OBS sessions. Five
+unattributed shutdown allocations; no other platforms or exact user
+theme qualified. Prior flip screenshot documentation removed as stale.
+Built, not installed or pushed; existing OBS instances untouched.

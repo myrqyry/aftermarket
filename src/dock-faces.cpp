@@ -1,5 +1,6 @@
 #include "dock-faces.h"
 #include "dock-header-button.h"
+#include "motion.h"
 #include <QDockWidget>
 #include <QMainWindow>
 #include <QPointer>
@@ -19,7 +20,6 @@
 #include <QVariantAnimation>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QTransform>
 #include <QGuiApplication>
 #include <QtMath>
 #include <functional>
@@ -31,7 +31,7 @@ QMainWindow *mainWindow(QDockWidget *dock) {
         if(auto *main=qobject_cast<QMainWindow*>(p))return main;
     return nullptr;
 }
-QToolButton *button(QWidget *parent,const char *name,const QString &tooltip,
+DockHeaderButton *button(QWidget *parent,const char *name,const QString &tooltip,
                     DockHeaderGlyph glyph) {
     auto *result=new DockHeaderButton(glyph,parent);
     result->setObjectName(name);
@@ -39,59 +39,56 @@ QToolButton *button(QWidget *parent,const char *name,const QString &tooltip,
     result->setAccessibleName(tooltip);
     return result;
 }
-// A paint-only, short two-sided flip. Neither real OBS widget is transformed
-// or reassigned a graphics effect. Frame images are captured only once, not
-// repeatedly on every paint; the animation remains inside the original dock.
+// Reveal the live destination around a folding edge, without capturing,
+// transforming or repainting either page synchronously. The native page
+// switches immediately; this decoration has no hit targets.
 class FlipFrame final : public QWidget {
 public:
-    FlipFrame(QPixmap outgoing,QPixmap incoming,QWidget *parent)
-        :QWidget(parent),outgoing_(std::move(outgoing)),incoming_(std::move(incoming)){
+    explicit FlipFrame(QWidget *parent):QWidget(parent){
         setObjectName("aftermarket-view-flip");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setFocusPolicy(Qt::NoFocus);
+        parent->installEventFilter(this);
     }
     void setProgress(qreal value){
+        const int previous=coverWidth();
         progress_=qBound(qreal(0),value,qreal(1));
-        update();
+        const int dirty=qMax(previous,coverWidth());
+        if(previous==coverWidth()||dirty<=0)return;
+        // Repaint only the area the old/new curtains occupy.
+        update(QRegion(QRect(0,0,dirty,height()))+
+               QRegion(QRect(width()-dirty,0,dirty,height())));
+    }
+    void cancel(){
+        hide();
+        if(auto *animation=findChild<QVariantAnimation*>("aftermarket-view-flip-motion"))animation->stop();
+        deleteLater();
     }
 protected:
+    bool eventFilter(QObject *watched,QEvent *event)override{
+        if(watched==parentWidget()&&(event->type()==QEvent::Resize||
+            event->type()==QEvent::Hide||event->type()==QEvent::PaletteChange||
+            event->type()==QEvent::StyleChange))cancel();
+        return QWidget::eventFilter(watched,event);
+    }
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
-        painter.fillRect(rect(),palette().color(QPalette::Window));
-        if(width()<=0||height()<=0)return;
-        const bool first=progress_<0.5;
-        const QPixmap &face=first?outgoing_:incoming_;
-        if(face.isNull())return;
-        const qreal halfTurn=first?progress_*2:(1-progress_)*2;
-        const qreal angle=halfTurn*M_PI_2;
-        const qreal amount=qCos(angle);
-        if(amount<0.01)return;
-        const qreal halfWidth=width()*amount/2;
-        const qreal cx=width()/2.0;
-        const qreal inset=height()*0.09*qSin(angle);
-        // One vertical edge recedes as the card rotates away; the other
-        // recedes as the second side turns in. The perspective is intentionally
-        // restrained to avoid a distracting gimmick in a working mixer.
-        const qreal leftInset=first?0:inset;
-        const qreal rightInset=first?inset:0;
-        const QPolygonF target{
-            QPointF(cx-halfWidth,leftInset),
-            QPointF(cx+halfWidth,rightInset),
-            QPointF(cx+halfWidth,height()-rightInset),
-            QPointF(cx-halfWidth,height()-leftInset)
-        };
-        const qreal pixelRatio=face.devicePixelRatio();
-        const QRectF bounds(0,0,face.width()/pixelRatio,face.height()/pixelRatio);
-        const QPolygonF source{bounds.topLeft(),bounds.topRight(),
-                               bounds.bottomRight(),bounds.bottomLeft()};
-        QTransform perspective;
-        if(!QTransform::quadToQuad(source,target,perspective))return;
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.setTransform(perspective);
-        painter.drawPixmap(bounds,face,QRectF(QPointF(0,0),face.size()/pixelRatio));
+        const auto pal=palette();
+        const int cover=coverWidth();
+        if(cover<=0)return;
+        const auto base=pal.color(QPalette::Window);
+        const auto shade=paletteBlend(base,pal.color(QPalette::Shadow),18);
+        const auto edge=paletteBlend(base,pal.color(QPalette::Highlight),32);
+        painter.fillRect(QRect(0,0,cover,height()),base);
+        painter.fillRect(QRect(width()-cover,0,cover,height()),base);
+        const int fold=qMin(cover,8);
+        painter.fillRect(QRect(cover-fold,0,fold,height()),shade);
+        painter.fillRect(QRect(width()-cover,0,fold,height()),shade);
+        painter.fillRect(QRect(cover-1,0,1,height()),edge);
+        painter.fillRect(QRect(width()-cover,0,1,height()),edge);
     }
 private:
-    QPixmap outgoing_,incoming_;
+    int coverWidth()const{return qRound(width()*0.48*(1-progress_));}
     qreal progress_=0;
 };
 }
@@ -144,12 +141,14 @@ bool DockFaces::attach(QDockWidget *dock,QWidget *back) {
                       "Next dock tab",DockHeaderGlyph::Next);
     // Only the interactive AudioBus switch belongs at the bottom.
     // The routing graph is a separate page, not an extra panel under OBS.
+    prev->setMotionProvider(state->motionEnabled);next->setMotionProvider(state->motionEnabled);
     auto *bottom=new QWidget(host);
     bottom->setObjectName("aftermarket-audiobus-controls");
     auto *bottomRow=new QHBoxLayout(bottom);
     bottomRow->setContentsMargins(4,0,4,1);
     bottomRow->setSpacing(2);
-    auto *flip=new QToolButton(bottom);
+    auto *flip=new FineStateToolButton(bottom);
+    flip->setMotionProvider(state->motionEnabled);
     flip->setObjectName("aftermarket-audiobus-toggle");
     flip->setText("AudioBus");
     flip->setCheckable(true);
@@ -257,31 +256,29 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     // Keep only the latest transition during rapid user reversals.
     if(it->transition)delete it->transition.data();
     it->transition=nullptr;
-    // QWidget snapshots must be painted synchronously on the GUI thread.
-    // Bound their physical pixel cost, and skip decoration for native/GPU
-    // surfaces which cannot reliably be captured by QWidget::grab().
+    // The decoration belongs INSIDE the destination page. A native page
+    // root can paint ordinary alien QWidget children; a native descendant
+    // or GPU surface cannot reliably compose below that overlay.
     const qreal dpr=stack->devicePixelRatioF();
     const bool withinBudget=qreal(stack->width())*stack->height()*dpr*dpr<=1024*1024;
-    auto capturable=[](QWidget *page){
-        auto nativeSurface=[](QWidget *w){
-            return w->testAttribute(Qt::WA_NativeWindow)||w->testAttribute(Qt::WA_PaintOnScreen)||
+    auto compositable=[](QWidget *page){
+        auto specialSurface=[](QWidget *w){
+            return w->testAttribute(Qt::WA_PaintOnScreen)||
                 w->inherits("QOpenGLWidget")||w->inherits("OBSQTDisplay");
         };
-        if(nativeSurface(page))return false;
+        if(specialSurface(page)||QCoreApplication::testAttribute(Qt::AA_NativeWindows))return false;
         for(auto *child:page->findChildren<QWidget*>())
-            if(nativeSurface(child))return false;
+            if(child->testAttribute(Qt::WA_NativeWindow)||specialSurface(child))return false;
         return true;
     };
     const bool animate=withinBudget&&state->motionEnabled&&state->motionEnabled()&&
         stack->isVisible()&&stack->width()>0&&stack->height()>0&&
         stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack)&&
-        capturable(stack->currentWidget())&&capturable(destination);
-    const QPixmap outgoing=animate?stack->grab():QPixmap{};
+        compositable(destination);
     stack->setCurrentWidget(destination);
-    const QPixmap incoming=animate?stack->grab():QPixmap{};
-    if(!outgoing.isNull()&&!incoming.isNull()){
-        auto *surface=new FlipFrame(outgoing,incoming,stack);
-        surface->setGeometry(stack->rect());
+    if(animate){
+        auto *surface=new FlipFrame(destination);
+        surface->setGeometry(destination->rect());
         surface->show();
         surface->raise();
         auto *animation=new QVariantAnimation(surface);
@@ -289,18 +286,23 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
         animation->setDuration(210);
         animation->setStartValue(0.0);
         animation->setEndValue(1.0);
-        animation->setEasingCurve(QEasingCurve::InOutSine);
         QPointer<FlipFrame> safe=surface;
         QPointer<QDockWidget> target=dock;
-        connect(animation,&QVariantAnimation::valueChanged,surface,[safe](const QVariant &v){
-            if(safe)safe->setProgress(v.toReal());
-        });
+        connect(animation,&QVariantAnimation::valueChanged,surface,
+            [this,safe,animation,budget=MotionFrameBudget{}](const QVariant &) mutable {
+                if(!safe)return;
+                if(!safe->isVisible()||!state->motionEnabled||!state->motionEnabled()){
+                    safe->cancel();return;
+                }
+                if(budget.advance(animation->currentTime(),animation->duration()))
+                    safe->setProgress(QEasingCurve(QEasingCurve::OutCubic).valueForProgress(budget.progress(animation->duration())));
+            });
         connect(animation,&QVariantAnimation::finished,this,[this,target,safe]{
             if(target){
                 auto it=state->entries.find(target);
                 if(it!=state->entries.end()&&it->transition==safe)it->transition=nullptr;
             }
-            if(safe)safe->deleteLater();
+            if(safe){safe->hide();safe->deleteLater();}
         });
         it->transition=surface;
         animation->start();

@@ -195,14 +195,11 @@ palette. Optional refinements include:
 - End or middle ellipses for long labels, while preserving actual names.
 - Responsive source/filter property columns (Auto, 1, up to 2, or up to 3) and collapsible native property groups.
 - Named source/filter property and whole filter-chain presets directly in the native Defaults/OK/Close footer, with portable JSON import/export.
-- Animated gradient tracks, menu artwork, dock collapse, and a brief
-  AudioBus half-turn. Bounded dock layout steps and snapshot sizes reduce GUI work. Disable interface animations for immediate transitions.
+- Animated gradient tracks, menu artwork (soft, pop, spin, fade and lift), dock collapse, and a snapshot-free AudioBus folding reveal. Aftermarket-owned dock, Studio and Action Strip toggle controls have subtle animated state feedback. Bounded elapsed-time steps, partial repaint regions and idle timers reduce GUI work. Disable Motion for immediate transitions.
 
 | List backgrounds | Transform selection |
 | :---: | :---: |
 | ![Alternating rows in OBS lists](docs/screenshots/readme/alternating-scenes-sources.webp) | ![Theme-colored source selection and transform handles](docs/screenshots/readme/transform-modern.png) |
-
-![Real OBS dock collapse and AudioBus flip animation frames](docs/screenshots/readme/ui-motion-docks-and-audiobus.webp)
 
 ![Native Color Correction filter settings reflowed into three columns](docs/screenshots/readme/responsive-filter-properties.webp)
 

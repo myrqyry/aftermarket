@@ -282,6 +282,7 @@ void DockTitleIcons::refresh(){
             continue;
         }
         auto *more=new DockHeaderButton(DockHeaderGlyph::More,dock);
+        more->setMotionProvider([panels=panels_]{return panels&&panels->motionAllowed();});
         more->setObjectName("aftermarket-dock-more");
         more->setToolTip("Dock options");
         more->setAccessibleName("Dock options");

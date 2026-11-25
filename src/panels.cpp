@@ -1,4 +1,5 @@
 #include "panels.h"
+#include "motion.h"
 #include <QApplication>
 #include <QGuiApplication>
 #include <QScreen>
@@ -167,6 +168,7 @@ bool Panels::setPreviewDocked(QMainWindow *main,bool enabled) {
         for(const auto &item:{std::pair{"auto","Auto"},std::pair{"both","Both"},
                                std::pair{"program","Program"},std::pair{"preview","Preview"}}) {
             auto *button=new FineStateToolButton(toolbar);
+            button->setMotionProvider(state->motionEnabled);
             button->setObjectName(QStringLiteral("aftermarket-studio-")+item.first);
             button->setText(item.second);button->setCheckable(true);
             button->setAutoRaise(true);
@@ -538,13 +540,16 @@ void Panels::startHeightMotion(QDockWidget *dock,int start,int finish,
     // five native layout updates (including endpoint) over 165 ms, even
     // when Qt samples the animation at its normal 60 Hz cadence.
     connect(animation,&QVariantAnimation::valueChanged,this,
-        [safe,main,animation,start,finish,lastStep=0](const QVariant &) mutable {
+        [this,safe,main,animation,start,finish,budget=MotionFrameBudget{}](const QVariant &) mutable {
             if(!safe)return;
-            const int time=animation->currentTime();
-            const int step=time>=animation->duration()?5:time/33;
-            if(step<=lastStep)return;
-            lastStep=step;
-            const auto progress=QEasingCurve(QEasingCurve::InOutCubic).valueForProgress(step/5.0);
+            if(!motionAllowed()&&animation->currentTime()<animation->duration()){
+                // Schedule endpoint outside this valueChanged callback.
+                QPointer<QVariantAnimation> pending=animation;
+                QTimer::singleShot(0,animation,[pending]{if(pending)pending->setCurrentTime(pending->duration());});
+                return;
+            }
+            if(!budget.advance(animation->currentTime(),animation->duration()))return;
+            const auto progress=QEasingCurve(QEasingCurve::InOutCubic).valueForProgress(budget.progress(animation->duration()));
             const int height=qRound(start+(finish-start)*progress);
             if(safe->minimumHeight()==height&&safe->maximumHeight()==height)return;
             safe->setFixedHeight(height);
@@ -562,6 +567,7 @@ void Panels::startHeightMotion(QDockWidget *dock,int start,int finish,
     state->heightMotions.insert(dock,animation);
     animation->start();
 }
+bool Panels::motionAllowed() const{return state->motionEnabled&&state->motionEnabled();}
 bool Panels::collapsed(QDockWidget *dock)const {return state->entries.contains(dock);}
 bool Panels::canCollapse(QDockWidget *dock)const {
     if(!dock)return false;

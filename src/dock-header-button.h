@@ -11,10 +11,10 @@ enum class DockHeaderGlyph { Previous, Next, Flip, Knobs, More };
 
 // Only used for Aftermarket-owned dock header controls. Original OBS buttons,
 // docking behavior, stylesheet and palette remain untouched.
-class DockHeaderButton final : public QToolButton {
+class DockHeaderButton final : public MotionToolButton {
 public:
     explicit DockHeaderButton(DockHeaderGlyph glyph,QWidget *parent=nullptr)
-        :QToolButton(parent),glyph_(glyph) {
+        :MotionToolButton(parent),glyph_(glyph) {
         setProperty("aftermarket-header-button",true);
         setFixedSize(20,18);
         setAutoRaise(true);
@@ -32,11 +32,11 @@ protected:
         const QColor accent=pal.color(group,QPalette::Highlight);
         const QColor base=pal.color(group,QPalette::Button);
         const bool active=isCheckable()&&isChecked();
-        const bool hover=isEnabled()&&underMouse();
-        if(active||hover){
+        const int feedback=qRound(feedbackAmount());
+        if(active||feedback>0){
             painter.setPen(QPen(active?accent:pal.color(group,QPalette::Mid),
                                 active?1.0:0.7));
-            painter.setBrush(paletteBlend(base,accent,active?12:6));
+            painter.setBrush(paletteBlend(base,accent,feedback));
             painter.drawRoundedRect(QRectF(rect()).adjusted(1.2,1.2,-1.2,-1.2),5,5);
         }
         const qreal cx=width()/2.0,cy=height()/2.0;

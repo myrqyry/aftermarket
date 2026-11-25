@@ -1,11 +1,13 @@
 #include "augment.h"
 #include "motion.h"
+#include "dock-header-button.h"
 #include <QApplication>
 #include <QMenu>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QElapsedTimer>
 #include <QTimer>
+#include <QEventLoop>
 #include <QThread>
 #include <QImage>
 #include <QJsonObject>
@@ -22,6 +24,29 @@ int main(int argc,char **argv) {
  track.retarget(0,70,200);
  REQUIRE(qAbs(track.value(70)-mid)<0.0001);
  REQUIRE(track.value(140)<mid && track.value(300)==0 && !track.running(300));
+ augment::MotionFrameBudget budget;
+ int updates=0;
+ for(int t=1;t<=210;++t)if(budget.advance(t,210))++updates;
+ REQUIRE(updates==6);
+ augment::MotionFrameBudget skipped;
+ REQUIRE(skipped.advance(100,210));
+ REQUIRE(!skipped.advance(101,210));
+ REQUIRE(skipped.advance(210,210));
+ REQUIRE(!skipped.advance(210,210));
+ bool allowed=false;
+ augment::DockHeaderButton header(augment::DockHeaderGlyph::Knobs);
+ header.setMotionProvider([&]{return allowed;});
+ header.show();app.processEvents();
+ auto *feedback=header.findChild<QTimer*>("aftermarket-feedback-clock");
+ REQUIRE(feedback&&!feedback->isActive());
+ allowed=true;header.setChecked(true);
+ REQUIRE(feedback->isActive());
+ QEventLoop feedbackLoop;QTimer::singleShot(200,&feedbackLoop,&QEventLoop::quit);feedbackLoop.exec();
+ REQUIRE(!feedback->isActive());
+ header.setChecked(false);REQUIRE(feedback->isActive());
+ header.hide();REQUIRE(!feedback->isActive());
+ header.show();app.processEvents();allowed=false;
+ header.setChecked(false);REQUIRE(!feedback->isActive());
  QTemporaryDir temp;
  auto path=temp.filePath("rules.json");
  QFile f(path);REQUIRE(f.open(QIODevice::WriteOnly));
@@ -47,10 +72,27 @@ int main(int argc,char **argv) {
  menu.setActiveAction(nullptr);wait(50);
  menu.hide(); REQUIRE(!clock->isActive() && a->icon().isNull());
  REQUIRE(controller.setMotionEnabled(false));
+ REQUIRE(!controller.cachedMotionEnabled());
  menu.popup(QPoint(40,40));app.processEvents();
  REQUIRE(!clock->isActive());
  a->trigger();REQUIRE(triggered);
  menu.hide();
+ REQUIRE(controller.setMotionEnabled(true));
+ REQUIRE(controller.cachedMotionEnabled());
+ augment::MotionSpec spec;
+ for(const auto *preset:{"fade","lift"}) {
+     REQUIRE(augment::MotionSpec::parse(QJsonObject{{"preset",preset},{"duration",180}},spec));
+     REQUIRE(spec.preset==preset&&spec.duration==180);
+     REQUIRE(controller.saveRule(QJsonObject{{"text","Filters"},{"icon","sliders"},{"color","#ff00ff"},{"animation",QJsonObject{{"preset",preset},{"duration",180}}}}));
+     menu.popup(QPoint(40,40));app.processEvents();
+     REQUIRE(clock->isActive());
+     const auto beginning=menu.grab().toImage();
+     wait(250);REQUIRE(!clock->isActive()&&beginning!=menu.grab().toImage());
+     menu.hide();
+ }
+ menu.popup(QPoint(40,40));app.processEvents();
+ REQUIRE(clock->isActive());
+ REQUIRE(controller.setMotionEnabled(false));REQUIRE(!clock->isActive());menu.hide();
  REQUIRE(controller.setMotionEnabled(true));
  auto broken=QJsonObject{{"text","Filters"},{"icon","sliders"},{"animation",QJsonObject{{"preset","spin"},{"duration",-1}}}};
  REQUIRE(!controller.saveRule(broken));

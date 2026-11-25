@@ -15,9 +15,18 @@
 #include <QVariantAnimation>
 #include <QEventLoop>
 #include <QTimer>
+#include <QPaintEvent>
 #include <iostream>
 #define REQUIRE(x) do {if(!(x)){std::cerr<<"FAILED "<<__LINE__<<": "<<#x<<"\\n";return 1;}}while(false)
 
+// QWidget::grab renders synchronously, even when the event loop is idle.
+class PaintProbe final : public QLabel {
+public:
+ using QLabel::QLabel;
+ int paints=0;
+protected:
+ void paintEvent(QPaintEvent *e) override {++paints;QLabel::paintEvent(e);}
+};
 int main(int argc,char **argv) {
  QApplication app(argc,argv);app.setStyle("Fusion");
  QMainWindow main;main.setCentralWidget(new QLabel("preview",&main));
@@ -33,7 +42,7 @@ int main(int argc,char **argv) {
  {
   bool motionOn=false;
   augment::DockFaces faces(nullptr,[&]{return motionOn;});
-  auto *back=new QLabel("Audio routes");back->setWindowTitle("Routing");
+  auto *back=new PaintProbe("Audio routes");back->setWindowTitle("Routing");
   QStyleOptionDockWidget opt;
   opt.initFrom(a);
   opt.title=a->windowTitle();
@@ -104,13 +113,16 @@ int main(int argc,char **argv) {
   // snapshots. The actual mixer/routing widgets retain identity, ownership
   // and native effects, and become interactive immediately underneath it.
   motionOn=true;
-  flip->click();app.processEvents();
+  const int paintsBefore=back->paints;
+  flip->click();
+  REQUIRE(back->paints==paintsBefore); // no synchronous destination capture
+  app.processEvents();
   REQUIRE(faces.backVisible(a)&&back->isVisible());
   auto *surface=stack->findChild<QWidget*>("aftermarket-view-flip");
   REQUIRE(surface&&surface->isVisible());
   REQUIRE(surface->testAttribute(Qt::WA_TransparentForMouseEvents));
   REQUIRE(surface->focusPolicy()==Qt::NoFocus);
-  REQUIRE(surface->geometry()==stack->rect());
+  REQUIRE(surface->parentWidget()==back&&surface->geometry()==back->rect());
   REQUIRE(native->graphicsEffect()==nullptr&&back->graphicsEffect()==nullptr);
   auto *flipMotion=surface->findChild<QVariantAnimation*>("aftermarket-view-flip-motion");
   REQUIRE(flipMotion&&flipMotion->state()==QAbstractAnimation::Running);
@@ -130,7 +142,14 @@ int main(int argc,char **argv) {
   QTimer::singleShot(280,&finishLoop,&QEventLoop::quit);
   finishLoop.exec();app.processEvents();
   REQUIRE(stack->findChildren<QWidget*>("aftermarket-view-flip").isEmpty());
-  // A large dock would require large synchronous QWidget snapshots.
+  // In-flight transitions disappear when motion is disabled.
+  REQUIRE(faces.showBack(a,true));app.processEvents();
+  motionOn=false;
+  QEventLoop cancelLoop;QTimer::singleShot(80,&cancelLoop,&QEventLoop::quit);cancelLoop.exec();
+  REQUIRE(!stack->findChild<QWidget*>("aftermarket-view-flip"));
+  REQUIRE(faces.backVisible(a));
+  REQUIRE(faces.showBack(a,false));motionOn=true;
+  // Large paint surfaces skip decorative transitions.
   // Skip decoration, not the real page change, when over the budget.
   main.resize(2400,1600);app.processEvents();
   const QSize previousSize=stack->size();
@@ -200,16 +219,27 @@ int main(int argc,char **argv) {
   REQUIRE(a->widget()==native);
   a->show();app.processEvents();
  }
- // A native surface also bypasses synchronous snapshot capture.
+ // Native page roots are fine: the decoration lives inside that root,
+ // not as a sibling trying to cover a separate native child window.
  {
   augment::DockFaces faces(nullptr,[]{return true;});
-  auto *nativeSurface=new QWidget;
-  nativeSurface->setAttribute(Qt::WA_NativeWindow);
-  REQUIRE(faces.attach(a,nativeSurface));a->raise();app.processEvents();
+  auto *nativePage=new QWidget;
+  nativePage->setAttribute(Qt::WA_NativeWindow);
+  REQUIRE(faces.attach(a,nativePage));a->raise();app.processEvents();
   REQUIRE(faces.showBack(a,true));
-  REQUIRE(faces.backVisible(a)&&!a->findChild<QWidget*>("aftermarket-view-flip"));
+  auto *reveal=nativePage->findChild<QWidget*>("aftermarket-view-flip");
+  REQUIRE(reveal&&reveal->parentWidget()==nativePage&&!reveal->testAttribute(Qt::WA_NativeWindow));
   REQUIRE(faces.showBack(a,false));
-  REQUIRE(!a->findChild<QWidget*>("aftermarket-view-flip"));
+ }
+ // Nested native/GPU surfaces still bypass decoration on that destination.
+ {
+  augment::DockFaces faces(nullptr,[]{return true;});
+  auto *page=new QWidget;
+  auto *nativeChild=new QWidget(page);nativeChild->setAttribute(Qt::WA_NativeWindow);
+  REQUIRE(faces.attach(a,page));a->raise();app.processEvents();
+  REQUIRE(faces.showBack(a,true));
+  REQUIRE(faces.backVisible(a)&&!page->findChild<QWidget*>("aftermarket-view-flip"));
+  REQUIRE(faces.showBack(a,false));
  }
  // Refuse non-owned/no-native widget dock.
  auto *empty=new QDockWidget("Empty",&main);

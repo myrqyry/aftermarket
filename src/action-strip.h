@@ -61,6 +61,7 @@ public:
     bool trigger(const QString &id);
     QWidget *widget() const;
     void refresh();
+    void setMotionProvider(std::function<bool()> provider);
     QString itemText(const QString &id) const;
     void showEditor(QWidget *parent=nullptr,QMenuBar *bar=nullptr);
     void closeEditor();
@@ -76,6 +77,7 @@ private:
     QPointer<QToolButton> overflow_;
     QStringList overflowIds_;
     bool overflowBusy_=false,overflowScheduled_=false;
+    std::function<bool()> motionProvider_;
     StatusProvider status_;
     HotkeyList hotkeys_;
     HotkeyTrigger trigger_;

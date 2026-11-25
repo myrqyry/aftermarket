@@ -572,8 +572,8 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     auto *motionRow=new QHBoxLayout;
     motionRow->addWidget(new QLabel("Animation",right));
     ui->preset=new QComboBox(right);ui->preset->setObjectName("augment-motion-preset");
-    ui->preset->addItems({"soft","pop","spin","none"});
-    ui->preset->setToolTip("soft: fade/slide and gentle hover growth; pop: stronger scale; spin: rotation; none: static.");
+    ui->preset->addItems({"soft","pop","spin","fade","lift","none"});
+    ui->preset->setToolTip("soft: fade/slide and gentle hover growth; pop: stronger scale; spin: rotation; fade: opacity only; lift: vertical rise; none: static.");
     motionRow->addWidget(ui->preset,1);
     ui->duration=new QSpinBox(right);ui->duration->setObjectName("augment-motion-duration");
     ui->duration->setRange(60,600);ui->duration->setSingleStep(20);ui->duration->setSuffix(" ms");ui->duration->setValue(160);

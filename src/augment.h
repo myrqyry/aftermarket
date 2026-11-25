@@ -55,6 +55,8 @@ public:
     bool hamburgerMenuBarEnabled() const;
     bool setHamburgerMenuBarEnabled(bool enabled,QString *error=nullptr);
     bool motionEnabled() const;
+    // GUI animation ticks use last-good configuration, never disk reads.
+    bool cachedMotionEnabled() const;
     bool setMotionEnabled(bool enabled, QString *error = nullptr);
     bool saveRule(const QJsonObject &rule, QString *error = nullptr);
     bool removeRule(const QJsonObject &selector, QString *error = nullptr);

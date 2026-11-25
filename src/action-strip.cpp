@@ -393,6 +393,11 @@ void ActionStrip::refresh(){
     }
     updateOverflow();
 }
+void ActionStrip::setMotionProvider(std::function<bool()> provider){
+    motionProvider_=std::move(provider);
+    if(content_)for(auto *button:content_->findChildren<QToolButton*>())
+        if(auto *owned=dynamic_cast<MotionToolButton*>(button))owned->setMotionProvider(motionProvider_);
+}
 void ActionStrip::rebuild(){
     if(!content_)return;
     auto *layout=qobject_cast<QHBoxLayout*>(content_->layout());
@@ -415,6 +420,7 @@ void ActionStrip::rebuild(){
         QToolButton *button=item.type=="dock"?
             static_cast<QToolButton*>(new FineStateToolButton(content_)):
             static_cast<QToolButton*>(new QToolButton(content_));
+        if(auto *owned=dynamic_cast<MotionToolButton*>(button))owned->setMotionProvider(motionProvider_);
         button->setObjectName("aftermarket-strip-"+item.id);
         button->setCheckable(item.type=="dock");
         button->setAutoRaise(true);

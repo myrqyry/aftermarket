@@ -383,6 +383,7 @@ static bool setAudioMixerBackside(bool enabled) {
     // A single native-title overflow holds the presentation toggle and all
     // advanced per-channel pan/sync editors. No second content header.
     auto *more=new augment::DockHeaderButton(augment::DockHeaderGlyph::More);
+    more->setMotionProvider([]{return controller&&controller->cachedMotionEnabled();});
     more->setObjectName("aftermarket-mixer-more");
     more->setToolTip("Audio Mixer options and channel settings");
     more->setAccessibleName("Audio Mixer more options");
@@ -513,7 +514,8 @@ static bool startCustomUi(){
     // Global Motion already controls decorative animation. Use the same
     // current setting for native dock height and AudioBus page transitions.
     // Motion off preserves all original immediate UI behavior.
-    auto uiMotion=[]{return controller&&controller->motionEnabled();};
+    auto uiMotion=[]{return controller&&controller->cachedMotionEnabled();};
+    actionStrip->setMotionProvider(uiMotion);
     panels=std::make_unique<augment::Panels>(nullptr,uiMotion);
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         dockTitleIcons=std::make_unique<augment::DockTitleIcons>(

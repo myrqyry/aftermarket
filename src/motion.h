@@ -6,6 +6,21 @@
 #include <cmath>
 
 namespace augment {
+// Use elapsed time, not a queue of frames. Skip intermediate work after a
+// delayed GUI tick and always admit the endpoint exactly once.
+constexpr int motionFrameIntervalMs=33;
+struct MotionFrameBudget {
+    int last=0;
+    static int steps(int duration){return qMax(1,duration/motionFrameIntervalMs);}
+    bool advance(int elapsed,int duration){
+        const int count=steps(duration);
+        const int step=duration<=0||elapsed>=duration?count:
+            qBound(0,int(qint64(qMax(0,elapsed))*count/duration),count);
+        if(step<=last)return false;
+        last=step;return true;
+    }
+    double progress(int duration)const{return double(last)/steps(duration);}
+};
 // Retarget from the currently sampled value rather than restarting from an endpoint.
 struct MotionTrack {
     double from=0, to=0;
@@ -35,7 +50,7 @@ struct MotionSpec {
         if(o.contains("preset")) {
             if(!o.value("preset").isString())return false;
             out.preset=o.value("preset").toString();
-            if(out.preset!="none" && out.preset!="soft" && out.preset!="pop" && out.preset!="spin")return false;
+            if(out.preset!="none" && out.preset!="soft" && out.preset!="pop" && out.preset!="spin" && out.preset!="fade" && out.preset!="lift")return false;
         }
         if(o.contains("duration")) {
             auto d=o.value("duration").toDouble(-1);
