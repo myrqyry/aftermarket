@@ -74,7 +74,7 @@ preserve native dock placement, not scene or audio settings.
 
 | Compact Studio Mode | Wide floating Studio Mode |
 | :---: | :---: |
-| ![Stacked native Preview and Program](docs/screenshots/readme/studio-compact.png) | ![Side-by-side native Preview and Program](docs/screenshots/readme/studio-wide.png) |
+| ![Stacked native Preview and Program](docs/screenshots/readme/studio-compact.png) | ![Side-by-side native Preview and Program with horizontal transition strip below](docs/screenshots/readme/studio-wide.png) |
 
 ### Action Strip
 

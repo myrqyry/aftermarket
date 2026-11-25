@@ -225,8 +225,9 @@ OBS Studio Mode is active. It provides four session-only display choices:
   dock, Program receives slightly more of the available height.
 - **Program / Preview:** focus that one original OBS display without replacing
   its renderer. Switch back to Both or Auto any time.
-- **Transition strip:** when stacked, the *original OBS control widget* becomes
-  a compact horizontal, scrollable bar. The chevrons reveal the remaining
+- **Transition strip:** the *original OBS control widget* is a compact horizontal,
+  scrollable bar in both layouts. It sits between the stacked displays in narrow
+  docks and spans the full width below both displays in wide docks. The chevrons reveal the remaining
   native quick-transition buttons and T-bar; their original click handlers
   and sliders are not proxied or replaced.
 
@@ -237,7 +238,7 @@ off and back on also safely reconstructs the strip.
 
 | Compact dock | Wide floating dock |
 | --- | --- |
-| ![Aftermarket compact Studio Mode with stacked live displays and horizontally scrollable native transition controls](screenshots/readme/studio-compact.png) | ![Aftermarket side-by-side Studio Mode with native centered transitions](screenshots/readme/studio-wide.png) |
+| ![Aftermarket compact Studio Mode with stacked live displays and horizontally scrollable native transition controls](screenshots/readme/studio-compact.png) | ![Aftermarket side-by-side Studio Mode with a full-width native transition strip beneath both displays](screenshots/readme/studio-wide.png) |
 
 **Session-only and opt-in.** It does not change existing theme files or
 `rules.json`. The normal OBS File → Exit path was checked in an isolated

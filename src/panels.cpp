@@ -78,6 +78,7 @@ struct Panels::State {
         QPointer<QBoxLayout> studioOptionsLayout;
         QBoxLayout::Direction originalOptionsDirection=QBoxLayout::TopToBottom;
         Qt::Alignment originalOptionsAlignment;
+        int originalOptionsPosition=-1,originalOptionsStretch=0;
         QPointer<QLabel> programTitle,previewTitle;
         QFont originalProgramFont,originalPreviewFont,appliedProgramFont,appliedPreviewFont;
         bool studioPreviewHiddenByUs=false,studioProgramHiddenByUs=false;
@@ -281,12 +282,14 @@ void Panels::restoreStudioControlStrip() {
     auto *scroll=entry.transitionStrip.data();
     if(!scroll||!entry.canvasLayout)return;
     const int pos=entry.canvasLayout->indexOf(scroll);
+    if(auto *root=qobject_cast<QBoxLayout*>(entry.content->layout()))root->removeWidget(scroll);
     QWidget *widget=scroll->takeWidget(); // transfer OBS-owned widget, never delete it
     entry.canvasLayout->removeWidget(scroll);
-    if(widget&&pos>=0) {
+    if(widget) {
         widget->hide();
         widget->setParent(entry.canvas);
-        entry.canvasLayout->insertWidget(pos,widget);
+        const int restorePos=entry.originalOptionsPosition>=0?entry.originalOptionsPosition:pos;
+        entry.canvasLayout->insertWidget(restorePos,widget,entry.originalOptionsStretch);
         entry.canvasLayout->setAlignment(widget,entry.originalOptionsAlignment);
         widget->show();
     }
@@ -301,7 +304,16 @@ void Panels::updatePreviewLayout() {
     // changes. Read the live layout, never retain a stale raw program pointer.
     QWidget *options=nullptr,*program=nullptr;
     QBoxLayout *optionsLayout=nullptr;
-    if(studio&&entry.canvasLayout->count()>=4) {
+    auto *root=qobject_cast<QBoxLayout*>(entry.content->layout());
+    const bool stripBelow=entry.transitionStrip&&root&&root->indexOf(entry.transitionStrip)>=0;
+    if(studio&&stripBelow&&entry.canvasLayout->count()>=3){
+        options=entry.transitionStrip->widget();
+        program=entry.canvasLayout->itemAt(entry.canvasLayout->count()-1)->widget();
+        optionsLayout=options?qobject_cast<QBoxLayout*>(options->layout()):nullptr;
+        if(!optionsLayout||!program||!program->findChild<QLabel*>()){
+            options=nullptr;program=nullptr;optionsLayout=nullptr;
+        }
+    }else if(studio&&entry.canvasLayout->count()>=4) {
         options=entry.canvasLayout->itemAt(entry.canvasLayout->count()-2)->widget();
         if(auto *scroll=qobject_cast<QScrollArea*>(options))options=scroll->widget();
         program=entry.canvasLayout->itemAt(entry.canvasLayout->count()-1)->widget();
@@ -319,6 +331,8 @@ void Panels::updatePreviewLayout() {
             entry.originalOptionsDirection=optionsLayout->direction();
             const int idx=entry.canvasLayout->indexOf(options);
             entry.originalOptionsAlignment=idx>=0?entry.canvasLayout->itemAt(idx)->alignment():Qt::Alignment{};
+            entry.originalOptionsPosition=idx;
+            entry.originalOptionsStretch=idx>=0?entry.canvasLayout->stretch(idx):0;
         }
     }
     if(entry.studioProgram!=program) {
@@ -341,9 +355,10 @@ void Panels::updatePreviewLayout() {
     auto desired=compact?QBoxLayout::BottomToTop:entry.originalDirection;
     if(entry.canvasLayout->direction()!=desired)entry.canvasLayout->setDirection(desired);
     if(optionsLayout) {
-        const auto optionDirection=compact?QBoxLayout::LeftToRight:entry.originalOptionsDirection;
+        const bool horizontal=compact||(root&&root->direction()==QBoxLayout::TopToBottom&&root->indexOf(entry.canvas)>=0);
+        const auto optionDirection=horizontal?QBoxLayout::LeftToRight:entry.originalOptionsDirection;
         if(optionsLayout->direction()!=optionDirection)optionsLayout->setDirection(optionDirection);
-        if(compact&&!entry.transitionStrip&&entry.canvasLayout->indexOf(options)>=0) {
+        if(horizontal&&!entry.transitionStrip&&entry.canvasLayout->indexOf(options)>=0) {
             const int position=entry.canvasLayout->indexOf(options);
             options->hide();
             entry.canvasLayout->removeWidget(options);
@@ -373,8 +388,9 @@ void Panels::updatePreviewLayout() {
                     }
                 });
             });
-            auto updateArrows=[this,scroll] {
-                if(state->preview.transitionStrip!=scroll)return;
+            auto updateArrows=[this,safeScroll] {
+                if(!safeScroll||state->preview.transitionStrip!=safeScroll)return;
+                auto *scroll=safeScroll.data();
                 auto *bar=state->preview.studioToolbar.data();
                 if(!bar)return;
                 auto *sb=scroll->horizontalScrollBar();
@@ -394,10 +410,22 @@ void Panels::updatePreviewLayout() {
             connect(scroll->horizontalScrollBar(),&QScrollBar::valueChanged,this,
                 [this,updateArrows](int){QTimer::singleShot(0,this,updateArrows);});
             QTimer::singleShot(0,this,updateArrows);
-        } else if(!compact&&entry.transitionStrip) {
+        } else if(!horizontal&&entry.transitionStrip) {
             restoreStudioControlStrip();
         }
         if(auto *scroll=entry.transitionStrip.data()) {
+            // Preserve the original OBS widget and its QVBoxLayout object.
+            // Only the scroll wrapper moves: stacked between surfaces, wide
+            // below the canvas and above the native source context toolbar.
+            if(!compact&&root&&root->indexOf(scroll)<0){
+                entry.canvasLayout->removeWidget(scroll);
+                root->insertWidget(root->indexOf(entry.canvas)+1,scroll);
+                scroll->show();
+            }else if(compact&&entry.canvasLayout->indexOf(scroll)<0){
+                if(root)root->removeWidget(scroll);
+                entry.canvasLayout->insertWidget(entry.originalOptionsPosition,scroll);
+                scroll->show();
+            }
             if(options->size()!=options->sizeHint())options->adjustSize();
         }
     }
@@ -433,8 +461,8 @@ void Panels::updatePreviewLayout() {
         if(index>=0&&entry.canvasLayout->stretch(index)!=amount)
             entry.canvasLayout->setStretch(index,amount);
     };
-    applyStretch(entry.studioPreview,compact?(showProgram?0:showPreview?6:2):entry.originalPreviewStretch);
-    applyStretch(entry.studioProgram,compact?(showPreview?0:showProgram?6:3):entry.originalProgramStretch);
+    applyStretch(entry.studioPreview,compact?(showProgram?0:showPreview?6:2):studio&&optionsLayout?(showProgram?0:1):entry.originalPreviewStretch);
+    applyStretch(entry.studioProgram,compact?(showPreview?0:showProgram?6:3):studio&&optionsLayout?(showPreview?0:1):entry.originalProgramStretch);
     auto *nativePreviewTitle=entry.studioPreview?
         entry.studioPreview->findChild<QLabel*>("previewLabel"):nullptr;
     auto *nativeProgramTitle=entry.studioProgram?

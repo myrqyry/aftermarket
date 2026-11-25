@@ -68,14 +68,16 @@ int main(int argc,char **argv) {
  bool animateDocks=true;
  augment::Panels motionPanels(nullptr,[&]{return animateDocks;});
  REQUIRE(motionPanels.canCollapse(a));
+ const int animationStartHeight=a->height();
  REQUIRE(motionPanels.toggle(a));
  REQUIRE(motionPanels.collapsed(a));
  auto *collapseMotion=a->findChild<QPropertyAnimation*>("aftermarket-dock-height-motion");
  REQUIRE(collapseMotion&&collapseMotion->state()==QAbstractAnimation::Running);
- QEventLoop partial;
- QTimer::singleShot(65,&partial,&QEventLoop::quit);partial.exec();
- REQUIRE(a->maximumHeight()<height);
- REQUIRE(a->height()<height);
+ // Advance the animation clock explicitly rather than depending on timer
+ // scheduling under load. Compare against the current single-dock geometry.
+ collapseMotion->setCurrentTime(65);app.processEvents();
+ REQUIRE(a->maximumHeight()<animationStartHeight);
+ REQUIRE(a->height()<animationStartHeight);
  REQUIRE(a->height()>45); // intermediate actual native dock height
  REQUIRE(motionPanels.toggle(a)); // reverse before collapse completes
  REQUIRE(!motionPanels.collapsed(a));
@@ -297,17 +299,28 @@ int main(int argc,char **argv) {
  REQUIRE(previewPane->isVisible()&&programPane->isVisible());
  REQUIRE(panels.setStudioViewMode(&responsive,augment::Panels::StudioViewMode::Auto));app.processEvents();
  REQUIRE(autoButton->isChecked());
- // In a roomy floating dock, controls and views return to a wide split.
+ // Wide dock retains the same horizontal strip below both views.
  auto *responsiveDock=panels.previewDock(&responsive);
  responsiveDock->setFloating(true);responsiveDock->resize(1050,650);app.processEvents();
  REQUIRE(editorLayout->direction()==QBoxLayout::LeftToRight);
- REQUIRE(optionsLayout->direction()==QBoxLayout::TopToBottom);
- REQUIRE(editorLayout->indexOf(options)>=0&&strip.isNull());
+ REQUIRE(optionsLayout->direction()==QBoxLayout::LeftToRight);
+ REQUIRE(strip&&strip->widget()==options);
+ REQUIRE(workspaceLayout->indexOf(strip)==workspaceLayout->indexOf(editor)+1);
+ REQUIRE(editorLayout->indexOf(strip)<0&&editorLayout->count()==3);
+ REQUIRE(previewPane->geometry().right()<programPane->geometry().left());
+ REQUIRE(qAbs(previewPane->width()-programPane->width())<=4);
+ REQUIRE(strip->mapToGlobal(QPoint()).y()>=editor->mapToGlobal(QPoint(0,editor->height())).y());
+ REQUIRE(strip->width()>=editor->width()-4);
+ REQUIRE(panels.setStudioViewMode(&responsive,augment::Panels::StudioViewMode::Program));app.processEvents();
+ REQUIRE(!previewPane->isVisible()&&programPane->isVisible()&&strip->isVisible());
+ REQUIRE(panels.setStudioViewMode(&responsive,augment::Panels::StudioViewMode::Both));app.processEvents();
+ REQUIRE(previewPane->isVisible()&&programPane->isVisible());
  responsiveDock->resize(430,580);app.processEvents();
  REQUIRE(editorLayout->direction()==QBoxLayout::BottomToTop);
  REQUIRE(optionsLayout->direction()==QBoxLayout::LeftToRight);
  strip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
  REQUIRE(!strip.isNull()&&strip->widget()==options);
+ REQUIRE(editorLayout->indexOf(strip)==2&&workspaceLayout->indexOf(strip)<0);
  REQUIRE(panels.setPreviewDocked(&responsive,false));app.processEvents();
  REQUIRE(responsive.centralWidget()==workspace);
  REQUIRE(workspace->findChild<QWidget*>("aftermarket-studio-toolbar")==nullptr);
@@ -319,7 +332,10 @@ int main(int argc,char **argv) {
  // OBS deletes programOptions and programWidget on Studio Mode exit.
  // The temporary scroll container must disappear before a new studio set.
  REQUIRE(panels.setPreviewDocked(&responsive,true));app.processEvents();
- QPointer<QScrollArea> oldStrip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ auto *exitDock=panels.previewDock(&responsive);
+ exitDock->setFloating(true);exitDock->resize(1050,650);app.processEvents();
+ QPointer<QScrollArea> oldStrip=workspace->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ REQUIRE(workspaceLayout->indexOf(oldStrip)>=0);
  REQUIRE(oldStrip);
  delete options;
  delete programPane;
@@ -334,7 +350,7 @@ int main(int argc,char **argv) {
  nextProgramLayout->addWidget(new QLabel("Program scene",nextProgram));
  editorLayout->addWidget(nextOptions);editorLayout->addWidget(nextProgram);
  app.processEvents();
- auto *newStrip=editor->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
+ auto *newStrip=workspace->findChild<QScrollArea*>("aftermarket-studio-transition-strip");
  REQUIRE(newStrip&&newStrip->widget()==nextOptions);
  REQUIRE(panels.setPreviewDocked(&responsive,false));app.processEvents();
  REQUIRE(editorLayout->indexOf(nextOptions)>=0);
