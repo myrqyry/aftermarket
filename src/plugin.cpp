@@ -504,7 +504,10 @@ static bool startCustomUi(){
         dockTitleIcons=std::make_unique<augment::DockTitleIcons>(
             main,panels.get(),QDir(QFileInfo(stripConfigPath).absolutePath())
                                .filePath("dock-title-settings.ini"));
-    if(dockTitleIcons)dockTitleIcons->setSourceDockSettingsAction([]{return sourceDockManagerAction();});
+    if(dockTitleIcons){
+        dockTitleIcons->setSourceDockSettingsAction([]{return sourceDockManagerAction();});
+        dockTitleIcons->setSourceDockPreviewSave([]{if(frontendReady&&uiActive)obs_frontend_save();});
+    }
     dockFaces=std::make_unique<augment::DockFaces>(nullptr,uiMotion);
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         sourcePicker=std::make_unique<augment::SourcePicker>(

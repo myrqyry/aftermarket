@@ -275,8 +275,20 @@ audio, media and scene controls. It does not replace the renderer or mutate
 existing docks. Source Dock may omit controls unsupported by the chosen source.
 With the workspace-api Source Dock fork, Aftermarket prefers its versioned native creation API and does not open the manager. On stock Source Dock, the adapter checks the known 0.5.1 form structure and the native localized Add
 label before creating anything; if incompatible, use the native manager.
-Without the optional module, the pin action is hidden. Full workspace restoration
-and reduced-refresh previews are not implemented.
+Without the optional module, the pin action is hidden. Full workspace restoration is not implemented.
+
+### Independent Source Dock preview refresh
+
+With the workspace-api Source Dock fork installed, open a source dock's
+three-dot menu → **Preview refresh**. Select Live, 30, 15, 10, 5, 2 or 1 FPS,
+or Freeze frame. Each SDR dock caches and redraws its own viewport; other
+displays and Program retain their normal cadence. These settings persist in
+the native scene collection and are included in workspace checkpoints.
+Non-SDR displays fall back to live rendering. A frozen image is captured
+again when the source or cache dimensions change, or when restored from a
+saved scene; it is not a saved screenshot. Display presentation still runs
+at the usual cadence. Use the native Source Docks manager's Preview checkbox
+for controls-only mode. Stock Source Dock does not expose the refresh menu.
 
 ### Off-air frame limiting
 

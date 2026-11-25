@@ -25,6 +25,7 @@ public:
                       Preview, Chat, Browser, Generic };
     static Kind classify(const QString &objectName,const QString &title,const QString &contentClass={});
     void setSourceDockSettingsAction(std::function<QAction*()> action);
+    void setSourceDockPreviewSave(std::function<void()> save){sourceDockPreviewSave_=std::move(save);}
     static int glyphSizeForRoom(int freePixels);
     static constexpr int titleTextInset(){return 20;}
     bool titleIndented(QDockWidget *dock) const;
@@ -60,6 +61,7 @@ private:
     bool adjustingFeatures_=false;
     bool scheduled_=false;
     std::function<QAction*()> sourceDockSettingsAction_;
+    std::function<void()> sourceDockPreviewSave_;
     void restoreTitle(QDockWidget *dock);
     QDockWidget::DockWidgetFeatures actualDockFeatures(QDockWidget *dock) const;
     void suppressNativeButtons(QDockWidget *dock);

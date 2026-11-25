@@ -12,6 +12,8 @@
 #include <QTimer>
 #include <QStyle>
 #include <QAction>
+#include <QActionGroup>
+#include <QMetaProperty>
 #include <QScopedValueRollback>
 #include <QApplication>
 #include <QStyleOptionDockWidget>
@@ -300,6 +302,31 @@ void DockTitleIcons::refresh(){
             }
             menu->addSeparator();
             owner->appendDockWindowActions(menu,safe);
+            if(auto *content=safe->widget();content&&content->inherits("SourceDock")){
+                const int index=content->metaObject()->indexOfProperty("previewRefreshFps");
+                if(index>=0&&content->metaObject()->property(index).isWritable()&&
+                   content->property("previewRefreshAvailable").toBool()){
+                    menu->addSeparator();
+                    auto *rates=menu->addMenu("Preview refresh");
+                    rates->setObjectName("aftermarket-source-preview-refresh");
+                    auto *group=new QActionGroup(rates);group->setExclusive(true);
+                    const int current=content->property("previewRefreshFps").toInt();
+                    const QList<QPair<int,QString>> modes={{0,"Live"},{30,"30 FPS"},{15,"15 FPS"},
+                        {10,"10 FPS"},{5,"5 FPS"},{2,"2 FPS"},{1,"1 FPS"},{-1,"Freeze frame"}};
+                    QPointer<QWidget> widget=content;
+                    for(const auto &mode:modes){
+                        auto *action=rates->addAction(mode.second);action->setCheckable(true);
+                        action->setChecked(current==mode.first);group->addAction(action);
+                        connect(action,&QAction::triggered,rates,[widget,owner,fps=mode.first]{
+                            if(widget&&widget->setProperty("previewRefreshFps",fps)&&
+                               widget->property("previewRefreshFps").toInt()==fps&&owner&&owner->sourceDockPreviewSave_)
+                                owner->sourceDockPreviewSave_();
+                        });
+                    }
+                    rates->setToolTipsVisible(true);
+                    rates->menuAction()->setToolTip("Per-dock SDR preview only; Program and source output are unchanged.");
+                }
+            }
             if(safe->widget()&&safe->widget()->inherits("SourceDock")&&owner->sourceDockSettingsAction_){
                 QPointer<QAction> native=owner->sourceDockSettingsAction_();
                 if(native&&native->isEnabled()){

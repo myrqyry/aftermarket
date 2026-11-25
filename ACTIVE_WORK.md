@@ -3054,3 +3054,30 @@ build exited 0; two unattributed OBS memory leaks reported. Logs under
 Fork retains native integration smoke source and symbol test. Aftermarket full
 36/36 CTest passed. No production install or push; independent preview rates,
 frozen thumbnails and further lifecycle testing remain open.
+
+
+## Independent Source Dock preview refresh — 2026-11-24
+
+Fork ~/loam/obs-source-dock workspace-api commit f0147cd. Qt read/write
+previewRefreshFps property (0 live, -1 freeze, 1–60 FPS) and
+previewRefreshAvailable. Scene JSON preview_refresh_fps defaults to live.
+For SDR displays, bounded 2048px-long-edge RGBA viewport texture is rendered
+on a per-dock deadline and presented every display callback. Freeze stops
+source renders after initial capture; source or cache dimensions invalidate.
+Non-SDR bypasses cache; no source or Program throttle, no claim of total GPU
+savings; presentation remains at OBS cadence, cache up to 16 MiB per dock.
+Existing preview checkbox provides controls-only. Aftermarket existing
+three-dot overflow discovers writable property, exposes rate submenu and
+requests native scene save on accepted changes. Stock plugin lacks submenu.
+
+RED cadence missing, then deadline regression with late sample 105ms
+followed by 200ms; GREEN anchored deadlines, skipped elapsed slots and
+freeze/backward clock tests. Real isolated OBS 32.2.0 native menu exercised
+on synthetic source, with independent synthetic Program source. Final
+2-second samples: live dock/program 59/59, 10fps 20/60, freeze 0/60.
+Sampled screen RGB 178,51,26 identical in all modes. Existing dock restored
+5fps; frozen preference -1 saved; normal exit 0, two unattributed leaks.
+Evidence /tmp/source-dock-refresh-native-20261124/obs-final.log; native
+probe source committed in fork. Aftermarket 36/36 CTest passed. No
+production install or publication; HDR cache and broader visual/content
+testing remain open.

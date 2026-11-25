@@ -79,6 +79,7 @@ its manager directly from Dock Layouts.
 Optional [Source Dock](https://obsproject.com/forum/resources/source-dock.1317/) panels
 receive the native Aftermarket header controls and a shortcut to Source Docks settings.
 Use **Pin to workspace** in Quick Find to create an actual Source Dock without switching scenes.
+The workspace-api fork adds per-dock preview refresh rates and freeze in the existing dock menu.
 Optional [Frame Interleave Filter](https://obsproject.com/forum/resources/frame-interleave-filter.1618/)
 adds **Off-air frame limit** to eligible asynchronous video sources in the Quick Find
 context menu; the original filter handles activity-aware frame dropping.
