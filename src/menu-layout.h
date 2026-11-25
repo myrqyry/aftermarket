@@ -23,8 +23,6 @@ public:
     void present();
     void restore();
 private:
-    void presentColumns();
-    void placeSubmenu();
     QMenu *menu;
     bool prepared=false, arranging=false;
     QRect arrangedGeometry;

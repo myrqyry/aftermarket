@@ -200,7 +200,7 @@ their triggering row, including on offset dual-monitor layouts.
 
 Native Qt tooltips have a configurable maximum width (360 logical px by default), with automatic wrapping and a native unlimited option.
 
-Compact multi-column menus open child menus beyond the parent’s outer edge when screen space permits, preserving the other columns.
+Compact columns are reserved for flat choice lists. Menus containing visible submenus (including More actions) retain native layout and compact row spacing.
 
 Customize specific native menus in Workspace → Menus & widgets: add icons, hide
 unwanted commands, explicitly move entries into More actions, add trusted

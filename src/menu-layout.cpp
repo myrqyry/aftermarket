@@ -19,7 +19,6 @@ constexpr auto labelsKey="_aftermarketLogicalLabels";
 constexpr auto nameKey="_aftermarketLogicalName";
 constexpr auto pageKey="_aftermarketOverflowPage";
 constexpr auto actionKey="_aftermarketOverflowAction";
-constexpr auto columnsKey="_aftermarketColumnMenu";
 // Source actions are a task-oriented menu rather than a catalogue of choices.
 // Their spatial order is useful muscle memory, so keep them in one column.
 // Match the distinctive OBS command group, not the menu's row count or its
@@ -136,42 +135,6 @@ void MenuLayout::trackCustom(QAction *action) {
     custom.append(action);
 }
 void MenuLayout::present() {
-    if(arranging)return;
-    presentColumns();
-    placeSubmenu();
-}
-void MenuLayout::placeSubmenu(){
-#ifdef AFTERMARKET_QT642_COLUMNS
-    if(arranging||!menu->isVisible()||qstrcmp(qVersion(),QT_VERSION_STR)!=0)return;
-    auto *d=QMenuPrivate::get(menu);
-    auto *parent=qobject_cast<QMenu*>(d->causedPopup.widget.data());
-    auto *action=d->causedPopup.action.data();
-    if(!parent||!action||!parent->isVisible()||!parent->property(columnsKey).toBool())return;
-    const auto bounds=parent->geometry();
-    const auto local=parent->actionGeometry(action);
-    if(!local.isValid())return;
-    const QRect row(parent->mapToGlobal(local.topLeft()),local.size());
-    auto *screen=geometryScreen(bounds);if(!screen)return;
-    const QRect work=screen->availableGeometry();
-    const int leftRoom=bounds.left()-work.left(),rightRoom=work.right()-bounds.right();
-    const bool fitsLeft=leftRoom>=menu->width(),fitsRight=rightRoom>=menu->width();
-    // Prefer the closest outer edge when both fit. Otherwise use the
-    // available side, or minimize unavoidable overlap on a narrow screen.
-    const bool preferLeft=row.center().x()<bounds.center().x()||
-        (row.center().x()==bounds.center().x()&&menu->isRightToLeft());
-    const bool left=fitsLeft&&fitsRight?preferLeft:fitsLeft?true:fitsRight?false:leftRoom>rightRoom;
-    const int x=left?bounds.left()-menu->width():bounds.right()+1;
-    const auto first=menu->actions().value(0);
-    const int y=row.top()-(first?qMax(0,menu->actionGeometry(first).top()):0);
-    const QPoint pos(qBound(work.left(),x,qMax(work.left(),work.right()-menu->width()+1)),
-                     qBound(work.top(),y,qMax(work.top(),work.bottom()-menu->height()+1)));
-    if(pos!=menu->pos()){
-        arranging=true;menu->move(pos);arranging=false;
-        if(columnsApplied)arrangedGeometry=menu->geometry();
-    }
-#endif
-}
-void MenuLayout::presentColumns() {
 #ifdef AFTERMARKET_QT642_COLUMNS
     // QMenu has no public column-height setter. Update its actual native
     // geometry cache, so paint, actionAt, mouse/keyboard and submenu paths
@@ -214,6 +177,13 @@ void MenuLayout::presentColumns() {
     // Preserve the familiar vertical layout of Source context menus. Do not
     // disable the independent optional placement rules or compact spacing.
     if(menu->property("_aftermarketSourceContext").toBool()||sourceContextMenu(menu))return;
+    // Keep hierarchical menus native and compact only flat choice lists.
+    // Check the actual visible actions after explicit overflow rules and
+    // custom entries, so a generated More actions submenu counts too.
+    const auto entries=menu->actions();
+    if(std::any_of(entries.cbegin(),entries.cend(),[](const QAction *a){
+        return a->isVisible()&&a->menu()!=nullptr;
+    }))return;
     if(!d->widgetItems.isEmpty()||d->tearoff||d->tornoff)return;
     const auto actions=menu->actions();
     if(actions.isEmpty())return;
@@ -239,24 +209,10 @@ void MenuLayout::presentColumns() {
     top=qMax(2,top+(d->scroll?qMax(0,-d->scroll->scrollOffset):0));
     left=qMax(2,left);
     const int bottom=top,right=left,gap=10;
-    int maxColumns=qMin(12,(work.width()-left-right+gap)/qMax(1,rowWidth+gap));
-    // A compact child can use fewer columns if that fits the space beside
-    // its parent without making any row taller than the monitor permits.
-    if(auto *parent=qobject_cast<QMenu*>(d->causedPopup.widget.data());
-       parent&&parent->isVisible()&&parent->property(columnsKey).toBool()){
-        const auto bounds=parent->geometry();
-        const int room=qMax(bounds.left()-work.left(),work.right()-bounds.right());
-        const int beside=qMin(maxColumns,(room-left-right+gap)/qMax(1,rowWidth+gap));
-        if(beside>=2&&qCeil(double(total)/beside)+top+bottom+menu->fontMetrics().height()+4<=work.height())
-            maxColumns=beside;
-        else if(beside==1&&total+top+bottom<=work.height()){
-            // Qt's normal single-column child fits the side; no reflow.
-            arrangedGeometry=menu->geometry();columnsApplied=false;menu->setProperty(columnsKey,QVariant());arranging=false;return;
-        }
-    }
+    const int maxColumns=qMin(12,(work.width()-left-right+gap)/qMax(1,rowWidth+gap));
     const auto count=std::count_if(actions.begin(),actions.end(),[](const QAction *a){return a->isVisible()&&!a->isSeparator();});
     if((count<16&&total+top+bottom<=cap)||maxColumns<2||rowWidth<=0) {
-        arrangedGeometry=menu->geometry();columnsApplied=false;menu->setProperty(columnsKey,QVariant());arranging=false;return;
+        arrangedGeometry=menu->geometry();columnsApplied=false;arranging=false;return;
     }
     // Balance contiguous columns in original order. Prefer a nearby
     // separator boundary, but never remove or duplicate a command.
@@ -278,7 +234,7 @@ void MenuLayout::presentColumns() {
     const QSize size(left+right+cols*rowWidth+(cols-1)*gap,tallest+bottom);
     // If every row won't fit, retain native behavior; never clip choices.
     if(size.width()>work.width()||size.height()>work.height()) {
-        arrangedGeometry=menu->geometry();columnsApplied=false;menu->setProperty(columnsKey,QVariant());arranging=false;return;
+        arrangedGeometry=menu->geometry();columnsApplied=false;arranging=false;return;
     }
     QPoint pos=menu->pos();
     if(parentActionAnchor.isValid()){
@@ -326,7 +282,7 @@ void MenuLayout::presentColumns() {
     menu->setGeometry(QRect(pos,size));
     if(d->scroll){d->scroll->scrollTimer.stop();d->scroll->scrollOffset=0;d->scroll->scrollFlags=0;d->scroll->scrollDirection=0;}
     d->actionRects=rects;d->ncols=cols;d->itemsDirty=false;
-    arrangedGeometry=menu->geometry();columnsApplied=true;menu->setProperty(columnsKey,true);arranging=false;
+    arrangedGeometry=menu->geometry();columnsApplied=true;arranging=false;
 #else
     // Public-API fallback: compact rows, never auto-hide commands.
 #endif
@@ -337,7 +293,7 @@ void MenuLayout::restore() {
 #ifdef AFTERMARKET_QT642_COLUMNS
     if(columnsApplied&&qstrcmp(qVersion(),QT_VERSION_STR)==0)QMenuPrivate::get(menu)->itemsDirty=true;
 #endif
-    columnsApplied=false;menu->setProperty(columnsKey,QVariant());arrangedGeometry={};
+    columnsApplied=false;arrangedGeometry={};
     anchoredToInvocation=false;openingAnchor={};
     placementResolved=false;menuBarAnchor=false;parentActionAnchor={};invocationScreen.clear();
     // Custom entries exist only while this menu is open.

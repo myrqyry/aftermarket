@@ -3738,3 +3738,21 @@ mouse-hover traversal between inner-column launcher and far edge, narrow
 no-fit geometry, and multi-monitor placement not independently qualified.
 Docs updated, local commit only; previous installed binary unchanged.
 Existing unrelated src/plugin.cpp comment preserved.
+
+## 2026-11-25: flat-only compact columns (supersedes outer-edge workaround)
+
+User explicitly prefers no splitting of menus containing submenus.
+Supersede 69af5f4's outer-edge placement and child column-budget logic
+without rewriting history. Retain existing compact spacing and native
+placement; only flat visible action lists eligible for Aftermarket column
+reflow. Check actual visible actions after custom and explicit overflow
+placement; generated More actions also excludes parent from splitting.
+Leaf submenu catalogues remain eligible independently. Existing Qt ABI
+guard, native overflow for extremely tall menus, root anchor and monitor
+behavior preserved. No new setting or event path. RED menu-augmentation
+failed hierarchical cols==1 on prior code, GREEN short/long leaf children
+and left/right anchors, flat choice execution and explicit overflow parent.
+Full 42/42 CTest /tmp/am-flat-menu-final-ctest.log; real Qt X11 fixture
+/tmp/am-flat-menu-final-xcb.log passed. Not a production OBS launch.
+Docs updated; built and committed locally, not installed/pushed.
+Existing unrelated plugin.cpp comment preserved.

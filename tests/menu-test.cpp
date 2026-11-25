@@ -211,8 +211,7 @@ int main(int argc, char **argv) {
             if(i==4)a->setEnabled(false);
             if(i==8){a->setCheckable(true);a->setChecked(true);}
         }
-        auto *nativeSub=longMenu.addMenu("Native submenu");
-        nativeSub->addAction("Child");
+        longMenu.addAction("Final choice");
         const auto originals=longMenu.actions();
         QAction *last=nullptr;for(auto *a:originals)if(a->text()=="Entry 20")last=a;
         REQUIRE(last);
@@ -249,8 +248,8 @@ int main(int argc, char **argv) {
         REQUIRE(count==101&&rootCount==1&&longMenu.actions()==originals);
         REQUIRE(originals.at(4)->isEnabled()==false);
         REQUIRE(controller.compactMenusEnabled());
-        // An interior-column submenu must not cover another column.
-        // Exercise both a short native child and a long compact child.
+        // Hierarchical menus retain a native single column. Leaf child
+        // catalogues can still use compact columns independently.
         {
             const QRect work=QGuiApplication::primaryScreen()->availableGeometry();
             const QPoint saved=QCursor::pos();
@@ -265,20 +264,21 @@ int main(int argc, char **argv) {
                 parent.popup(anchor);app.processEvents();
                 QSet<int> cols;
                 for(auto *action:parent.actions())cols.insert(parent.actionGeometry(action).x());
-                REQUIRE(cols.size()>1);
+                REQUIRE(cols.size()==1);
                 const QRect originalParent=parent.geometry();
                 parent.setActiveAction(child->menuAction());
                 QKeyEvent right(QEvent::KeyPress,Qt::Key_Right,Qt::NoModifier);
                 QApplication::sendEvent(&parent,&right);app.processEvents();
                 REQUIRE(child->isVisible());
                 REQUIRE(work.contains(child->geometry()));
-                REQUIRE(!child->geometry().intersects(originalParent));
-                REQUIRE(parent.geometry()==originalParent);
-                REQUIRE(nearRight?child->geometry().right()<originalParent.left():child->geometry().left()>originalParent.right());
+                REQUIRE(parent.geometry()==originalParent&&parent.actions().contains(child->menuAction()));
+                QSet<int> childCols;
                 for(auto *action:child->actions()){
                     auto rect=child->actionGeometry(action);
                     REQUIRE(rect.isValid()&&child->actionAt(rect.center())==action);
+                    childCols.insert(rect.x());
                 }
+                REQUIRE(longChild?childCols.size()>1:childCols.size()==1);
                 child->hide();parent.hide();app.processEvents();
             }
             QCursor::setPos(saved);
@@ -407,13 +407,17 @@ int main(int argc, char **argv) {
         embedded.popup(QPoint(40,40));app.processEvents();
         REQUIRE(embedded.actions()==embeddedActions&&embedded.styleSheet()==style);
         embedded.hide();app.processEvents();
-        REQUIRE(nativeSub->actions().size()==1);
+        REQUIRE(longMenu.actions()==originals);
         // Only an explicitly scoped choice may enter overflow.
         REQUIRE(write(R"({"enabled":true,"menuOverflow":[{"text":"Entry 7","menuContains":["Entry 0","Entry 1"]}],"rules":[]})"));
         longMenu.popup(QPoint(50,50));app.processEvents();
         QMenu *more=nullptr;
         for(auto *a:longMenu.actions())if(a->text()=="More actions…")more=a->menu();
         REQUIRE(more&&more->actions().size()==1&&more->actions().first()->text()=="Entry 7");
+        QSet<int> overflowCols;
+        for(auto *a:longMenu.actions())if(a->isVisible()&&!a->isSeparator())
+            overflowCols.insert(longMenu.actionGeometry(a).x());
+        REQUIRE(overflowCols.size()==1);
         for(auto *a:originals)if(a->text()!="Entry 7")REQUIRE(longMenu.actions().contains(a));
         longMenu.hide();app.processEvents();
         REQUIRE(longMenu.actions()==originals);
