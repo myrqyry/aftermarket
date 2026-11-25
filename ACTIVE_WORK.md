@@ -3245,3 +3245,6 @@ README/user guide updated. Existing unstaged plugin.cpp comment preserved.
 User OBS running; no installation or push. Follow-on: explicit opt-in
 new-source default assignment, with native creation vs collection load
 and duplication distinction; do not silently apply automatic defaults.
+
+### Preset scope decision — 2026-11-25
+User explicitly declined automatic defaults. Keep presets named and explicitly loaded by the user; do not apply them automatically on source/filter creation or add Source Defaults template-filter behavior. Earlier automatic-default follow-on is superseded.
