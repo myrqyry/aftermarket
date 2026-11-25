@@ -1,6 +1,6 @@
 # Aftermarket: dock faces, header controls, and native audio patchbay
 
-Status: **proposed for review** (2026-11-21). No product code changed by this design.
+Status: **historical design proposal** (2026-11-21). Retained for provenance, not current product instructions. AudioBus and native dock headers are implemented; the [current user guide](user-guide.md#mixer-and-audiobus) supersedes this proposal, including optional Audio Monitor device sends.
 Owner: `obs-ui-augment/`, project-facing name Aftermarket.
 
 ## Intent and accepted direction

@@ -3189,3 +3189,22 @@ persisted layouts. Cue dispatch from embedded page tested in Qt fixture.
 Two unattributed libobs leaks remain. Native evidence
 /tmp/aftermarket-unified-workspace-20261124/obs-recovery2.log; docs screenshot
 replaced. No production install or push.
+
+## Installed current workspace and companion fork — 2026-11-24
+
+Explicit install request completed: rebuilt Aftermarket 70372b0 plus the
+pre-existing unstaged comment, 38/38 CTests passed; Source Dock workspace-api
+0a37ed0 built and ABI/cadence/visibility/resolution tests passed. Installed
+both binaries atomically in the existing user plugin directories. Previous
+binaries preserved outside OBS search path at
+~/.local/share/aftermarket/rollback/current-install.MoapGJ.
+Built and installed SHA-256 values match (Aftermarket 70498fadd42e8cdeacfa2065b72219134625aa85e5baacd8d25f64429b0a980d;
+Source Dock cfd026077a5ddc4240fa603c87589bd0d14d91311fd07d0d90a5ac688cee00d3).
+No missing shared libraries. Production OBS was closed; user scene/settings
+files untouched. Copied installed modules to disposable profile, verified
+Workspace and Quick Find plus native pin API and companion module loading
+(Audio Monitor, Scene Collection Manager, Frame Interleave); OBS exit 0.
+Evidence /tmp/aftermarket-installed-docs-20261124/obs.log. Refreshed seven
+Workspace tab images, Quick Find, actual responsive filter controls; audited
+README, user guide, dock layouts, CI and historical dock design. Relative
+file-link checks passed; historical screenshots not all recaptured. No push.

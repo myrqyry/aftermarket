@@ -7,8 +7,17 @@ Save and restore native OBS dock arrangements using Qt dock state. Aftermarket d
 1. In OBS, open Tools > Aftermarket > Workspace > Dock layouts after the application finishes loading.
 2. Arrange the native OBS docks and choose Save current... Give the arrangement a unique name, such as Streaming, Editing, or Audio.
 3. Select a saved snapshot and choose Switch to layout (or double-click it). Undo switch restores the previous dock arrangement, once.
-4. Use Rename, Update from current (confirmed replacement), and Delete (confirmed removal) from the same dialog.
+4. Use Rename, Update from current (confirmed replacement), and Delete (confirmed removal) from the same Workspace tab.
 5. For a one-click layout macro, open Tools > Aftermarket > Workspace > Action strip > Edit buttons and status readouts..., choose Add... > layout, and select a saved arrangement. Turn on the Action Strip if you want the button in the OBS menu bar. Saved layout actions can be reordered and overflow like existing hotkey or dock buttons.
+
+## Checkpoints and companion backups
+
+Open **Workspace checkpoints…** in Dock layouts for named recovery bundles.
+These contain the scene collection, dock state and selected Aftermarket
+settings. Dock-only restore and explicit recovery exports are supported;
+full one-click workspace restoration is not. If Scene Collection Manager
+is loaded, its optional companion backup uses the native backup action and
+verifies the resulting file. See the [checkpoint guide](user-guide.md#workspace-checkpoints).
 
 ## Safety and scope
 

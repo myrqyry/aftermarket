@@ -38,6 +38,18 @@ For rollback, close OBS, remove the new module from the search path, restore
 the previous package from the rollback directory, and move the current config
 directory back to obs-ui-augment (do not overwrite an existing directory).
 
+### Optional companion plugins
+
+Aftermarket works without third-party plugins. For optional integrations,
+install Audio Monitor 0.10.1, Scene Collection Manager 0.1.2, Source Dock
+0.5.1 (or the compatible workspace-api fork), and Frame Interleave Filter
+0.2.0 from their upstream releases where available. These versions were
+exercised with OBS 32.2.0 on Linux. The Source Dock fork requires its own
+build and replaces the stock Source Dock module, not a second copy; back
+up the stock binary outside the OBS plugin directory. Its versioned API
+and preview properties are optional capabilities, detected at runtime.
+Aftermarket's installer does not download companion plugins.
+
 ### Settings inside OBS
 
 Open **OBS → Settings → Aftermarket** from OBS's normal Settings dialog.
@@ -52,13 +64,13 @@ The options are staged until you click OBS's existing **Apply** or **OK**
 button. **Cancel discards unapplied Aftermarket changes**, using the same
 native Settings controls as other OBS pages. Source names, mixer routing,
 and unrelated OBS settings are preserved. Advanced target-specific tools
-remain in the Inspector; the regular preferences now have their own home.
+remain in the Workspace; the regular preferences now have their own home.
 
 ![Aftermarket entry in the real OBS Settings sidebar, with global Appearance preferences](screenshots/readme/aftermarket-obs-settings.webp)
 
 ![Mixer and gradient preferences inside OBS Settings Aftermarket](screenshots/readme/aftermarket-settings-mixer.webp)
 
-### Inspector workspace
+### Unified Workspace
 
 The native Tools menu has one Aftermarket submenu: Workspace, Find Sources, and Emergency restore. The Workspace contains Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts, and Cue Deck tabs. In emergency safe mode only Resume UI customizations is visible. Open **Tools → Aftermarket → Workspace** for advanced per-target editing and
 richer visual editors. Its specialized pages remain available for:
@@ -84,7 +96,11 @@ richer visual editors. Its specialized pages remain available for:
   Toggle **Audio Mixer backside (native routing)** to add a flip button to
   OBS's real Audio Mixer dock. **Alternating list backgrounds** adds separate
   Scenes and Sources switches with native-theme or custom row colors. The
-  The Panels tab of Tools → Aftermarket → Workspace also provides dock controls.
+  native Settings Panels page also exposes global property layout preferences.
+
+- **Action strip:** show or hide the strip, review configured buttons and open its editor.
+- **Dock layouts:** manage saved arrangements, undo a switch and open workspace checkpoints.
+- **Cue Deck:** create, edit, run and stop named sequences of native actions.
 
 ![Mixer page in OBS](screenshots/readme/workspace-mixer.png)
 
@@ -109,6 +125,8 @@ native property reloads. This applies to source Properties and Filters
 dialogs, not every unrelated OBS settings page. Apply/OK saves the preference
 as `propertyColumns` (0 = Auto, 1–3 = maximum columns) in rules.json.
 
+![Actual native Color Correction controls in three responsive columns](screenshots/readme/responsive-filter-properties.webp)
+
 Property-group folding is off by default and saved as `collapsiblePropertyGroups` in
 `rules.json`. It affects native `OBSPropertiesView` **ordinary QGroupBox sections**
 only, not ungrouped filter controls or checkable enable/disable groups. Expanded
@@ -129,7 +147,7 @@ require explicit replacement. Remove exact rule deletes only the identical
 selector and leaves broader rules intact. The menu matcher's previous
 heuristic and rule precedence are unchanged.
 
-![Captured native menu](screenshots/readme/workspace-menus.png)
+![Menus and widgets tab before target capture](screenshots/readme/workspace-menus.png)
 
 ## Workspace and dock controls
 
@@ -210,8 +228,7 @@ restored it. Also verified by Qt dock-layout regression tests.
 ### Dockable video preview
 
 The preview normally stays in the center of OBS. To move it into the native
-dock system, open **Tools → Aftermarket → Workspace → Panels** (or the **Panels** tab of the
-Inspector) and press **Make preview dockable**. The Preview dock can be
+dock system, open **Tools → Aftermarket → Workspace → Panels** and press **Make preview dockable**. The Preview dock can be
 dragged between dock areas, floated, resized, or closed just like the other
 native OBS docks.
 
@@ -388,7 +405,11 @@ The remaining menu-bar space can hold the optional Action Strip described below.
 ### Action Strip
 
 **OBS Settings → Aftermarket → Action strip** controls visibility and
-opens the button editor. The **Action strip** tab in Tools → Aftermarket → Workspace also opens the same editor. Choose
+opens the button editor. The **Action strip** tab in Tools → Aftermarket → Workspace also opens the same editor.
+
+![Action strip tab inside the unified Workspace](screenshots/readme/workspace-action-strip.webp)
+
+Choose
 **Show OBS action strip** to place your configured items at the
 right of the *existing* native menu bar, including when the hamburger is off.
 It is **off by default** and does not replace OBS's Controls dock, native
@@ -440,6 +461,8 @@ dock late, and stops retrying on emergency recovery. It does not copy Timeline's
 ### Cue Deck
 
 **Tools → Aftermarket → Workspace → Cue Deck** opens the embedded cue manager.
+
+![Cue Deck tab inside the unified Workspace](screenshots/readme/workspace-cues.webp)
 Cues are named ordered action sequences—not new OBS scenes or copies of any
 third-party animation engine. Use **New cue**, enter a name, then add steps:
 
@@ -474,7 +497,7 @@ Up to 32 cues, each up to 48 steps, are supported; total waits per cue are
 limited to 120 seconds. Existing scene, filter, and plugin configurations are
 never rewritten by creating or editing a cue.
 
-This first implementation uses existing plugin hotkeys for interoperability;
+Cue Deck uses existing plugin hotkeys for interoperability;
 it does not add vendor-specific Exeldro parameter editing, visual animation
 previews, completion callbacks, or a general WebSocket macro adapter. Those
 need explicit compatibility and runtime testing before being described as
@@ -528,6 +551,7 @@ OBS; it doesn't send content elsewhere.
 - **Properties**, **Filters**, and **Go to scene** are independent actions.
   Typing in the search box does not change the live scene or source settings.
   **Refresh** rebuilds the source index if something changed while it was open.
+- When Source Dock is loaded, **Pin to workspace** creates a native source or scene dock without switching scenes. Right-click eligible asynchronous video results for **Off-air frame limit…** if Frame Interleave Filter is loaded. See the optional integration sections above.
 - For one-click entry, add **Find sources** in the existing
   **Aftermarket → Workspace → Action strip → Edit buttons and status readouts… → Add… → search** editor.
 - For keyboard entry, assign a shortcut to
@@ -546,7 +570,7 @@ modify OBS's docking layout.
 ### Alternating Scenes and Sources backgrounds
 
 In **OBS Settings → Aftermarket → Appearance**, turn on **Scenes** and/or
-**Sources** alternate rows independently. The Inspector's detailed
+**Sources** alternate rows independently. The Workspace's detailed
 **Panels → Alternating list backgrounds** editor remains available for
 choosing custom row colors. By default both are off.
 **Normal rows** and **Alternating rows** can each use a chosen solid color
@@ -560,7 +584,7 @@ ones; selection, hover and source-specific coloring remain native.
 
 The Strength slider is available in **OBS Settings → Aftermarket → Appearance**
 and **Tools → Aftermarket → Workspace → Panels → Alternating list backgrounds**.
-The Inspector previews changes while you drag and saves on release. Native
+The Workspace previews changes while you drag and saves on release. Native
 OBS Settings stages the value until you choose Apply or OK; Cancel discards
 unapplied edits. The settings are stored atomically as listRows.strength in
 rules.json, and turning stripes off restores the original palette and
@@ -710,7 +734,7 @@ The meter scale remains visible at silence and mute, using dimmed native zone co
 
 In **Tools → Aftermarket → Workspace**, enable gradient tracks on Gradients, then open Mixer and enable
 **Audio-reactive mixer gradients**, and optionally **Pulse native meter colors**.
-Enable Motion in the inspector. The effects are opt-in and can be toggled live.
+Enable Motion in the Workspace. The effects are opt-in and can be toggled live.
 
 - Each mixer fader follows its own source's libobs magnitude, not the global
   clock or another channel. Audio energy accelerates gradient flow and raises
@@ -752,7 +776,7 @@ inside meter bars remain future work.
 
 ### Animated gradient tracks
 
-Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the inspector's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gradient tracks**, select sliders and/or progress bars, and apply. Enable the Workspace's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
 
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
@@ -773,7 +797,7 @@ Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gra
 }
 ```
 
-Edit just the gradient and motion fields in an existing file to preserve your menu rules. The inspector merges settings into the existing file, atomically. Changes apply without a theme reload or restart; the rules watcher also reloads valid external edits. Motion off freezes the gradient; gradient off removes the decoration entirely.
+Edit just the gradient and motion fields in an existing file to preserve your menu rules. The Workspace merges settings into the existing file, atomically. Changes apply without a theme reload or restart; the rules watcher also reloads valid external edits. Motion off freezes the gradient; gradient off removes the decoration entirely.
 
 The overlay derives groove, thumb and progress content rectangles from Qt's actual style geometry. Slider gradients extend to the native thumb center, preserving the actual handle silhouette instead of leaving a rounded gap before it. A cached native-paint comparison covers the exposed page around the thumb; solid-color antialiased edges are recomposited over the animated fill. Ambiguous custom handle pixels remain native. It uses a seamless repeated gradient and one shared 30 Hz timer, which stops if there are no visible, nonempty animated tracks. It never writes slider values or changes the stream compositor.
 
@@ -871,14 +895,14 @@ existing `rules.json`; do not replace the entire file):
 
 These keys are added to the existing `rules.json`; they do not replace the
 original `rules`, `menuOverflow`, or gradient settings. Add commands from
-the inspector to generate unique IDs automatically.
+the Workspace to generate unique IDs automatically.
 
 | Customized native menu | Recover or edit saved entries |
 | --- | --- |
 | ![OBS source menu with a custom command and a hidden default](screenshots/readme/menu-custom-actions.png) | ![Manage hidden native actions and custom entries](screenshots/readme/menu-actions-manager.png) |
 
 **Current scope:** native QMenu actions, scoped hiding, and direct executable
-custom entries. The inspector can browse nested native submenus, but custom
+custom entries. The Workspace can browse nested native submenus, but custom
 entries are appended to the captured menu rather than placed into new nested
 groups. Ordering custom commands, selection/source argument placeholders, and
 importing external menu-action definitions are not yet implemented. Native
@@ -913,7 +937,7 @@ may need to be opened before capturing their full list.
 
 | Selected choices in OBS | Expanded inspector menu tree |
 | --- | --- |
-| ![Native OBS source menu showing selected color and Lanczos filtering](screenshots/readme/menu-selected-choices.png) | ![Inspector listing nested native menu items and selected color preset](screenshots/readme/inspector-menu-tree.png) |
+| ![Native OBS source menu showing selected color and Lanczos filtering](screenshots/readme/menu-selected-choices.png) | ![Menus & widgets listing nested native menu items and selected color preset](screenshots/readme/inspector-menu-tree.png) |
 
 ### Live rules
 
@@ -947,7 +971,7 @@ Example of a complete replacement rules file:
 ### Theme-aware typography and selected states
 
 Aftermarket's own controls use a restrained visual hierarchy without
-changing the current OBS theme's font family or color palette. The Inspector
+changing the current OBS theme's font family or color palette. The Workspace
 uses normal-weight body text and semibold section headings; Studio Mode
 labels scale relative to the active font rather than forcing 12px.
 Aftermarket-owned selected Studio view buttons and patchbay track switches
@@ -958,7 +982,7 @@ thinner, while their source/track routes remain unchanged.
 Compact menus honor the active font's actual line height. **Native OBS
 widgets, menus and source list selection remain owned by OBS and its theme.**
 
-![Aftermarket Inspector typography with Colorway](screenshots/readme/inspector-typography.webp)
+![Earlier verified Inspector typography with Colorway (before Workspace consolidation)](screenshots/readme/inspector-typography.webp)
 
 ### Theme-aware transform selection
 
@@ -1006,7 +1030,7 @@ Enable **Motion** in **OBS → Settings → Aftermarket → Menus** or from
 **Tools → Aftermarket → Workspace**. The same global control governs menu artwork,
 dock collapse/expand, AudioBus page switching, and existing reactive gradients.
 Motion is off by default, preserving the native immediate behavior until enabled.
-For individual menu artwork rules, pick a preset and duration in the inspector.
+For individual menu artwork rules, pick a preset and duration in the Workspace.
 
 - **soft**: fade/slide entrance, modest icon growth on hover.
 - **pop**: fade/slide with a more pronounced scale transition.
@@ -1131,7 +1155,15 @@ Inspector slice verification (same isolated OBS configuration):
 Real OBS testing is limited to Linux/X11 with OBS 32.2.0 and Qt 6.4.2, using native themes and Colorway.
 Additional themes, DPI scaling, RTL, other platforms and unsupported native widgets need validation. See the [verification history](../ACTIVE_WORK.md) for individual runtime receipts and known limitations.
 
-Recent real OBS checks include the split compact source picker, single-click creation, existing-source filtering and addition, and two-monitor filter submenu anchoring. The regression suite also covers native dock snapshots, Quick Find and the Action Strip. Recent verification used 29/30 offscreen CTests plus a passing single-head XCB run of the display-sensitive panels test.
+Current local verification: **38/38 CTests passed**. Isolated OBS runs
+covered responsive source/filter settings, dynamic property reloads, native
+mixer reorder and optional device sends, checkpoint capture, Source Dock
+pinning and lightweight previews, and the unified Workspace with emergency
+recovery during an open checkpoint dialog. The installed modules were also
+loaded together in a disposable profile; OBS exited normally. No claim is
+made that every combination of plugins, source types, hardware or graphics
+drivers has been exercised. Optional preview caching is SDR-only and total
+GPU savings have not been benchmarked.
 
 ### Disable/remove
 

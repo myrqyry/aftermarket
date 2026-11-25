@@ -57,6 +57,11 @@ The mixer still belongs to OBS. AudioBus does not implement a second audio engin
 
 ## Workspace
 
+The main **Tools → Aftermarket → Workspace** window contains seven tabs:
+Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts and
+Cue Deck. Quick Find and Emergency restore are the only other Tools
+commands. Routine preferences remain in OBS Settings.
+
 ### Docks and layouts
 
 Native dock titles get theme-aware icons and compact three-dot menus for
@@ -79,12 +84,17 @@ its manager directly from Dock Layouts.
 Optional [Source Dock](https://obsproject.com/forum/resources/source-dock.1317/) panels
 receive the native Aftermarket header controls and a shortcut to Source Docks settings.
 Use **Pin to workspace** in Quick Find to create an actual Source Dock without switching scenes.
-The workspace-api fork adds per-dock preview refresh rates, freeze, controls-only mode and cached resolution in the existing dock menu; hidden previews release their cache and showing reference.
+The optional Source Dock workspace-api fork supplies a native pinning API,
+independent SDR preview refresh (Live, 30, 15, 10, 5, 2, 1 FPS or Freeze),
+controls-only mode and cached resolution (2048, 1280, 640 or 320 px).
+Hidden previews release their cache and showing reference. Stock 0.5.1
+supports the guarded pinning adapter but not these new preview options.
+The fork retains upstream module identity and license; no public fork
+release is established.
 Optional [Frame Interleave Filter](https://obsproject.com/forum/resources/frame-interleave-filter.1618/)
 adds **Off-air frame limit** to eligible asynchronous video sources in the Quick Find
 context menu; the original filter handles activity-aware frame dropping.
-Workspace checkpoints capture their scene-collection configuration without replacing
-Source Dock's rendering or controls.
+Workspace checkpoints capture Source Dock settings and Frame Interleave filters through the native scene collection. Neither integration replaces the underlying source or Program renderer.
 
 | Native dock headers | Saved dock arrangements |
 | :---: | :---: |
@@ -97,7 +107,7 @@ Source Dock's rendering or controls.
 ### Action Strip
 
 Put useful controls in the existing menu bar: OBS and plugin hotkeys,
-dock show/hide buttons, live status, saved dock layouts, and Quick Find.
+dock show/hide buttons, live status, saved dock layouts, Cue Deck sequences, and Quick Find.
 Reorder them directly or use the editor. Extra items move to overflow instead
 of being clipped. The optional hamburger menu frees additional space.
 
@@ -160,7 +170,7 @@ their triggering row, including on offset dual-monitor layouts.
 
 ![A compact Filters Add submenu attached to its actual parent menu](docs/screenshots/readme/filter-submenu-anchored.webp)
 
-Customize specific native menus through the Inspector: add icons, hide
+Customize specific native menus in Workspace → Menus & widgets: add icons, hide
 unwanted commands, explicitly move entries into More actions, add trusted
 executable commands, and display checked submenu values. The searchable
 theme/style picker makes long Appearance lists easier to navigate.
@@ -185,9 +195,11 @@ palette. Optional refinements include:
 
 ![Real OBS dock collapse and AudioBus flip animation frames](docs/screenshots/readme/ui-motion-docks-and-audiobus.webp)
 
+![Native Color Correction filter settings reflowed into three columns](docs/screenshots/readme/responsive-filter-properties.webp)
+
 [Appearance and motion guide](docs/user-guide.md#appearance-and-motion)
 
-## Settings and inspector
+## Settings and Workspace
 
 Open **OBS → Settings → Aftermarket** for normal preferences.
 Use the native Apply, OK, and Cancel buttons. The five pages are
@@ -212,8 +224,8 @@ ctest --test-dir build --output-on-failure
 ./scripts/install.sh
 ```
 
-Restart OBS. Existing themes and configuration are preserved by the installer.
-The module and configuration directory are now named aftermarket. The Linux installer backs up the previous plugin outside OBS’s search path; existing settings migrate as a complete directory on the next launch. See the [upgrade guide](docs/user-guide.md#upgrading-from-obs-ui-augment).
+Restart OBS. Existing themes and configuration are preserved by the installer. For same-name upgrades, back up the previous module outside the plugin directory before installing. Optional companion plugins are installed separately.
+The module and configuration directory are now named aftermarket. The Linux installer moves the legacy obs-ui-augment package outside OBS’s search path; existing settings migrate as a complete directory on the next launch. See the [upgrade guide](docs/user-guide.md#upgrading-from-obs-ui-augment).
 
 **Compatibility:** Runtime verification currently covers Linux/X11,
 OBS 32.2.0 and Qt 6.4.2. The native column layout adapter requires the
@@ -226,7 +238,7 @@ DPI configurations, and OBS versions need additional verification.
 The [Linux CI workflow](.github/workflows/ci.yml) targets Ubuntu 24.04 and
 a SHA-256-pinned OBS 32.2.0 SDK. It checks local README links, builds the
 module, runs the native Qt/libobs CTest suite under an isolated X display
-(at least 32 tests, no skips), stages the plugin, checks linked libraries
+(CI baseline: at least 32 tests, no skips; current local suite: 38), stages the plugin, checks linked libraries
 and the exact package contents, and verifies the archive checksum.
 It does not install into a user's profile, publish release assets, or
 claim Windows, macOS, or OBS 33 support.
@@ -254,5 +266,5 @@ when ready.
 - [Verification and development history](ACTIVE_WORK.md) — implementation checkpoints and real runtime evidence.
 
 Screenshots are captured from real, isolated OBS sessions with native themes
-and Colorway. The project is independent of OBS Studio and does not replace its
+and Colorway. Workspace, Quick Find and responsive properties images reflect the current interface; other feature screenshots may depict earlier verified builds. The project is independent of OBS Studio and does not replace its
 theme system or streaming compositor.
