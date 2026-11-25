@@ -3585,3 +3585,40 @@ shutdown allocations. Group editing, actual mixed AV reorder, other
 platforms, embedded properties, filter create/delete undo not qualified.
 Docs updated. Built not installed/pushed. Preserve existing unrelated
 plugin.cpp comment.
+
+## 2026-11-25: inspector filter membership with native history
+
+Continue accepted Source Inspector scope: add and remove existing-source
+filters inline, no external editor import. Theme-native plus and trash
+controls, compatible registered filter-type picker, unique default name,
+explicit shared-source removal confirmation default No. Capture parent
+UUID and revalidate current selection/pin and visible dock on acceptance.
+AV compatibility matches libobs; reject disabled/nonduplicable and
+deprecated on creation. Native save-source snapshot bounded 1 MiB,
+retain exact raw serialized JSON in history; no disk persistence or
+retained deleted filter references. Undo/redo attach using native
+obs_load_private_source (project filter loading semantics), validate
+UUID and type, set original native index, invoke source load. Unrelated
+attached filters are never rebuilt. Detach checks expected chain and
+serialized filter state; refuse stale data/name/UUID collisions, missing
+or incompatible targets. If another owner still retains detached UUID,
+restore refuses rather than creating an ambiguous replacement.
+Recreated object is not identical runtime instance; transient GPU/DSP
+state not preserved. Arbitrary third-party save/load side effects and
+mixed AV or special plugin state not independently qualified.
+Existing native dialog remains fallback for unsupported filters and
+full property editing. Embedded native property editor/license/version
+dependency remains unresolved.
+
+RED native probe /tmp/am-inspector-edits.O30fGa/obs.log missing add/remove.
+First GREEN all 27 checks /tmp/am-inspector-edits.Cw8v96/obs.log but
+harness count incorrectly expected 26; fixed and extended tests for stale
+redo, second restore and stale selection. Full CTest 41/41
+/tmp/am-membership-final-ctest.log (15.20s). Final isolated OBS 32.2.0
+/tmp/am-inspector-edits.HO9Y8e/obs.log 30/30, exit0: compatible catalog,
+actual add/undo/redo UUID, cancel/remove/undo restoring changed gamma,
+disabled state and position, redo, unaffected original filter references,
+stale edited filter redo refusal and selection-change confirmation refusal.
+Two unattributed shutdown allocations. No production session touched.
+Docs updated; built not installed/pushed. Unrelated plugin.cpp comment
+unchanged.

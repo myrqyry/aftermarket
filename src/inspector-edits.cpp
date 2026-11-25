@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QList>
 #include <cmath>
+#include <algorithm>
 namespace augment {
 namespace {
 QByteArray json(const QJsonObject &o){return QJsonDocument(o).toJson(QJsonDocument::Compact);}
@@ -58,6 +59,68 @@ obs_source_t *findFilter(const Filters &list,const QString &id){
  if(id.isEmpty())return nullptr;
  for(const auto &f:list)if(utf(obs_source_get_uuid(f))==id)return f;return nullptr;
 }
+// Use libobs's AV compatibility contract, plus the native creation
+// catalog's hidden/deprecated exclusions. Do not instantiate to probe.
+bool compatible(obs_source_t *parent,const QString &type,bool creating){
+ if(!parent||obs_source_removed(parent)||type.isEmpty())return false;
+ bool registered=false;const char *id=nullptr;
+ for(size_t i=0;obs_enum_filter_types(i,&id);++i)if(utf(id)==type){registered=true;break;}
+ if(!registered)return false;
+ const auto flags=obs_get_source_output_flags(type.toUtf8().constData());
+ if(flags&(OBS_SOURCE_DO_NOT_DUPLICATE|OBS_SOURCE_CAP_DISABLED))return false;
+ if(creating&&(flags&OBS_SOURCE_DEPRECATED))return false;
+ constexpr uint32_t av=OBS_SOURCE_VIDEO|OBS_SOURCE_AUDIO|OBS_SOURCE_ASYNC;
+ auto needed=flags&av;
+ if((needed&OBS_SOURCE_AUDIO)&&!(needed&OBS_SOURCE_VIDEO))needed&=~OBS_SOURCE_ASYNC;
+ return (obs_source_get_output_flags(parent)&needed)==needed;
+}
+constexpr qsizetype snapshotLimit=1024*1024;
+QByteArray filterSnapshot(obs_source_t *filter){
+ if(!filter||obs_source_removed(filter))return {};
+ OBSDataAutoRelease saved=obs_save_source(filter);
+ if(!saved)return {};
+ QByteArray bytes=obs_data_get_json(saved);
+ if(bytes.size()>snapshotLimit||!QJsonDocument::fromJson(bytes).isObject())return {};
+ return bytes;
+}
+bool nameUsed(const Filters &list,const QString &name){
+ for(const auto &f:list)if(utf(obs_source_get_name(f))==name)return true;
+ return false;
+}
+bool replayMembership(obs_source_t *parent,const Filters &list,const QJsonObject &o){
+ const auto id=o.value("id").toString();
+ const auto desired=o.value("desired").toArray();
+ const auto bytes=o.value("snapshot").toString().toUtf8();
+ if(bytes.isEmpty()||bytes.size()>snapshotLimit)return false;
+ OBSDataAutoRelease data=obs_data_create_from_json(bytes.constData());
+ if(!data||utf(obs_data_get_string(data,"uuid"))!=id)return false;
+ const auto type=utf(obs_data_get_string(data,"versioned_id"));
+ const auto name=utf(obs_data_get_string(data,"name"));
+ auto *live=findFilter(list,id);
+ if(o.value("kind").toString()=="detach"){
+  // Never remove a filter that has been edited since the history entry.
+  if(!live||desired.size()!=list.size()-1||
+     QJsonDocument::fromJson(filterSnapshot(live)).object()!=QJsonDocument::fromJson(bytes).object())return false;
+  obs_source_filter_remove(parent,live);
+  return chain(filters(parent))==desired;
+ }
+ if(live||desired.size()!=list.size()+1||name.isEmpty()||nameUsed(list,name)||!compatible(parent,type,false))return false;
+ int index=-1;for(int i=0;i<desired.size();++i)if(desired[i].toObject().value("id").toString()==id)index=i;
+ if(index<0)return false;
+ // Native project loading also treats attached filters as private sources.
+ // Do not reuse or overwrite a detached UUID still retained by another owner.
+ OBSSourceAutoRelease collision=obs_get_source_by_uuid(id.toUtf8().constData());
+ if(collision)return false;
+ OBSSourceAutoRelease restored=obs_load_private_source(data);
+ if(!restored||obs_source_get_type(restored)!=OBS_SOURCE_TYPE_FILTER||
+    utf(obs_source_get_uuid(restored))!=id||utf(obs_source_get_id(restored))!=type)return false;
+ obs_source_filter_add(parent,restored);
+ if(obs_filter_get_parent(restored)!=parent)return false;
+ obs_source_filter_set_index(parent,restored,size_t(desired.size()-1-index));
+ obs_source_load(restored);
+ if(chain(filters(parent))==desired)return true;
+ obs_source_filter_remove(parent,restored);return false;
+}
 QJsonObject payload(const QString &kind,const QString &source,const QString &id,const QJsonValue &expected,const QJsonValue &desired){
  return {{"kind",kind},{"collection",collection()},{"source",source},{"id",id},{"expected",expected},{"desired",desired}};
 }
@@ -76,7 +139,11 @@ void replay(const char *data){
  }
  OBSSourceAutoRelease parent=obs_get_source_by_uuid(source.toUtf8().constData());
  auto list=filters(parent);
- if(chain(list)!=o.value("expected").toArray())return;
+ if(!parent||obs_source_removed(parent)||chain(list)!=o.value("expected").toArray())return;
+ if(kind=="attach"||kind=="detach"){
+  if(replayMembership(parent,list,o))obs_frontend_save();
+  return;
+ }
  auto *filter=findFilter(list,id);if(!filter)return;
  const auto desired=o.value("desired").toArray();
  if(desired.size()!=list.size())return;
@@ -99,6 +166,12 @@ void history(const char *name,QJsonObject before,QJsonObject after){
 }
 void filterHistory(const char *name,const QString &kind,const QString &source,const QString &id,const QJsonArray &before,const QJsonArray &after){
  history(name,payload(kind,source,id,after,before),payload(kind,source,id,before,after));
+}
+void membershipHistory(const char *name,const QString &source,const QString &id,const QByteArray &bytes,
+                       const QJsonArray &without,const QJsonArray &with,bool added){
+ auto attach=payload("attach",source,id,without,with),detach=payload("detach",source,id,with,without);
+ attach["snapshot"]=QString::fromUtf8(bytes);detach["snapshot"]=QString::fromUtf8(bytes);
+ history(name,added?detach:attach,added?attach:detach);
 }
 }
 QByteArray encodeTransform(const obs_transform_info &i,const obs_sceneitem_crop &c){
@@ -146,6 +219,44 @@ bool setInspectorFilterEnabled(const QString &source,const QString &id,bool enab
  const auto before=chain(list);obs_source_set_enabled(f,enabled);const auto after=chain(filters(parent));
  if(before==after)return false;
  filterHistory("Aftermarket: Toggle filter","enabled",source,id,before,after);return true;
+}
+QList<InspectorFilterType> inspectorFilterTypes(const QString &source){
+ OBSSourceAutoRelease parent=obs_get_source_by_uuid(source.toUtf8().constData());
+ QList<InspectorFilterType> result;if(!parent||obs_source_removed(parent))return result;
+ const char *id=nullptr;
+ for(size_t i=0;obs_enum_filter_types(i,&id);++i){
+  const auto type=utf(id);if(!compatible(parent,type,true))continue;
+  auto name=utf(obs_source_get_display_name(id));if(!name.isEmpty())result.append({type,name});
+ }
+ std::sort(result.begin(),result.end(),[](const auto &a,const auto &b){return a.name.localeAwareCompare(b.name)<0;});
+ return result;
+}
+bool addInspectorFilter(const QString &source,const QString &type){
+ OBSSourceAutoRelease parent=obs_get_source_by_uuid(source.toUtf8().constData());
+ if(!compatible(parent,type,true))return false;
+ const auto list=filters(parent);if(list.size()>=256)return false;
+ const auto base=utf(obs_source_get_display_name(type.toUtf8().constData()));
+ if(base.isEmpty())return false;
+ QString name=base;
+ for(int i=2;nameUsed(list,name);++i)name=base+" "+QString::number(i);
+ OBSSourceAutoRelease filter=obs_source_create_private(type.toUtf8().constData(),name.toUtf8().constData(),nullptr);
+ if(!filter||obs_source_get_type(filter)!=OBS_SOURCE_TYPE_FILTER||utf(obs_source_get_id(filter))!=type)return false;
+ const auto before=chain(list);
+ obs_source_filter_add(parent,filter);
+ if(obs_filter_get_parent(filter)!=parent)return false;
+ const auto bytes=filterSnapshot(filter),id=utf(obs_source_get_uuid(filter)).toUtf8();
+ const auto after=chain(filters(parent));
+ if(bytes.isEmpty()||id.isEmpty()||after.size()!=before.size()+1){obs_source_filter_remove(parent,filter);return false;}
+ membershipHistory("Aftermarket: Add filter",source,QString::fromUtf8(id),bytes,before,after,true);return true;
+}
+bool removeInspectorFilter(const QString &source,const QString &id){
+ OBSSourceAutoRelease parent=obs_get_source_by_uuid(source.toUtf8().constData());
+ const auto list=filters(parent);auto *filter=findFilter(list,id);
+ if(!filter||list.size()>256||!compatible(parent,utf(obs_source_get_id(filter)),false))return false;
+ const auto bytes=filterSnapshot(filter);if(bytes.isEmpty())return false;
+ const auto before=chain(list);obs_source_filter_remove(parent,filter);
+ const auto after=chain(filters(parent));if(after.size()!=before.size()-1)return false;
+ membershipHistory("Aftermarket: Remove filter",source,id,bytes,after,before,false);return true;
 }
 bool moveInspectorFilter(const QString &source,const QString &id,bool up){
  OBSSourceAutoRelease parent=obs_get_source_by_uuid(source.toUtf8().constData());

@@ -17,5 +17,5 @@ set -e
 echo "OBS_EXIT=$rc"
 grep -E "EDITCHECK" "$root/obs.log" || true
 [[ "$rc" == 0 ]]
-[[ $(grep -c 'EDITCHECK .*=[1]$' "$root/obs.log") == 16 ]]
+[[ $(grep -c 'EDITCHECK .*=[1]$' "$root/obs.log") == 30 ]]
 ! grep -q 'EDITCHECK .*=[0]$' "$root/obs.log"

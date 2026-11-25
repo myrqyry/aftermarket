@@ -36,12 +36,14 @@ private:
  struct FilterRow{QString id,name;bool enabled;bool operator==(const FilterRow &o)const{return id==o.id&&name==o.name&&enabled==o.enabled;}};
  QList<FilterRow> filterRows_;
  QComboBox *transformPresets_;
- QPushButton *saveTransform_,*loadTransform_,*deleteTransform_,*up_,*down_;
+ QPushButton *saveTransform_,*loadTransform_,*deleteTransform_,*up_,*down_,*addFilter_,*removeFilter_;
  QLabel *feedback_;
  bool updating_=false;
  void refreshPresetNames();
  void setTransformAvailable(bool);
  void changeFilterOrder(bool);
+ void openFilterPicker();
+ void confirmRemoveFilter();
  bool currentTargetStillValid()const;
  void schedule();
  void setPinned(bool);

@@ -9,6 +9,8 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QMessageBox>
+#include <QInputDialog>
+#include <QMap>
 #include <QScopedValueRollback>
 #include <QStyle>
 #include <QListWidget>
@@ -94,7 +96,11 @@ SourceInspectorDock::SourceInspectorDock(QMainWindow *main,QString presetFile):Q
  auto *orderRow=new QHBoxLayout;
  up_=new QPushButton(this);up_->setIcon(style()->standardIcon(QStyle::SP_ArrowUp));up_->setObjectName("aftermarket-inspect-filter-up");up_->setAccessibleName("Move filter up");
  down_=new QPushButton(this);down_->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));down_->setObjectName("aftermarket-inspect-filter-down");down_->setAccessibleName("Move filter down");
- orderRow->addWidget(up_);orderRow->addWidget(down_);orderRow->addStretch();root->addLayout(orderRow);
+ addFilter_=new QPushButton("+",this);addFilter_->setObjectName("aftermarket-inspect-filter-add");addFilter_->setAccessibleName("Add filter");addFilter_->setToolTip("Add a compatible OBS filter");
+ removeFilter_=new QPushButton(this);removeFilter_->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));removeFilter_->setObjectName("aftermarket-inspect-filter-remove");removeFilter_->setAccessibleName("Remove selected filter");removeFilter_->setToolTip("Remove selected filter");
+ orderRow->addWidget(up_);orderRow->addWidget(down_);orderRow->addStretch();orderRow->addWidget(addFilter_);orderRow->addWidget(removeFilter_);root->addLayout(orderRow);
+ connect(addFilter_,&QPushButton::clicked,this,[this]{openFilterPicker();});
+ connect(removeFilter_,&QPushButton::clicked,this,[this]{confirmRemoveFilter();});
  connect(up_,&QPushButton::clicked,this,[this]{changeFilterOrder(true);});
  connect(down_,&QPushButton::clicked,this,[this]{changeFilterOrder(false);});
  connect(filterList_,&QListWidget::itemChanged,this,[this](QListWidgetItem *item){
@@ -104,7 +110,7 @@ SourceInspectorDock::SourceInspectorDock(QMainWindow *main,QString presetFile):Q
   if(!setInspectorFilterEnabled(target_.source,id,item->checkState()==Qt::Checked))label(feedback_,"Filter no longer available.");
   schedule();
  });
- connect(filterList_,&QListWidget::currentItemChanged,this,[this]{const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);});
+ connect(filterList_,&QListWidget::currentItemChanged,this,[this]{const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);removeFilter_->setEnabled(selected);});
  usageButton_=new QPushButton("Find scene usage",this);root->addWidget(usageButton_);
  usage_=new QLabel(this);usage_->setWordWrap(true);usage_->setTextFormat(Qt::PlainText);usage_->setObjectName("aftermarket-inspect-usage");root->addWidget(usage_);
  connect(pin_,&QPushButton::toggled,this,[this](bool on){setPinned(on);schedule();});
@@ -129,7 +135,7 @@ void SourceInspectorDock::setPinned(bool pinned){
 }
 void SourceInspectorDock::clearSelection(){
  target_={};setPinned(false);label(heading_,"Select one source");label(detail_,{});label(transform_,{});label(usage_,{});
- if(!filterRows_.isEmpty()||filterList_->count()){filterRows_.clear();updateFilterList();}setTransformAvailable(false);pin_->setEnabled(false);properties_->setEnabled(false);filters_->setEnabled(false);usageButton_->setEnabled(false);
+ if(!filterRows_.isEmpty()||filterList_->count()){filterRows_.clear();updateFilterList();}setTransformAvailable(false);addFilter_->setEnabled(false);removeFilter_->setEnabled(false);up_->setEnabled(false);down_->setEnabled(false);pin_->setEnabled(false);properties_->setEnabled(false);filters_->setEnabled(false);usageButton_->setEnabled(false);
 }
 void SourceInspectorDock::schedule(){if(isVisible()&&!coalesce_.isActive())coalesce_.start();}
 void SourceInspectorDock::showEvent(QShowEvent *e){QWidget::showEvent(e);schedule();refreshTimer_.start();}
@@ -172,6 +178,7 @@ void SourceInspectorDock::refresh(){
   auto *list=static_cast<QList<FilterRow>*>(p);
   if(list->size()<257)list->append({uuid(filter),utf(obs_source_get_name(filter)),obs_source_enabled(filter)});
  },&rows);
+ addFilter_->setEnabled(rows.size()<256);
  if(rows.size()>256)rows.clear();
  if(rows!=filterRows_){filterRows_=rows;updateFilterList();}
 }
@@ -197,6 +204,42 @@ void SourceInspectorDock::changeFilterOrder(bool up){
  else label(feedback_,"Filter reordered. Undo from OBS Edit menu.");
  refresh();
 }
+void SourceInspectorDock::openFilterPicker(){
+ if(!currentTargetStillValid())return;
+ if(auto *existing=findChild<QInputDialog*>("aftermarket-inspect-filter-picker");existing&&existing->isVisible())return;
+ const auto source=target_.source;
+ const auto types=inspectorFilterTypes(source);
+ QMap<QString,QString> choices;
+ for(const auto &type:types){
+  auto name=type.name;if(choices.contains(name))name+=" ("+type.id+")";
+  choices.insert(name,type.id);
+ }
+ if(choices.isEmpty()){label(feedback_,"No compatible filter types available.");return;}
+ auto *picker=new QInputDialog(this);
+ picker->setObjectName("aftermarket-inspect-filter-picker");picker->setWindowTitle("Add OBS filter");picker->setLabelText("Filter type");
+ picker->setComboBoxItems(choices.keys());picker->setComboBoxEditable(false);
+ picker->setAttribute(Qt::WA_DeleteOnClose);
+ connect(picker,&QInputDialog::accepted,this,[this,picker,source,choices]{
+  if(!isVisible()||target_.source!=source||!currentTargetStillValid())return;
+  const auto type=choices.value(picker->textValue());
+  label(feedback_,addInspectorFilter(source,type)?"Filter added. Undo from OBS Edit menu.":"Filter unavailable or could not be created.");
+  refresh();
+ });picker->open();
+}
+void SourceInspectorDock::confirmRemoveFilter(){
+ auto *row=filterList_->currentItem();
+ if(!row||!currentTargetStillValid())return;
+ if(auto *existing=findChild<QMessageBox*>("aftermarket-inspect-filter-remove-confirm");existing&&existing->isVisible())return;
+ const auto source=target_.source,id=row->data(Qt::UserRole).toString();
+ auto *prompt=new QMessageBox(QMessageBox::Question,"Remove filter","Remove "+row->text()+" from this shared source?",QMessageBox::Yes|QMessageBox::No,this);
+ prompt->setTextFormat(Qt::PlainText);prompt->setObjectName("aftermarket-inspect-filter-remove-confirm");
+ prompt->setDefaultButton(QMessageBox::No);prompt->setAttribute(Qt::WA_DeleteOnClose);
+ connect(prompt,&QMessageBox::finished,this,[this,source,id](int result){
+  if(result!=QMessageBox::Yes||!isVisible()||target_.source!=source||!currentTargetStillValid())return;
+  label(feedback_,removeInspectorFilter(source,id)?"Filter removed. Undo from OBS Edit menu.":"Cannot safely remove this filter; use the native Filters dialog.");
+  refresh();
+ });prompt->open();
+}
 void SourceInspectorDock::updateFilterList(){
  const auto current=filterList_->currentItem()?filterList_->currentItem()->data(Qt::UserRole).toString():QString{};
  const QScopedValueRollback<bool> guard(updating_,true);
@@ -208,7 +251,7 @@ void SourceInspectorDock::updateFilterList(){
   item->setCheckState(row.enabled?Qt::Checked:Qt::Unchecked);
   if(!current.isEmpty()&&current==row.id)filterList_->setCurrentItem(item);
  }
- const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);
+ const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);removeFilter_->setEnabled(selected);
 }
 void SourceInspectorDock::updateUsage(){
  if(target_.source.isEmpty())return;

@@ -666,14 +666,21 @@ are excluded until their parent-layout side effects are qualified.
 
 **Inline filters:** Search names, check/uncheck the enabled state, or select
 a filter and use the arrow buttons to move it within its native filter
-category. Existing filter objects remain attached; the inspector does not
-recreate their settings or private state. Add/remove and full filter
-property editing still use the native Filters dialog.
+category. Existing filter objects remain attached during toggles and reorder.
+The plus button opens a compatible registered filter-type picker and
+creates a uniquely named filter using its defaults. The trash button
+confirms removal of the selected filter from the shared source. Add and
+remove use native OBS serialized source data for history, retaining the
+UUID, settings, enabled state and original chain position on restoration.
+Restoration recreates the removed filter; transient runtime state is not
+preserved. Nonduplicable, unavailable or oversized (over 1 MiB serialized)
+filters are excluded from undoable removal; use the native Filters dialog
+for these and for full property editing.
 
-**Undo/redo:** A changed transform preset load, filter toggle or reorder
+**Undo/redo:** A changed transform preset load, filter toggle, reorder, addition or removal
 creates one nonrepeatable entry in OBS's Edit menu history. Replay resolves
 the original source UUID and scene/item or filter identity, checks the
-collection and expected current transform/chain state, and refuses stale
+collection and expected current transform/chain state (including the serialized filter when removing it), and refuses stale
 or incompatible targets. OBS may consume a skipped history entry even when
 no mutation occurs. Out-of-band edits are not silently overwritten. The
 native history is not a persistent preset library.
