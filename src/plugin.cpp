@@ -138,6 +138,19 @@ static bool setAudioMixerBackside(bool enabled) {
             return levels->sample(routes);
         }
     );
+    patchbay->setDeviceBackend(
+        []{return augment::ObsRouting::deviceDestinations();},
+        [](const QString &source,const QString &device,bool connected){
+            const bool ok=augment::ObsRouting::setDeviceSend(source,device,connected);
+            if(ok&&frontendReady)obs_frontend_save();
+            return ok;
+        });
+    patchbay->setDeviceParameterWriter(
+        [](const QString &source,const QString &device,augment::DeviceParameter parameter,double value){
+            const bool ok=augment::ObsRouting::setDeviceParameter(source,device,parameter,value);
+            if(ok&&frontendReady)obs_frontend_save();
+            return ok;
+        });
     if(!dockFaces->attach(dock,patchbay)){delete patchbay;return false;}
     const QString settingsFile=QDir(QFileInfo(stripConfigPath).absolutePath())
         .filePath("front-audio-controls.json");

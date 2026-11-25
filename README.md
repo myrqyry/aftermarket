@@ -51,8 +51,9 @@ Keep the familiar native mixer or customize selected channels:
 
 ![Native OBS faders with gradient tracks](docs/screenshots/readme/mixer-faders.png)
 
-The mixer still belongs to OBS. AudioBus is not a second audio engine,
-DSP graph, or hardware output router. [Detailed mixer guide](docs/user-guide.md#mixer-and-audiobus).
+**Optional independent device sends:** install [Exeldro's Audio Monitor](https://obsproject.com/forum/resources/audio-monitor.1186/) to expose playback devices below the native track nodes. Drag a source to a device; right-click its wire for independent gain, pan and delay. Existing Audio Monitor filters are not taken over by Aftermarket. Without the plugin, the native graph works normally.
+
+The mixer still belongs to OBS. AudioBus does not implement a second audio engine or DSP graph; optional device sends use the Audio Monitor plugin's own filters. [Detailed mixer guide](docs/user-guide.md#mixer-and-audiobus).
 
 ## Workspace
 

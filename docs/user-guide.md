@@ -492,6 +492,15 @@ Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket →
 
 ![Right-click the headphones for the native OBS monitoring modes](screenshots/readme/audiohub-monitor-menu.webp)
 
+### Independent device sends (optional Audio Monitor integration)
+
+Install [Exeldro's Audio Monitor](https://obsproject.com/forum/resources/audio-monitor.1186/) and restart OBS. When its real `audio_monitor` filter type is registered, AudioBus discovers playback devices through OBS. They appear as named destinations below the six track circles; the native headphones destination remains separate. Refresh audio routes or reopen AudioBus to discover device changes. Without the optional plugin, no device nodes or substitute playback engine appear.
+
+- Drag a source onto a device to create an actual Audio Monitor filter, initially at 50% gain. Dropping an already-connected source is idempotent. Click a device with a source selected to remove an Aftermarket-created send; existing independently created filters remain read-only.
+- Right-click a device for the selected source, or right-click an existing device wire, to edit gain (0–100%), pan (−100% to +100%), and delay (0–10000 ms). A wire intersection offers source/destination choices rather than silently choosing a route. Each edit writes to the filter's OBS settings. Gain 0 is silent; independent filter enable and other advanced settings remain available in OBS Filters. No native fader, track mask or monitoring mode is changed by these edits.
+- Sends are real scene-collection filters and survive Aftermarket UI recovery or unload. Use Remove independent send or OBS Filters to remove them. Existing linked or source-mute-linked filters are not changed through these parameter editors. Offline/unlisted devices and plugin-specific advanced destinations may still be managed through OBS Filters.
+- An independent send may be audible even when the source is muted on the native mixer. Aftermarket starts new sends in Audio Monitor's inactive-source mute mode and leaves native source mute linking disabled. Direct matching output-capture device loops are rejected when identifiable; other feedback paths are possible. Avoid routing captured desktop audio back into its capture device. Device nodes do not claim to measure the physical output signal.
+
 **Native mixer title and bottom control:** After **Collapse/Expand**, **Pop out**, and **Close**, the **vertical three-dot button in the genuine OBS dock title** opens the pan/sync presentation setting and the original **hidden sources, mixer orientation, Advanced Audio Properties and Mixer options** actions, plus a **Channel settings** submenu with per-source native Pan and Sync editors. The old OBS footer is hidden only when the header menu is actually available; floating or cramped docks restore it, so controls remain accessible. The interactive **AudioBus** button lives by itself at the dock's bottom edge and switches between mixer and routing pages, never stacking the entire routing graph below OBS. Dock icons, native titles and drag behavior remain native; undock and close actions are now consolidated into the header overflow when available.
 
 ![Mixer with only the AudioBus switch at the bottom](screenshots/readme/audiohub-bottom-switch.webp)
@@ -504,11 +513,11 @@ Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket →
 
 Pan and sync are read from and written to the same source properties shown in **Advanced Audio Properties**. Adjustments request a debounced OBS project save; the separate atomic `plugin_config/aftermarket/front-audio-controls.json` holds only the slider/knob presentation preference. External source changes are read back while the dock is visible, and all additional widgets detach cleanly.
 
-**Monitoring note:** the physical Monitor Device is selected under **OBS Settings → Audio → Advanced**. Routing a source to an already-captured monitor device can cause echo/feedback. Monitor Only suppresses normal program output even if track assignments remain enabled. The plugin neither chooses a hardware output nor performs arbitrary DSP/bus routing. With many sources, the diagram can still scroll.
+**Monitoring note:** the physical Monitor Device is selected under **OBS Settings → Audio → Advanced**. Routing a source to an already-captured monitor device can cause echo/feedback. Monitor Only suppresses normal program output even if track assignments remain enabled. Native OBS monitoring still uses that one device. Independent device sends, when available, use the optional Audio Monitor backend; Aftermarket performs no arbitrary DSP/bus routing. With many sources, the diagram can still scroll.
 
 ### Patchbay routing diagnostics
 
-The **AudioBus** routing view exposes native OBS tracks 1–6 and monitoring.
+The **AudioBus** routing view exposes native OBS tracks 1–6 and monitoring, plus optional independent device sends.
 Source tooltips distinguish muted, disabled, OBS-inactive, silent and unknown
 signal states. Measured activity drives the palette-derived node outlines;
 selection takes precedence. OBS's audio-active flag alone does not prove
@@ -517,8 +526,7 @@ is reaching a monitor device.
 
 Hovering and inspecting do not modify routes. Explicit track clicks, source
 drags and monitoring controls edit native OBS routing. Aftermarket does not
-inspect or modify atkAudio PluginHost2 graphs, hardware device routing or VST
-chains.
+inspect or modify atkAudio PluginHost2 graphs or VST chains. Independent device sends are managed only via Audio Monitor filters.
 
 ### Rotary mixer knobs
 

@@ -14,6 +14,9 @@
 #include <QSignalBlocker>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPainterPathStroker>
+#include <QSpinBox>
+#include <QWidgetAction>
 #include <QMouseEvent>
 #include <QContextMenuEvent>
 #include <QKeyEvent>
@@ -74,7 +77,7 @@ class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int targetRight=13; // circular output hit area, with clear outer margin
     static constexpr int targetWidth=28; // true circular hit target
     int rowStep() const {
-        return qBound(minStep,(height()-58)/qMax(6,int(routes.size())),maxStep);
+        return qBound(minStep,(height()-58)/qMax(6+int(devices.size()),int(routes.size())),maxStep);
     }
     int nodeHeight() const {return qMin(26,rowStep()-2);}
     int pressedSource=-1;
@@ -89,6 +92,13 @@ class AudioPatchbay::Canvas final : public QWidget {
         return hoveredSource.isEmpty()?selected:hoveredSource;
     }
     bool hasConnection(const RouteSource &src,int target) const {
+        if(target>monitorTarget){
+            const int i=target-monitorTarget-1;
+            if(i>=devices.size())return false;
+            return std::any_of(src.deviceSends.begin(),src.deviceSends.end(),[&](const auto &send){
+                return send.deviceId==devices[i].id&&send.enabled;
+            });
+        }
         return target==monitorTarget?src.monitor!=0:
             target>=1&&target<=6&&(src.tracks&(1u<<(target-1)));
     }
@@ -108,6 +118,8 @@ class AudioPatchbay::Canvas final : public QWidget {
         // stock Audio Mixer dock is too short to show all six track rows.
         if(t==monitorTarget)
             return QRect(width()-targetRight-targetWidth,2,targetWidth,targetWidth);
+        if(t>monitorTarget)
+            return QRect(width()-targetRight-92,firstY+(t-2)*rowStep()-nodeHeight()/2,92,nodeHeight());
         return QRect(width()-targetRight-targetWidth,
                      firstY+(t-1)*rowStep()-nodeHeight()/2,targetWidth,nodeHeight());
     }
@@ -117,16 +129,19 @@ class AudioPatchbay::Canvas final : public QWidget {
         return -1;
     }
     int trackAt(QPoint pt) const {
-        for(int t=1;t<=monitorTarget;++t){
+        for(int t=1;t<=targetCount();++t){
             const auto r=trackRect(t);
+            if(t>monitorTarget){if(r.contains(pt))return t;continue;}
             const QPointF delta=QPointF(pt)-QPointF(r.center());
             const qreal radius=r.width()/2.0;
             if(delta.x()*delta.x()+delta.y()*delta.y()<=radius*radius)return t;
         }
         return -1;
     }
-    QPainterPath cable(int fromY,int toY) const {
-        const qreal endX=width()-targetRight-targetWidth;
+    QPainterPath cable(int fromY,int target) const {
+        const auto rect=trackRect(target);
+        const qreal endX=rect.left();
+        const int toY=rect.center().y();
         const qreal mid=portX+(endX-portX)/2.0;
         QPainterPath result(QPointF(portX,fromY));
         result.cubicTo(mid,fromY,mid,toY,endX,toY);
@@ -143,6 +158,19 @@ class AudioPatchbay::Canvas final : public QWidget {
     }
 public:
     QVector<RouteSource> routes;
+    QVector<DeviceDestination> devices;
+    int targetCount()const{return monitorTarget+devices.size();}
+    QString deviceId(int target)const{
+        const int i=target-monitorTarget-1;
+        return i>=0&&i<devices.size()?devices[i].id:QString{};
+    }
+    void setDevices(const QVector<DeviceDestination> &value){
+        if(devices==value)return;
+        resetDrag();devices=value;
+        setMinimumWidth(devices.isEmpty()?240:310);
+        setMinimumHeight(58+qMax(int(routes.size()),6+int(devices.size()))*minStep);
+        updateGeometry();update();
+    }
     QString selected;
     bool showAll=true;
     static bool sourceLive(const RouteSource &src){
@@ -172,6 +200,8 @@ public:
     std::function<void(int)> onTrack;
     std::function<void(int,const QPoint &)> onContextTarget;
     std::function<void(const QString &,int)> onConnect;
+    using SendTarget=QPair<QString,QString>;
+    std::function<void(const QList<SendTarget> &,const QPoint &)> onContextSends;
 
     explicit Canvas(QWidget *parent=nullptr):QWidget(parent){
         setObjectName("aftermarket-route-canvas");
@@ -193,7 +223,7 @@ public:
     int visibleCableCount() const {
         int count=0;
         for(const auto &src:routes)
-            for(int target=1;target<=monitorTarget;++target)
+            for(int target=1;target<=targetCount();++target)
                 if(visibleWire(src,target))++count;
         return count;
     }
@@ -206,7 +236,7 @@ public:
         if(!hoveredSource.isEmpty()&&!std::any_of(routes.begin(),routes.end(),
             [this](const RouteSource &src){return src.id==hoveredSource;}))
             hoveredSource.clear();
-        setMinimumHeight(58+qMax(routes.size(),6)*minStep);
+        setMinimumHeight(58+qMax(int(routes.size()),6+int(devices.size()))*minStep);
         updateGeometry();
         update();
     }
@@ -236,7 +266,7 @@ protected:
         p.setPen(caption);
         p.drawText(QRect(7,3,120,23),Qt::AlignVCenter,"Sources");
 
-        for(int t=1;t<=monitorTarget;++t){
+        for(int t=1;t<=targetCount();++t){
             const auto rect=trackRect(t);
             const auto selectedIt=std::find_if(routes.begin(),routes.end(),
                 [this](const RouteSource &src){return src.id==selected;});
@@ -251,7 +281,8 @@ protected:
             p.setPen(QPen(live?activeColor:(hoveredTarget==t?hovered:inactive),
                           live?1.85:(hoveredTarget==t?1.3:0.95)));
             p.setBrush(connected?paletteBlend(base,accent,13):base);
-            p.drawEllipse(rect);
+            if(t>monitorTarget)p.drawRoundedRect(rect,4,4);
+            else p.drawEllipse(rect);
             p.setFont(bodyFont);
             p.setPen(fg);
             if(t==monitorTarget) {
@@ -261,6 +292,10 @@ protected:
                 p.drawArc(QRectF(centre.x()-6.6,centre.y()-7.2,13.2,14.4),20*16,140*16);
                 p.drawRoundedRect(QRectF(centre.x()-7.6,centre.y(),3.2,6.2),1.1,1.1);
                 p.drawRoundedRect(QRectF(centre.x()+4.4,centre.y(),3.2,6.2),1.1,1.1);
+            }else if(t>monitorTarget){
+                p.setFont(captionFont);
+                p.drawText(rect.adjusted(3,0,-3,0),Qt::AlignCenter,
+                    p.fontMetrics().elidedText(devices[t-monitorTarget-1].name,Qt::ElideRight,rect.width()-6));
             }else {
                 p.drawText(rect,Qt::AlignCenter,QString::number(t));
             }
@@ -274,17 +309,20 @@ protected:
                 const auto &src=routes.at(i);
                 const bool current=src.id==focusedSource();
                 if(current!=(pass==1))continue;
-                for(int track=1;track<=monitorTarget;++track){
+                for(int track=1;track<=targetCount();++track){
                     if(!visibleWire(src,track))continue;
                     // Muted/disabled source routes remain wired in OBS; their
                     // dashed strokes indicate status, not disconnected wiring.
-                    const bool healthy=src.enabled&&!src.muted;
+                    const bool healthy=track>monitorTarget?
+                        std::any_of(src.deviceSends.begin(),src.deviceSends.end(),[&](const auto &send){
+                            return send.deviceId==deviceId(track)&&send.enabled&&send.volume>0;
+                        }):src.enabled&&!src.muted;
                     QColor wire=current?accent:fg;
                     wire.setAlpha(current?(healthy?225:155):(healthy?145:90));
                     p.setPen(QPen(wire,current?1.25:0.8,
                                   healthy?Qt::SolidLine:Qt::DashLine,Qt::RoundCap));
                     p.setBrush(Qt::NoBrush);
-                    p.drawPath(cable(firstY+i*rowStep(),trackRect(track).center().y()));
+                    p.drawPath(cable(firstY+i*rowStep(),track));
                 }
             }
         if(dragging){
@@ -297,7 +335,7 @@ protected:
             const int sourceIndex=origin==routes.cend()?-1:int(origin-routes.cbegin());
             if(sourceIndex>=0){
                 const int y=firstY+sourceIndex*rowStep();
-                if(hoveredTarget>0)p.drawPath(cable(y,trackRect(hoveredTarget).center().y()));
+                if(hoveredTarget>0)p.drawPath(cable(y,hoveredTarget));
                 else{
                     QPainterPath draft(QPointF(portX,y));
                     draft.cubicTo(portX+28,y,dragPoint.x()-28,dragPoint.y(),dragPoint.x(),dragPoint.y());
@@ -395,6 +433,24 @@ protected:
             event->accept(); // don't propagate to OBS's Audio Mixer context menu
             return;
         }
+        if(onContextSends){
+            const auto point=event->pos();
+            const int target=trackAt(point);
+            QList<SendTarget> candidates;
+            if(target>monitorTarget&&!selected.isEmpty()){
+                candidates.append({selected,deviceId(target)});
+            }else if(target<0&&sourceAt(point)<0){
+                QPainterPathStroker hit;hit.setWidth(8);
+                for(int i=0;i<routes.size();++i)
+                    for(int t=monitorTarget+1;t<=targetCount();++t)
+                        if(visibleWire(routes[i],t)&&hit.createStroke(cable(firstY+i*rowStep(),t)).contains(point))
+                            candidates.append({routes[i].id,deviceId(t)});
+            }
+            if(!candidates.isEmpty()){
+                onContextSends(candidates,event->globalPos());
+                event->accept();return;
+            }
+        }
         QWidget::contextMenuEvent(event);
     }
     void mousePressEvent(QMouseEvent *event) override {
@@ -461,6 +517,9 @@ protected:
                 if(target==monitorTarget)
                     setToolTip(QStringLiteral("Headphones · native OBS Monitor · right-click for Monitor Only and other modes · %1 connected %2 · %3 · not Track 7")
                         .arg(incoming).arg(incoming==1?"source":"sources",signal));
+                else if(target>monitorTarget)
+                    setToolTip(devices[target-monitorTarget-1].name+
+                        " · Independent Audio Monitor send · right-click for send settings · may play despite source mute; avoid feedback loops");
                 else
                     setToolTip(QStringLiteral("Track %1 · %2 connected %3 · %4")
                         .arg(target).arg(incoming).arg(incoming==1?"source":"sources",signal));
@@ -529,9 +588,13 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     canvas->onSource=[this](const QString &id){selectSource(id);};
     canvas->onTrack=[this](int track){
         if(track==7)toggleMonitorOutput();
+        else if(track>7)toggleDevice(canvas->deviceId(track));
         else toggleTrack(track);
     };
-    canvas->onConnect=[this](const QString &id,int track){connectRoute(id,track);};
+    canvas->onConnect=[this](const QString &id,int track){
+        if(track>7)connectDevice(id,canvas->deviceId(track));
+        else connectRoute(id,track);
+    };
     scroll->setWidget(canvas);
     root->addWidget(scroll,1);
     monitorMenu=new QMenu(this);
@@ -551,6 +614,23 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
         if(target!=7||selected.isEmpty())return;
         syncMonitorMenu();
         monitorMenu->popup(global);
+    };
+    canvas->onContextSends=[this](const QList<Canvas::SendTarget> &candidates,const QPoint &global){
+        auto *menu=new QMenu(this);
+        menu->setObjectName("aftermarket-device-send-menu");
+        connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+        for(const auto &candidate:candidates){
+            QMenu *editor=menu;
+            if(candidates.size()>1){
+                const auto source=std::find_if(routes.begin(),routes.end(),[&](const auto &r){return r.id==candidate.first;});
+                const auto device=std::find_if(destinations.begin(),destinations.end(),[&](const auto &d){return d.id==candidate.second;});
+                if(source==routes.end()||device==destinations.end())continue;
+                editor=menu->addMenu(source->name+" → "+device->name);
+            }
+            populateDeviceSendMenu(editor,candidate.first,candidate.second);
+        }
+        if(menu->isEmpty()){delete menu;return;}
+        menu->popup(global);
     };
     timer=new QTimer(this);
     timer->setInterval(950);
@@ -598,8 +678,99 @@ void AudioPatchbay::populateRoutingMenu(QMenu *menu){
     reload->setObjectName("aftermarket-refresh-audio-routes");
     reload->setToolTip("Read current audio routes from OBS.");
     connect(reload,&QAction::triggered,menu,[safe]{
-        if(safe)safe->refresh();
+        if(safe){safe->refreshDevices();safe->refresh();}
     });
+}
+void AudioPatchbay::setDeviceBackend(DeviceQuery devices,SetDeviceSend send){
+    deviceQuery=std::move(devices);setDeviceSend=std::move(send);
+    refreshDevices();refresh();
+}
+void AudioPatchbay::refreshDevices(){
+    destinations=deviceQuery?deviceQuery():QVector<DeviceDestination>{};
+    canvas->setDevices(destinations);
+}
+void AudioPatchbay::setDeviceParameterWriter(DeviceParameterWriter writer){
+    deviceParameterWriter=std::move(writer);
+}
+bool AudioPatchbay::populateDeviceSendMenu(QMenu *menu,const QString &id,const QString &device){
+    if(!menu)return false;
+    const auto current=query?query():routes;
+    const auto source=std::find_if(current.begin(),current.end(),[&](const auto &r){return r.id==id;});
+    const auto dest=std::find_if(destinations.begin(),destinations.end(),[&](const auto &d){return d.id==device;});
+    if(source==current.end()||dest==destinations.end())return false;
+    menu->addSection(source->name+" → "+dest->name);
+    const auto send=std::find_if(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device;});
+    if(send==source->deviceSends.end()){
+        auto *add=menu->addAction("Connect independent send");
+        connect(add,&QAction::triggered,menu,[this,id,device]{connectDevice(id,device);});
+        return true;
+    }
+    const auto matches=std::count_if(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device;});
+    if(!send->managed||matches!=1){
+        menu->addAction("External or duplicate filters — edit in OBS Filters")->setEnabled(false);
+        return true;
+    }
+    if(deviceParameterWriter){
+        auto addEditor=[this,menu,id,device](const QString &label,const char *name,DeviceParameter parameter,
+             int min,int max,int value,int step,const QString &suffix,double factor){
+            auto *action=new QWidgetAction(menu);
+            auto *row=new QWidget(menu);
+            auto *layout=new QHBoxLayout(row);layout->setContentsMargins(8,2,8,2);
+            layout->addWidget(new QLabel(label,row));
+            auto *spin=new QSpinBox(row);
+            spin->setObjectName(name);
+            spin->setRange(min,max);spin->setSingleStep(step);
+            spin->setSuffix(suffix);spin->setKeyboardTracking(false);
+            spin->setValue(value);
+            layout->addStretch();layout->addWidget(spin);
+            action->setDefaultWidget(row);menu->addAction(action);
+            connect(spin,qOverload<int>(&QSpinBox::valueChanged),row,
+                [this,id,device,parameter,factor,spin,previous=value](int next)mutable{
+                    if(deviceParameterWriter&&deviceParameterWriter(id,device,parameter,next*factor)){
+                        previous=next;refresh();notify("Updated independent send");
+                    }else{
+                        const QSignalBlocker block(spin);spin->setValue(previous);
+                        refresh();notify("Send unavailable or linked; edit in OBS Filters",true);
+                    }
+                });
+        };
+        addEditor("Gain","aftermarket-send-gain",DeviceParameter::Gain,0,100,qRound(send->volume),5,"%",1);
+        addEditor("Pan","aftermarket-send-pan",DeviceParameter::Pan,-100,100,qRound(send->balance*100),5,"%",.01);
+        addEditor("Delay","aftermarket-send-delay",DeviceParameter::Delay,0,10000,send->delayMs,10," ms",1);
+    }
+    auto *disconnect=menu->addAction("Remove independent send");
+    connect(disconnect,&QAction::triggered,menu,[this,id,device]{
+        const bool ok=setDeviceSend&&setDeviceSend(id,device,false);
+        refresh();notify(ok?"Disconnected independent device send":"Device send could not be disconnected",!ok);
+    });
+    return true;
+}
+int AudioPatchbay::deviceDestinationCount()const{return destinations.size();}
+bool AudioPatchbay::connectDevice(const QString &id,const QString &device){
+    if(!setDeviceSend||device.isEmpty()||
+       std::none_of(destinations.begin(),destinations.end(),[&](const auto &d){return d.id==device;}))return false;
+    const auto current=query?query():routes;
+    const auto source=std::find_if(current.begin(),current.end(),[&](const auto &r){return r.id==id;});
+    if(source==current.end())return false;
+    if(std::any_of(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device&&s.enabled;})){
+        refresh();selectSource(id);return true;
+    }
+    const bool ok=setDeviceSend(id,device,true);
+    refresh();if(ok)selectSource(id);
+    notify(ok?"Connected independent device send":"Cannot connect device (unavailable, external filter or feedback risk)",!ok);
+    return ok;
+}
+bool AudioPatchbay::toggleDevice(const QString &device){
+    if(selected.isEmpty()||!setDeviceSend)return false;
+    const auto current=query?query():routes;
+    const auto source=std::find_if(current.begin(),current.end(),[&](const auto &r){return r.id==selected;});
+    if(source==current.end())return false;
+    const auto send=std::find_if(source->deviceSends.begin(),source->deviceSends.end(),[&](const auto &s){return s.deviceId==device&&s.enabled;});
+    if(send==source->deviceSends.end())return connectDevice(selected,device);
+    if(!send->managed){notify("External Audio Monitor filter: edit it in OBS Filters",true);return false;}
+    const bool ok=setDeviceSend(selected,device,false);
+    refresh();notify(ok?"Disconnected independent device send":"Device send could not be disconnected",!ok);
+    return ok;
 }
 int AudioPatchbay::visibleCableCount() const{return canvas->visibleCableCount();}
 void AudioPatchbay::setSourceOrderProvider(SourceOrderProvider provider){
@@ -608,6 +779,7 @@ void AudioPatchbay::setSourceOrderProvider(SourceOrderProvider provider){
 }
 void AudioPatchbay::showEvent(QShowEvent *event){
     QWidget::showEvent(event);
+    refreshDevices();
     // Refresh before DockFaces captures the incoming face for its animation.
     refresh();
 }

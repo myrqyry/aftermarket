@@ -15,6 +15,21 @@ struct SignalReading {
     bool active=false;
     bool operator==(const SignalReading &o)const{return known==o.known&&active==o.active;}
 };
+struct DeviceDestination {
+    QString id,name;
+    bool operator==(const DeviceDestination &o)const{return id==o.id&&name==o.name;}
+};
+enum class DeviceParameter { Gain, Pan, Delay };
+struct DeviceSend {
+    QString deviceId;
+    bool managed=false,enabled=false;
+    double volume=100;
+    double balance=0;
+    int delayMs=0;
+    bool operator==(const DeviceSend &o)const{
+        return deviceId==o.deviceId&&managed==o.managed&&enabled==o.enabled&&volume==o.volume&&balance==o.balance&&delayMs==o.delayMs;
+    }
+};
 struct RouteSource {
     QString id,name;
     uint32_t tracks=0;
@@ -25,11 +40,12 @@ struct RouteSource {
     QString sourceType; // OBS registered source ID, never inferred from its display name
     bool signalKnown=false;
     bool signalActive=false;
+    QVector<DeviceSend> deviceSends;
     bool operator==(const RouteSource &o) const {
         return id==o.id&&name==o.name&&tracks==o.tracks&&monitor==o.monitor
             &&muted==o.muted&&enabled==o.enabled&&audioActive==o.audioActive
             &&sourceType==o.sourceType
-            &&signalKnown==o.signalKnown&&signalActive==o.signalActive;
+            &&signalKnown==o.signalKnown&&signalActive==o.signalActive&&deviceSends==o.deviceSends;
     }
 };
 class AudioPatchbay final : public QWidget {
@@ -47,6 +63,15 @@ public:
                   QWidget *parent=nullptr,SetTrack setTrack={},SignalProvider levels={});
     using SourceOrderProvider=std::function<QStringList()>;
     void setSourceOrderProvider(SourceOrderProvider provider);
+    using DeviceQuery=std::function<QVector<DeviceDestination>()>;
+    using SetDeviceSend=std::function<bool(const QString &,const QString &,bool)>;
+    void setDeviceBackend(DeviceQuery devices,SetDeviceSend send);
+    using DeviceParameterWriter=std::function<bool(const QString &,const QString &,DeviceParameter,double)>;
+    void setDeviceParameterWriter(DeviceParameterWriter writer);
+    bool populateDeviceSendMenu(QMenu *menu,const QString &source,const QString &device);
+    int deviceDestinationCount() const;
+    bool connectDevice(const QString &source,const QString &device);
+    bool toggleDevice(const QString &device);
     void refresh();
     void refreshLevels();
     int routeCount() const;
@@ -77,6 +102,11 @@ private:
     SetTrack setTrack;
     SignalProvider levels;
     SourceOrderProvider sourceOrder;
+    DeviceQuery deviceQuery;
+    SetDeviceSend setDeviceSend;
+    DeviceParameterWriter deviceParameterWriter;
+    QVector<DeviceDestination> destinations;
+    void refreshDevices();
     QVector<RouteSource> routes;
     QString selected;
     Canvas *canvas=nullptr;

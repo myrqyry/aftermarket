@@ -76,8 +76,51 @@ int main(int argc,char **argv) {
     REQUIRE(!augment::NativeAudioSettings::setPan(uuid,-.1));
     REQUIRE(!augment::NativeAudioSettings::setOffsetMs("not-a-source",0));
 
+    // Missing optional backend must never create a placeholder filter.
+    REQUIRE(!augment::ObsRouting::deviceMonitoringAvailable());
+    REQUIRE(!augment::ObsRouting::setDeviceSend(uuid,"test-sink",true));
+    // A real libobs registered filter exercises creation, settings, and ownership.
+    obs_source_info filterInfo=sourceInfo;
+    filterInfo.id="audio_monitor";filterInfo.type=OBS_SOURCE_TYPE_FILTER;
+    obs_register_source(&filterInfo);
+    REQUIRE(augment::ObsRouting::deviceMonitoringAvailable());
+    REQUIRE(!augment::ObsRouting::setDeviceSend(uuid,"nonexistent-sink",true));
+    auto *settings=obs_data_create();obs_data_set_string(settings,"device","external-sink");
+    auto *external=obs_source_create_private("audio_monitor","External monitor",settings);
+    obs_data_release(settings);REQUIRE(external);
+    obs_source_filter_add(source,external);
+    record=matches(augment::ObsRouting::list());
+    REQUIRE(record.deviceSends.size()==1&&record.deviceSends[0].deviceId=="external-sink");
+    REQUIRE(!record.deviceSends[0].managed);
+    REQUIRE(!augment::ObsRouting::setDeviceSend(uuid,"external-sink",false));
+    REQUIRE(!augment::ObsRouting::setDeviceParameter(uuid,"external-sink",augment::DeviceParameter::Gain,20));
+    REQUIRE(obs_filter_get_parent(external)==source);
+    obs_source_filter_remove(source,external);obs_source_release(external);
+    // Real OBS filter settings store independently editable send parameters.
+    settings=obs_data_create();
+    obs_data_set_string(settings,"device","managed-sink");
+    obs_data_set_bool(settings,"aftermarket_device_send",true);
+    obs_data_set_double(settings,"volume",50);
+    auto *managed=obs_source_create_private("audio_monitor","Managed monitor",settings);
+    obs_data_release(settings);REQUIRE(managed);
+    obs_source_filter_add(source,managed);
+    const auto nativeGain=obs_source_get_volume(source);
+    REQUIRE(augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Gain,35));
+    REQUIRE(augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Pan,-.4));
+    REQUIRE(augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Delay,125));
+    REQUIRE(!augment::ObsRouting::setDeviceParameter(uuid,"managed-sink",augment::DeviceParameter::Gain,150));
+    record=matches(augment::ObsRouting::list());
+    REQUIRE(record.deviceSends.size()==1&&record.deviceSends[0].managed);
+    REQUIRE(qAbs(record.deviceSends[0].volume-35)<.001);
+    REQUIRE(qAbs(record.deviceSends[0].balance+.4)<.001&&record.deviceSends[0].delayMs==125);
+    REQUIRE(obs_source_get_volume(source)==nativeGain&&obs_source_muted(source));
+    REQUIRE(augment::ObsRouting::setDeviceSend(uuid,"managed-sink",false));
+    REQUIRE(matches(augment::ObsRouting::list()).deviceSends.isEmpty());
+    obs_source_release(managed);
+
     obs_source_remove(source);
     obs_source_release(source);
+    obs_queue_task(OBS_TASK_DESTROY, [](void *){}, nullptr, true); // headless destroy-queue barrier
     obs_shutdown();
     std::cout<<"OBS bridge read-only source status, UUID routing and monitoring verified\n";
     return 0;

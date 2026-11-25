@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QToolButton>
 #include <QLabel>
+#include <QSpinBox>
 #include <QMouseEvent>
 #include <QContextMenuEvent>
 #include <QPainter>
@@ -362,6 +363,40 @@ int main(int argc,char **argv){
  REQUIRE(bay.selectedId()=="browser");
  REQUIRE(!bay.selectSource("voice"));
  REQUIRE(!bay.connectRoute("voice",2));
+ REQUIRE(trackWrites==1);
+ // Independent device destination nodes use stable device IDs, not track bits.
+ int sends=0;QString sentSource,sentDevice;bool enabled=false;
+ bay.setDeviceBackend([]{return QVector<augment::DeviceDestination>{{"sink-A","Test speakers"}};},
+     [&](const QString &id,const QString &device,bool connect){
+         ++sends;sentSource=id;sentDevice=device;enabled=connect;
+         for(auto &src:sources)if(src.id==id){
+             src.deviceSends.clear();if(connect)src.deviceSends.append({device,true,true,75});return true;
+         }return false;
+     });
+ bay.refresh();app.processEvents();
+ REQUIRE(bay.deviceDestinationCount()==1);
+ REQUIRE(bay.selectSource("browser"));
+ const int cablesBeforeDevice=bay.visibleCableCount();
+ REQUIRE(bay.connectDevice("browser","sink-A"));
+ REQUIRE(sends==1&&sentSource=="browser"&&sentDevice=="sink-A"&&enabled);
+ REQUIRE(bay.visibleCableCount()==cablesBeforeDevice+1);
+ REQUIRE(bay.connectDevice("browser","sink-A")&&sends==1);
+ int parameterWrites=0;
+ bay.setDeviceParameterWriter([&](const QString &id,const QString &device,augment::DeviceParameter param,double value){
+     if(id!="browser"||device!="sink-A"||param!=augment::DeviceParameter::Gain)return false;
+     ++parameterWrites;for(auto &src:sources)if(src.id==id)src.deviceSends[0].volume=value;
+     return true;
+ });
+ QMenu sendMenu;
+ REQUIRE(bay.populateDeviceSendMenu(&sendMenu,"browser","sink-A"));
+ auto *sendGain=sendMenu.findChild<QSpinBox*>("aftermarket-send-gain");
+ REQUIRE(sendGain&&sendGain->value()==75);
+ sendGain->setValue(25);
+ REQUIRE(parameterWrites==1&&sources[0].deviceSends[0].volume==25);
+ REQUIRE(trackWrites==1);
+
+ REQUIRE(bay.toggleDevice("sink-A")&&sends==2&&!enabled);
+ REQUIRE(bay.visibleCableCount()==cablesBeforeDevice);
  REQUIRE(trackWrites==1);
  sources.clear();bay.refresh();
  REQUIRE(bay.routeCount()==0&&bay.selectedId().isEmpty());
