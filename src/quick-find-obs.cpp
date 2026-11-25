@@ -1,4 +1,5 @@
 #include "quick-find.h"
+#include "source-performance.h"
 #include <obs.h>
 #include <obs-frontend-api.h>
 #include <QHash>
@@ -99,7 +100,8 @@ void addSource(Collector &c,obs_source_t *source,bool scene){
     const QString location=paths.join(" · ").left(320);
     c.entries.append({scene?QuickFindEntry::Scene:QuickFindEntry::Source,id,{},
         utf(obs_source_get_name(source)),scene?"scene":utf(obs_source_get_unversioned_id(source)),
-        scene?QString{}:localInput(source),location,c.context->sceneId.value(id)});
+        scene?QString{}:localInput(source),location,c.context->sceneId.value(id),!scene&&
+        (obs_source_get_output_flags(source)&OBS_SOURCE_ASYNC_VIDEO)==OBS_SOURCE_ASYNC_VIDEO&&SourcePerformance::available()});
     addFilters(c,source);
 }
 }
@@ -127,7 +129,7 @@ QList<QuickFindEntry> collectObsQuickFind(){
 }
 
 bool performObsQuickFind(const QuickFindEntry &entry,QuickFind::Action action){
-    if(action==QuickFind::PinSource)return false; // handled by the optional source-dock adapter
+    if(action==QuickFind::PinSource||action==QuickFind::Performance)return false; // handled by the optional source-dock adapter
     if(action==QuickFind::Default)
         action=entry.kind==QuickFindEntry::Filter?QuickFind::Filters:
             entry.kind==QuickFindEntry::Scene||

@@ -19,11 +19,12 @@ struct QuickFindEntry {
     QString detail;      // explicitly permitted file path or URL
     QString location;    // parent scene or filter owner name
     QString sceneId;     // parent scene UUID; only for a source hit
+    bool performanceAvailable=false;
 };
 
 class QuickFind final: public QDialog {
 public:
-    enum Action { Default, Properties, Filters, SceneJump, PinSource };
+    enum Action { Default, Properties, Filters, SceneJump, PinSource, Performance };
     using Provider=std::function<QList<QuickFindEntry>()>;
     using Performer=std::function<bool(const QuickFindEntry&,Action)>;
     explicit QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable=false);

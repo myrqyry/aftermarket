@@ -8,6 +8,7 @@
 #include <QShortcut>
 #include <QKeyEvent>
 #include <QPointer>
+#include <QMenu>
 #include <QApplication>
 #include <algorithm>
 
@@ -120,7 +121,24 @@ QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform,bool pi
     });
     auto *escape=new QShortcut(QKeySequence(Qt::Key_Escape),this);
     connect(escape,&QShortcut::activated,this,&QDialog::reject);
-    results_->setContextMenuPolicy(Qt::NoContextMenu);
+    results_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(results_,&QListWidget::customContextMenuRequested,this,[this](const QPoint &pos){
+        auto *item=results_->itemAt(pos);if(!item)return;
+        const int index=item->data(Qt::UserRole).toInt();
+        if(index<0||index>=cached_.size())return;
+        const auto &entry=cached_[index];
+        const bool canPin=!pin_->isHidden()&&entry.kind!=QuickFindEntry::Filter;
+        const bool canConfigure=entry.kind==QuickFindEntry::Source&&entry.performanceAvailable;
+        if(!canPin&&!canConfigure)return;
+        results_->setCurrentItem(item);
+        QMenu menu(this);
+        if(canPin)menu.addAction("Pin to workspace",this,[this]{activate(PinSource);});
+        if(canConfigure){
+            auto *action=menu.addAction("Off-air frame limit…",this,[this]{activate(Performance);});
+            action->setObjectName("aftermarket-source-performance");
+        }
+        menu.exec(results_->viewport()->mapToGlobal(pos));
+    });
 }
 
 void QuickFind::open() {
@@ -161,6 +179,7 @@ bool QuickFind::activate(Action action){
     if(index<0||index>=cached_.size())return false;
     const QuickFindEntry entry=cached_[index];
     if(action==PinSource&&(pin_->isHidden()||entry.kind==QuickFindEntry::Filter))return false;
+    if(action==Performance&&(entry.kind!=QuickFindEntry::Source||!entry.performanceAvailable))return false;
     if(!perform_(entry,action))return false;
     hide();
     return true;

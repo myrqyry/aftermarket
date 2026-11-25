@@ -15,7 +15,7 @@
 int main(int argc,char**argv){
     QApplication app(argc,argv);
     using augment::QuickFindEntry;
-    const QList<QuickFindEntry> data{
+    QList<QuickFindEntry> data{
         {QuickFindEntry::Scene,"scene-one",{},"Starting Soon","Scene",{}, {},{}},
         {QuickFindEntry::Source,"source-a",{},"Game Capture","game_capture", "/home/videos/game.mp4",
             "Starting Soon","scene-one"},
@@ -53,6 +53,20 @@ int main(int argc,char**argv){
     REQUIRE(list->item(0)->text().contains("Blur Pass"));
     REQUIRE(palette.activate(augment::QuickFind::Filters));
     REQUIRE(!palette.isVisible());
+    data[2].performanceAvailable=true;
+    QString configured;
+    augment::QuickFind performancePalette(&main,[&]{return data;},[&](const QuickFindEntry &hit,augment::QuickFind::Action action){
+        if(action!=augment::QuickFind::Performance)return false;
+        configured=hit.id;return true;
+    });
+    performancePalette.open();
+    auto *perfInput=performancePalette.findChild<QLineEdit*>("aftermarket-quick-find-input");
+    perfInput->setText("blur");
+    REQUIRE(!performancePalette.activate(augment::QuickFind::Performance));
+    perfInput->setText("game2");
+    REQUIRE(!performancePalette.activate(augment::QuickFind::Performance));
+    perfInput->setText("web view");
+    REQUIRE(performancePalette.activate(augment::QuickFind::Performance)&&configured=="source-b");
     QString pinned;
     augment::QuickFind pinPalette(&main,[&]{return data;},[&](const QuickFindEntry &hit,augment::QuickFind::Action action){
         if(action!=augment::QuickFind::PinSource)return false;

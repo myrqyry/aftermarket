@@ -11,6 +11,7 @@
 #include "action-strip.h"
 #include "quick-find.h"
 #include "source-dock-pin.h"
+#include "source-performance.h"
 #include "dock-layouts.h"
 #include "workspace-checkpoints.h"
 #include "cue-deck.h"
@@ -43,6 +44,7 @@
 #include <QEventLoop>
 #include <QPushButton>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QRegularExpression>
 #include <util/config-file.h>
 #include "augment.h"
@@ -231,6 +233,30 @@ static bool pinSourceDock(const augment::QuickFindEntry &hit){
         "The native Source Dock creation form could not be verified or the dock was not created. Use the Source Dock manager directly.");
     return ok;
 }
+static bool configureSourcePerformance(const augment::QuickFindEntry &hit){
+    if(!frontendReady||!uiActive||hit.kind!=augment::QuickFindEntry::Source)return false;
+    auto state=augment::SourcePerformance::inspect(hit.id);
+    auto *parent=static_cast<QWidget*>(obs_frontend_get_main_window());
+    if(!state.eligible)return false;
+    if(state.blocked){
+        QMessageBox::information(parent,"Off-air frame limit",
+            "This source already has an external or duplicate Frame Interleave filter. Manage it in native Filters.");
+        return false;
+    }
+    bool accepted=false;
+    const int ms=QInputDialog::getInt(parent,"Off-air frame limit",
+        "Minimum interval in milliseconds while OBS considers this source inactive.\n"
+        "0 removes Aftermarket's filter. 100 ≈ 10 fps; 500 ≈ 2 fps.\n"
+        "All previews of this source share the limit. Active sources bypass it.",
+        state.managed&&state.enabled?state.intervalMs:0,0,1000,1,&accepted);
+    if(!accepted)return false;
+    if(!augment::SourcePerformance::setInterval(hit.id,ms)){
+        QMessageBox::warning(parent,"Off-air frame limit","The source or its filter changed. No new limit was confirmed.");
+        return false;
+    }
+    obs_frontend_save();
+    return true;
+}
 static void showQuickFind(){
     if(!uiActive||!frontendReady)return;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -240,6 +266,7 @@ static void showQuickFind(){
             []{return augment::collectObsQuickFind();},
             [](const augment::QuickFindEntry &hit,augment::QuickFind::Action action){
                 if(action==augment::QuickFind::PinSource)return pinSourceDock(hit);
+                if(action==augment::QuickFind::Performance)return configureSourcePerformance(hit);
                 return augment::performObsQuickFind(hit,action);
             },sourceDockManagerAction()!=nullptr);
     }

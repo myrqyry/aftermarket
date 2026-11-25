@@ -278,6 +278,24 @@ label before creating anything; if incompatible, use the native manager.
 Without the optional module, the pin action is hidden. Full workspace restoration
 and reduced-refresh previews are not implemented.
 
+### Off-air frame limiting
+
+Install [Frame Interleave Filter](https://obsproject.com/forum/resources/frame-interleave-filter.1618/)
+separately. Right-click an asynchronous video source in Quick Find and choose
+**Off-air frame limit…**. Enter the interval in milliseconds (0–1000).
+For example, 100 ms targets roughly ten incoming frames per second when OBS
+considers the source inactive; 500 ms targets roughly two. The upstream
+filter bypasses limiting for active sources. Actual cadence depends on OBS
+and source frame timing. This is a source-wide asynchronous frame limit,
+not an independent Source Dock refresh rate, decoder throttle or guaranteed
+GPU savings. It can affect all previews of that source.
+
+Aftermarket creates a marked native filter only after explicit confirmation,
+updates only its own filter, and removes only that filter at zero. Existing
+manually configured or duplicate Frame Interleave filters are left untouched.
+The action is absent for synchronous sources, scenes, filters and when the
+optional backend is unavailable. Native scene saves retain the settings.
+
 ### Workspace checkpoints
 
 Open **Tools → Aftermarket: Dock Layouts… → Workspace checkpoints…**.
