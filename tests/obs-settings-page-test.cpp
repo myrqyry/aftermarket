@@ -79,6 +79,8 @@ int main(int argc,char **argv){
     services.setActionStrip=[&](bool b){stripEnabled=b;++stripCalls;return true;};
     services.actionStripEnabled=[&]{return stripEnabled;};
     services.setPropertySections=[&](bool){++sectionUpdates;};
+    int columnUpdates=0;
+    services.setPropertyColumns=[&](int mode){columnUpdates=mode;};
     services.setRowStripes=[&](const QJsonObject &){++stripeUpdates;};
     bool embeddedPickerEnabled=true;
     int pickerUpdates=0;
@@ -130,6 +132,7 @@ int main(int argc,char **argv){
         QApplication::processEvents();
         REQUIRE(titles.ellipsisMode()==Qt::ElideRight);
         REQUIRE(!controller.mixerBacksideEnabled()&&mixerCalls==0);
+        REQUIRE(controller.propertyColumns()==0&&columnUpdates==0);
     }
     {
         auto *dialog=openSettings();
@@ -144,6 +147,9 @@ int main(int argc,char **argv){
         dialog->findChild<QCheckBox*>("aftermarket-setting-scene-stripes")->setChecked(true);
         dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength")->setValue(175);
         dialog->findChild<QCheckBox*>("aftermarket-setting-sections")->setChecked(true);
+        auto *columns=dialog->findChild<QComboBox*>("aftermarket-setting-property-columns");
+        REQUIRE(columns&&columns->currentData().toInt()==0);
+        columns->setCurrentIndex(columns->findData(2));
         dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker")->setChecked(false);
         dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
@@ -159,6 +165,8 @@ int main(int argc,char **argv){
         REQUIRE(controller.listRowSettings().value("strength").toInt()==175);
         REQUIRE(!embeddedPickerEnabled&&pickerUpdates==1);
         REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
+        REQUIRE(controller.propertyColumns()==2&&columnUpdates==2);
+        REQUIRE(!controller.setPropertyColumns(4));
         REQUIRE(stripEnabled&&stripCalls==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
         REQUIRE(titles.ellipsisMode()==Qt::ElideMiddle);
@@ -172,6 +180,7 @@ int main(int argc,char **argv){
         bridge->scan();
         auto *nav=dialog->findChild<QListWidget*>("listWidget");
         nav->setCurrentRow(9);
+        REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-property-columns")->currentData().toInt()==2);
         REQUIRE(dialog->findChild<QComboBox*>("augment-global-ellipsis")
                        ->currentData().toString()=="middle");
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-mixer-back")->isChecked());

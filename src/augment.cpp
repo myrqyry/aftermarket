@@ -238,6 +238,7 @@ struct Rules {
     QString path;
     Logger logger;
     QByteArray lastRead;
+    int propertyColumns=0;
     bool enabled = true, inspect = false, motion = false, compactMenus = true, hamburgerMenuBar=false, showSubmenuSelections = false, modernTransforms=false, collapsibleGroups=false, mixerBackside=false;
     QJsonObject listRows;
     std::vector<Rule> entries, overflowEntries, hiddenEntries;
@@ -278,6 +279,7 @@ struct Rules {
             (root.contains("modernTransformFrame")&&!root.value("modernTransformFrame").isBool()) ||
             (root.contains("collapsiblePropertyGroups")&&!root.value("collapsiblePropertyGroups").isBool()) ||
             (root.contains("mixerBackside")&&!root.value("mixerBackside").isBool()) ||
+            (root.contains("propertyColumns")&&(!root.value("propertyColumns").isDouble()||root.value("propertyColumns").toInt(-1)<0||root.value("propertyColumns").toInt(-1)>3)) ||
             !validListRows(root.value("listRows"))) return false;
         GradientSpec nextGradient;
         if(!GradientSpec::parse(root.value("gradient"),nextGradient))return false;
@@ -378,6 +380,7 @@ struct Rules {
         showSubmenuSelections = root.value("showSubmenuSelections").toBool(false);
         modernTransforms = root.value("modernTransformFrame").toBool(false);
         collapsibleGroups = root.value("collapsiblePropertyGroups").toBool(false);
+        propertyColumns = root.value("propertyColumns").toInt(0);
         mixerBackside = root.value("mixerBackside").toBool(false);
         listRows = root.value("listRows").toObject();
         entries = std::move(next);
@@ -816,7 +819,7 @@ bool fail(QString *error, const QString &message) {
     if (error) *error=message;
     return false;
 }
-bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr,const bool *modernTransforms=nullptr,const bool *collapsibleGroups=nullptr,const bool *mixerBackside=nullptr,const QJsonObject *listRows=nullptr,const bool *hamburgerMenuBar=nullptr) {
+bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *error, const bool *motion=nullptr, const QJsonObject *gradient=nullptr, const QJsonObject *expected=nullptr, const bool *compactMenus=nullptr, const bool *overflow=nullptr, const bool *hidden=nullptr, const QJsonObject *custom=nullptr,const QString *removeCustom=nullptr,const bool *submenuSelections=nullptr,const bool *modernTransforms=nullptr,const bool *collapsibleGroups=nullptr,const bool *mixerBackside=nullptr,const QJsonObject *listRows=nullptr,const bool *hamburgerMenuBar=nullptr,const int *propertyColumns=nullptr) {
     // Read the actual latest file, not the controller's last-good cache.
     QFile in(current.path);
     if (!in.open(QIODevice::ReadOnly)) return fail(error,"Cannot read rules.json");
@@ -839,6 +842,7 @@ bool editRules(Rules &current, const QJsonObject &entry, bool remove, QString *e
     else if (mixerBackside) root["mixerBackside"]=*mixerBackside;
     else if (listRows) root["listRows"]=*listRows;
     else if (hamburgerMenuBar) root["hamburgerMenuBar"]=*hamburgerMenuBar;
+    else if (propertyColumns) root["propertyColumns"]=*propertyColumns;
     else if(hidden) {
         const auto selector=canonicalSelector(entry);
         if(!selector.contains("text")&&!selector.contains("objectName"))return fail(error,"No valid action selector.");
@@ -919,6 +923,14 @@ bool Controller::modernTransformFrame() const {
 bool Controller::setModernTransformFrame(bool enabled,QString *error) {
     return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,
         nullptr,nullptr,nullptr,nullptr,&enabled);
+}
+int Controller::propertyColumns() const {
+    state->rules.refresh();return state->rules.propertyColumns;
+}
+bool Controller::setPropertyColumns(int mode,QString *error){
+    if(mode<0||mode>3)return fail(error,"Invalid property column count.");
+    return editRules(state->rules,{},false,error,nullptr,nullptr,nullptr,nullptr,nullptr,
+        nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,&mode);
 }
 bool Controller::collapsiblePropertyGroups() const {
     state->rules.refresh();return state->rules.collapsibleGroups;

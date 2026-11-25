@@ -22,6 +22,7 @@ public:
         std::function<bool()> actionStripEnabled;
         std::function<void(QWidget*)> editActionStrip;
         std::function<void(bool)> setPropertySections;
+        std::function<void(int)> setPropertyColumns;
         std::function<void(const QJsonObject&)> setRowStripes;
         std::function<bool()> compactSourcePickerEnabled;
         std::function<bool(bool)> setCompactSourcePicker;

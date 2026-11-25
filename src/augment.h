@@ -42,6 +42,8 @@ public:
     bool setShowSubmenuSelections(bool enabled,QString *error=nullptr);
     bool modernTransformFrame() const;
     bool setModernTransformFrame(bool enabled,QString *error=nullptr);
+    int propertyColumns() const;
+    bool setPropertyColumns(int mode,QString *error=nullptr);
     bool collapsiblePropertyGroups() const;
     bool setCollapsiblePropertyGroups(bool enabled,QString *error=nullptr);
     bool mixerBacksideEnabled() const;

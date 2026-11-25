@@ -6,6 +6,7 @@
 #include "inspector.h"
 #include "panels.h"
 #include "property-sections.h"
+#include "property-columns.h"
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
@@ -61,6 +62,7 @@ static QPointer<augment::QuickFind> quickFind;
 static QPointer<QAction> toolsAction, panelsAction, stripAction, layoutsAction, findAction, cuesAction, emergencyAction, resumeAction;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
+static std::unique_ptr<augment::PropertyColumns> propertyColumns;
 static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::MenuBarCompact> compactBar;
 static std::unique_ptr<augment::ActionStrip> actionStrip;
@@ -450,6 +452,7 @@ static void stopCustomUi(){
     dockTitleIcons.reset(); // remove only plugin-painted native title icons
     compactBar.reset(); // return original OBS QAction identities
     rowStripes.reset();
+    propertyColumns.reset();
     propertySections.reset();
     transforms.reset();
     panels.reset(); // return original center preview (if docked)
@@ -468,6 +471,8 @@ static bool startCustomUi(){
     if(!controller)return false;
     propertySections=std::make_unique<augment::PropertySections>();
     propertySections->setEnabled(controller->collapsiblePropertyGroups());
+    propertyColumns=std::make_unique<augment::PropertyColumns>();
+    propertyColumns->setMode(controller->propertyColumns());
     rowStripes=std::make_unique<augment::RowStripes>();
     rowStripes->configure(controller->listRowSettings());
     compactBar=std::make_unique<augment::MenuBarCompact>();
@@ -545,6 +550,7 @@ static bool startCustomUi(){
                 static_cast<QWidget*>(obs_frontend_get_main_window()));
             if(main)actionStrip->showEditor(owner,main->menuBar());
         };
+        services.setPropertyColumns=[](int mode){if(propertyColumns)propertyColumns->setMode(mode);};
         services.setPropertySections=[](bool enabled){
             if(propertySections)propertySections->setEnabled(enabled);
         };

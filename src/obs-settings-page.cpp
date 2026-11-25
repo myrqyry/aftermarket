@@ -40,7 +40,8 @@ struct ObsSettingsPage::Entry {
     QPointer<QStackedWidget> pages;
     QPointer<QWidget> page;
     QPointer<QLabel> message;
-    QPointer<QComboBox> ellipsis;
+    QPointer<QComboBox> ellipsis,propertyColumns;
+    int columnsBaseline=0;
     QPointer<QPushButton> applyButton;
     QHash<QString,QPointer<QCheckBox>> flags;
     QHash<QString,bool> baseline;
@@ -241,6 +242,18 @@ void ObsSettingsPage::attach(QDialog *dialog){
     auto panels=makeTab("Panels");
     checkbox("sections","Collapsible property and filter groups",panels.second,panels.first,
              controller_->collapsiblePropertyGroups());
+    auto *propertyForm=new QFormLayout;
+    entry->propertyColumns=new QComboBox(panels.first);
+    entry->propertyColumns->setObjectName("aftermarket-setting-property-columns");
+    entry->propertyColumns->addItem("Auto",0);
+    entry->propertyColumns->addItem("1 column (native)",1);
+    entry->propertyColumns->addItem("Up to 2 columns",2);
+    entry->propertyColumns->addItem("Up to 3 columns",3);
+    entry->columnsBaseline=controller_->propertyColumns();
+    entry->propertyColumns->setCurrentIndex(entry->propertyColumns->findData(entry->columnsBaseline));
+    propertyForm->addRow("Source / filter settings",entry->propertyColumns);
+    panels.second->addLayout(propertyForm);
+
     auto *panelsHint=new QLabel("Each dock's three-dot menu provides Collapse / Expand. "
                                  "These actions are local to the dock.",panels.first);
     panelsHint->setWordWrap(true);
@@ -283,6 +296,8 @@ void ObsSettingsPage::attach(QDialog *dialog){
             changed=true;
         if(entry->knobSources&&entry->knobSources->text()!=spec.knobSources.join(", "))
             changed=true;
+        if(entry->propertyColumns&&entry->propertyColumns->currentData().toInt()!=entry->columnsBaseline)
+            changed=true;
         if(entry->stripeStrength&&entry->stripeStrength->value()!=
            entry->listRowsBaseline.value("strength").toInt(100))
             changed=true;
@@ -300,6 +315,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
             // Do not disable native Apply: OBS may have OTHER unsaved fields.
         }
     };
+    QObject::connect(entry->propertyColumns,qOverload<int>(&QComboBox::currentIndexChanged),page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->ellipsis,qOverload<int>(&QComboBox::currentIndexChanged),
                      page,[updateDirty](int){updateDirty();});
     for(const auto &checkbox:entry->flags)
@@ -363,6 +379,18 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
                         [target,priorMode]{if(target)target->setEllipsisMode(priorMode);}});
     }
     QPointer<Controller> c=controller_;
+    const int previousColumns=entry->columnsBaseline;
+    const int columns=entry->propertyColumns->currentData().toInt();
+    if(columns!=previousColumns){
+        auto write=[this,c](int mode,QString &e){
+            if(!c||!c->setPropertyColumns(mode,&e))return false;
+            if(services_.setPropertyColumns)services_.setPropertyColumns(mode);
+            return true;
+        };
+        changes.append({[write,columns](QString &e){return write(columns,e);},
+                        [write,previousColumns]{QString ignored;write(previousColumns,ignored);}});
+    }
+
     addFlag("transform",[c](bool b,QString &e){return c&&c->setModernTransformFrame(b,&e);});
     if(services_.setCompactSourcePicker)
         addFlag("source-picker",[this](bool b,QString &e){
@@ -488,6 +516,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     // Current state is the new baseline for repeated Apply clicks.
     for(auto it=entry->flags.cbegin();it!=entry->flags.cend();++it)
         if(it.value())entry->baseline[it.key()]=it.value()->isChecked();
+    entry->columnsBaseline=controller_->propertyColumns();
     entry->gradientBaseline=controller_->gradientSettings();
     entry->listRowsBaseline=controller_->listRowSettings();
     entry->existingMode=mode==Qt::ElideMiddle?"middle":"end";

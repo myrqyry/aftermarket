@@ -92,6 +92,23 @@ richer visual editors. Its specialized pages remain available for:
 
 ![Panels page in OBS](screenshots/readme/workspace-panels.png)
 
+### Responsive source and filter properties
+
+In OBS Settings → Aftermarket → Panels, choose **Source / filter settings**.
+Auto (default) uses one column in narrow property panes and up to two or
+three when about 680 or 1020 logical pixels of usable width are available.
+The 2/3 column preferences are maximums, not forced widths; 1 column
+restores the original form. Sliders, spinboxes, checkboxes, combo boxes and
+recognized native color picker rows are packed in original row-major order
+when their minimum sizes fit. Adjacent compact groups can share a row;
+their internal native forms and collapse controls remain intact. File
+paths, multiline text, complex controls, and other unrecognized or oversized
+rows keep the original full-width layout. OBS's existing widgets and
+callbacks are preserved, and replacement property containers reflow after
+native property reloads. This applies to source Properties and Filters
+dialogs, not every unrelated OBS settings page. Apply/OK saves the preference
+as `propertyColumns` (0 = Auto, 1–3 = maximum columns) in rules.json.
+
 Property-group folding is off by default and saved as `collapsiblePropertyGroups` in
 `rules.json`. It affects native `OBSPropertiesView` **ordinary QGroupBox sections**
 only, not ungrouped filter controls or checkable enable/disable groups. Expanded

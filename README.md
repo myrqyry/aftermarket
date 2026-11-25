@@ -175,7 +175,7 @@ palette. Optional refinements include:
 - Alternating Scenes and Sources row backgrounds with adjustable strength.
 - Theme-colored transform selection frames and handles.
 - End or middle ellipses for long labels, while preserving actual names.
-- Collapsible native property groups.
+- Responsive source/filter property columns (Auto, 1, up to 2, or up to 3) and collapsible native property groups.
 - Animated gradient tracks, menu artwork, dock collapse, and a brief
   AudioBus half-turn. Disable interface animations for immediate transitions.
 

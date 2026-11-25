@@ -3113,3 +3113,37 @@ widget hide path; specific Aftermarket collapse menu not independently
 exercised. Logs /tmp/source-dock-lightweight-native-20261124/obs.log.
 Aftermarket 36/36 tests passed. No installation or push; Windows/macOS,
 HDR and complex-source visual fidelity/performance remain unverified.
+
+
+## Responsive source/filter property columns — 2026-11-24
+
+New PropertyColumns presentation adapter for native PropertiesContainer
+QFormLayouts under OBSPropertiesView in OBSBasicProperties/OBSBasicFilters.
+Auto default, width-driven one/two/three columns (340 logical px per column),
+explicit max modes 1/2/3. Scoped, coalesced show/resize scan; reflow contiguous
+compact rows in original row-major order in nested grids; preserve actual
+labels/widgets/sublayouts, callbacks, hidden rows and wide/complex controls.
+Recognizes native numeric slider/spinbox pairs, checkbox/combo, native hex
+swatch/button color picker; adjacent compact group boxes can share a row,
+group interiors remain native. Restore original form rows on narrow/disable,
+no native data writes. Settings → Aftermarket → Panels preference persists
+via rules.json and existing Apply/Cancel handling. No OBS fork.
+
+RED missing API, then color row and stylesheet-backed swatch regressions;
+GREEN actual geometry, narrow restore, value/signal, hidden row, replacement
+container, color packing, adjacent groups with independent collapse,
+settings persistence. Final 37/37 CTest passed. Actual isolated OBS 32.2.0
+source dialog synthetic fixture: narrow 466px/8 rows, wide 1278px/3 columns,
+native slider setting saved 42, native checkbox reveal created Extra value
+and rebuilt form still 3 columns. Real native Color Correction filter:
+1267px/3 columns (info plus packed grid, including two color controls),
+455px/9 native rows. Final ordinary exit 0. Earlier source fixture failed
+registration (missing width/height) and crashed after adding dimensions
+without render callback; corrected synthetic fixture with no-op native
+custom renderer, final paths passed. Final run reported 5 unattributed
+libobs memory leaks (earlier 2); attribution unresolved. Native screenshots
+and log /tmp/aftermarket-property-columns-native-20261124/obs-style.log.
+Group packing/collapse verified in Qt fixture only. RTL, other platforms,
+HyperShader-specific forms and complex nested groups not independently
+tested. No production install/push. Existing unrelated src/plugin.cpp
+comment remains unstaged.
