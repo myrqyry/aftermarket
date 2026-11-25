@@ -401,6 +401,37 @@ int main(int argc,char **argv){
  REQUIRE(channel->findChild<QBoxLayout*>("aftermarket-rotary-center"));
  rotaryUi.detach();app.processEvents();
  REQUIRE(statusRow->indexOf(db)>=0&&bodyRow->indexOf(frame)>=0&&status->maximumWidth()>20&&gain->value()==51&&header->stretch(0)==0);
+ // Native side-by-side channels have a 110px cap, a vertical gain
+ // slider and separate centered status/name/dB/button layout rows.
+ QWidget columnMixer;auto *columnsRoot=new QHBoxLayout(&columnMixer);
+ auto *strip=new QWidget(&columnMixer);strip->setObjectName("VolumeControl");strip->setMaximumWidth(110);columnsRoot->addWidget(strip);
+ auto *stripRoot=new QVBoxLayout(strip);stripRoot->setContentsMargins(0,0,0,0);
+ auto *stripStatus=new QLabel("Pinned",strip);auto *sr=new QHBoxLayout;sr->addWidget(stripStatus);stripRoot->addLayout(sr);
+ auto *stripName=new QToolButton(strip);stripName->setObjectName("VolumeName");stripName->setText("Media Source");
+ auto *nr=new QHBoxLayout;nr->addWidget(stripName);stripRoot->addLayout(nr);
+ auto *stripDb=new QLabel("-8.7 dB",strip);stripDb->setObjectName("volLabel");
+ auto *dr=new QHBoxLayout;dr->addWidget(stripDb);dr->addStretch();stripRoot->addLayout(dr);
+ auto *stripFrame=new QFrame(strip);stripFrame->setObjectName("volMeterFrame");auto *fl=new QHBoxLayout(stripFrame);
+ auto *stripGain=new QSlider(Qt::Vertical,stripFrame);stripGain->setProperty("_obsUiAugmentKnob",true);stripGain->setProperty("_obsUiAugmentIntegratedMeter",true);
+ stripGain->setFixedSize(68,76);stripGain->setValue(63);fl->addWidget(stripGain);stripRoot->addWidget(stripFrame,1);
+ auto *br=new QHBoxLayout;auto *sm=new QPushButton(strip),*sn=new QPushButton(strip);sm->setFixedSize(24,22);sn->setFixedSize(24,22);br->addWidget(sm);br->addWidget(sn);stripRoot->addLayout(br);
+ columnMixer.resize(360,500);columnMixer.show();app.processEvents();
+ augment::FrontAudioControls columnUi(tmp.filePath("columnMixer.json"),[&]{return current;},{},{});
+ REQUIRE(columnUi.attach(&columnMixer));REQUIRE(columnUi.setKnobs(true));columnUi.refresh();app.processEvents();
+ auto *columnPan=strip->findChild<QDial*>("aftermarket-pan-dial");
+ auto *columnSync=strip->findChild<QDial*>("aftermarket-offset-dial");
+ auto *columnSpin=strip->findChild<QSpinBox*>("aftermarket-offset-ms");
+ REQUIRE(columnPan&&columnSync&&columnSpin&&columnPan->isVisible()&&columnSync->isVisible()&&!columnSpin->isVisible());
+ REQUIRE(stripStatus->maximumWidth()==18);
+ REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);
+ REQUIRE(stripDb->mapTo(strip,QPoint()).y()-stripGain->mapTo(strip,QPoint()).y()-stripGain->height()<30);
+ REQUIRE(stripGain->value()==63&&stripGain->parentWidget()==stripFrame);
+ stripGain->setProperty("_obsUiAugmentKnob",false);stripGain->setProperty("_obsUiAugmentIntegratedMeter",false);columnUi.refresh();app.processEvents();
+ REQUIRE(dr->indexOf(stripDb)==0&&stripRoot->stretch(stripRoot->indexOf(stripFrame))==1);
+ REQUIRE(columnSync->isVisible()&&!columnSpin->isVisible());
+ columnUi.setKnobs(false);app.processEvents();REQUIRE(columnSpin->isVisible());
+ columnUi.detach();app.processEvents();
+ REQUIRE(stripRoot->count()==5&&dr->indexOf(stripDb)==0&&stripStatus->maximumWidth()>18&&stripGain->value()==63);
  // Responsive grid keeps the real horizontal mixer container and channel
  // widgets, and restores the original native box on narrow/disabled views.
  QWidget gridMixer;

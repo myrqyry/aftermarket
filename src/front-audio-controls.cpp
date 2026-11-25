@@ -201,6 +201,8 @@ struct FrontAudioControls::State {
         int statusMin=0,statusMax=QWIDGETSIZE_MAX;
         QString statusTip,appliedStatusTip;
         bool statusDecorated=false;
+        bool columnMode=false,columnGain=false;
+        QSpacerItem *columnSpacer=nullptr;
 
     };
     QObject *owner=nullptr;
@@ -258,14 +260,17 @@ struct FrontAudioControls::State {
         }
         grid.clear();gridBox.clear();gridSlots.clear();gridColumns=0;
     }
-    QBoxLayout *horizontalBox()const{
+    QBoxLayout *activeMixerBox()const{
         if(!native)return nullptr;
-        auto *scroll=native->findChild<QScrollArea*>("hMixerScrollArea");
-        if(!scroll||!scroll->widget()||scroll->widget()->objectName()!="hVolumeWidgets")return nullptr;
-        auto *box=qobject_cast<QBoxLayout*>(scroll->widget()->layout());
-        if(!box||box->direction()!=QBoxLayout::TopToBottom||
-           box->parentWidget()!=scroll->widget())return nullptr;
-        return box;
+        for(bool columns:{false,true}){
+            auto *scroll=native->findChild<QScrollArea*>(columns?"vMixerScrollArea":"hMixerScrollArea");
+            if(!scroll||!scroll->isVisible()||!scroll->widget()||
+               scroll->widget()->objectName()!=(columns?"vVolumeWidgets":"hVolumeWidgets"))continue;
+            auto *box=qobject_cast<QBoxLayout*>(scroll->widget()->layout());
+            if(box&&box->direction()==(columns?QBoxLayout::LeftToRight:QBoxLayout::TopToBottom)&&
+               box->parentWidget()==scroll->widget())return box;
+        }
+        return nullptr;
     }
     bool gridIntact()const{
         if(!grid||!gridBox||gridIndex()<0)return false;
@@ -286,16 +291,33 @@ struct FrontAudioControls::State {
         if(!scroll||scroll->widget()!=host)return 1;
         const auto margins=box->contentsMargins();
         const int width=scroll->viewport()->width()-margins.left()-margins.right();
-        int minimum=240;
+        const bool strips=box->direction()==QBoxLayout::LeftToRight;
+        int minimum=strips?80:240,minimumHeight=180;
         for(auto *w:widgets){
             if(w->isHidden()||w->property("aftermarket-foreign").toBool())return 1;
             minimum=qMax(minimum,qMax(w->minimumWidth(),w->minimumSizeHint().width()));
+            if(strips){
+                // Native column host scrolls horizontally only. Wrap
+                // solely compact integrated rotary strips when every
+                // resulting row fits the viewport without clipping.
+                const auto r=std::find_if(rows.cbegin(),rows.cend(),[w](const Row &r){return r.volume==w;});
+                if(r==rows.cend()||!r->columnGain||w->maximumWidth()>150)return 1;
+                minimum=qMax(minimum,w->maximumWidth());
+                minimumHeight=qMax(minimumHeight,qMax(w->minimumSizeHint().height(),w->sizeHint().height()));
+            }
         }
         constexpr int spacing=6;
+        if(strips){
+            const int cols=qMax(1,(width+spacing)/(minimum+spacing));
+            if(cols<2||cols>=widgets.size())return 1;
+            const int height=scroll->viewport()->height()-margins.top()-margins.bottom();
+            const int count=(widgets.size()+cols-1)/cols;
+            return count*minimumHeight+(count-1)*spacing<=height?cols:1;
+        }
         return qBound(1,(width+spacing)/(minimum+spacing),qMin(4,int(widgets.size())));
     }
     void refreshGrid(){
-        auto *box=horizontalBox();
+        auto *box=activeMixerBox();
         if(grid&&(!gridIntact()||gridBox!=box))restoreGrid();
         if(!box||!autoGrid){restoreGrid();return;}
         auto widgets=orderedWidgets(box);
@@ -322,8 +344,11 @@ struct FrontAudioControls::State {
         layout->setObjectName("aftermarket-mixer-grid");
         layout->setContentsMargins(0,0,0,0);
         layout->setSpacing(6);
-        for(int i=0;i<captured.size();++i)layout->addWidget(captured[i].widget,i/cols,i%cols);
-        for(int i=0;i<cols;++i)layout->setColumnStretch(i,1);
+        const bool strips=box->direction()==QBoxLayout::LeftToRight;
+        for(int i=0;i<captured.size();++i)
+            layout->addWidget(captured[i].widget,i/cols,i%cols,strips?Qt::AlignTop:Qt::Alignment{});
+        if(strips)layout->setAlignment(Qt::AlignLeft|Qt::AlignTop);
+        else for(int i=0;i<cols;++i)layout->setColumnStretch(i,1);
         box->insertLayout(first,layout);
         gridBox=box;grid=layout;gridSlots=captured;gridColumns=cols;
     }
@@ -559,7 +584,94 @@ struct FrontAudioControls::State {
         const auto tip=r.statusTip.isEmpty()?r.status->text():r.statusTip;
         if(tip!=r.appliedStatusTip){r.status->setToolTip(tip);r.appliedStatusTip=tip;}
     }
+    void restoreColumnGain(Row &r){
+        if(!r.columnGain)return;
+        if(r.root){
+            if(r.columnSpacer){
+                const int count=r.root->count();
+                for(int i=0;i<count;++i)if(r.root->itemAt(i)==r.columnSpacer){
+                    delete r.root->takeAt(i);break;
+                }
+            }
+            if(r.db&&r.header&&r.root->indexOf(r.db)>=0){
+                r.root->removeWidget(r.db);
+                r.header->insertWidget(r.dbIndex,r.db,r.dbStretch,r.dbAlignment);
+            }
+            if(r.frame&&r.root->indexOf(r.frame)>=0){
+                r.root->setStretch(r.root->indexOf(r.frame),r.frameStretch);
+                r.root->setAlignment(r.frame,r.frameAlignment);
+            }
+        }
+        r.columnSpacer=nullptr;r.columnGain=false;
+    }
+    void restoreColumn(Row &r){
+        if(!r.columnMode)return;
+        restoreColumnGain(r);
+        restoreStatus(r);
+        if(r.controls){
+            if(r.root&&r.root->indexOf(r.controls)>=0)
+                r.root->setAlignment(r.controls,r.controlsAlignment);
+            r.controls->setMinimumSize(r.controlsMin);r.controls->setMaximumSize(r.controlsMax);
+            r.controls->setSizePolicy(r.controlsPolicy);
+        }
+        r.columnMode=false;r.root.clear();r.header.clear();r.frame.clear();r.db.clear();r.status.clear();
+    }
+    bool syncColumn(Row &r){
+        if(!r.volume||!r.controls||!useKnobs||r.volume->width()<80){
+            restoreColumn(r);return false;
+        }
+        auto *root=qobject_cast<QBoxLayout*>(r.volume->layout());
+        auto *frame=r.volume->findChild<QWidget*>("volMeterFrame",Qt::FindDirectChildrenOnly);
+        QSlider *gain=nullptr;
+        if(frame)for(auto *s:frame->findChildren<QSlider*>(QString(),Qt::FindDirectChildrenOnly)){
+            if(gain){restoreColumn(r);return false;}gain=s;
+        }
+        if(!root||root->direction()!=QBoxLayout::TopToBottom||!gain||gain->orientation()!=Qt::Vertical){
+            restoreColumn(r);return false;
+        }
+        if(r.columnMode&&(r.root!=root||r.frame!=frame||!r.db||!r.header))restoreColumn(r);
+        if(!r.columnMode){
+            // OBS side-by-side channel: separate status, source name, dB,
+            // meter frame, mute/monitor row, and our adjustment strip.
+            // Refuse unknown or extended layouts.
+            if(root->count()!=6||root->itemAt(3)->widget()!=frame||root->itemAt(5)->widget()!=r.controls)return false;
+            auto row=[root](int i){return qobject_cast<QBoxLayout*>(root->itemAt(i)->layout());};
+            auto *statusRow=row(0),*nameRow=row(1),*dbRow=row(2),*buttons=row(4);
+            auto *db=r.volume->findChild<QLabel*>("volLabel",Qt::FindDirectChildrenOnly);
+            if(!statusRow||statusRow->count()!=1||!nameRow||nameRow->count()!=1||
+               nameRow->itemAt(0)->widget()!=r.nameHandle||!dbRow||!db||dbRow->indexOf(db)<0||
+               !buttons||buttons->direction()!=QBoxLayout::LeftToRight||buttons->count()!=2||
+               !qobject_cast<QAbstractButton*>(buttons->itemAt(0)->widget())||
+               !qobject_cast<QAbstractButton*>(buttons->itemAt(1)->widget()))return false;
+            auto *status=qobject_cast<QLabel*>(statusRow->itemAt(0)->widget());
+            if(!status)return false;
+            r.columnMode=true;r.root=root;r.header=dbRow;r.frame=frame;r.db=db;r.status=status;
+            r.frameStretch=root->stretch(3);r.frameAlignment=root->itemAt(3)->alignment();
+            r.dbIndex=dbRow->indexOf(db);r.dbStretch=dbRow->stretch(r.dbIndex);r.dbAlignment=dbRow->itemAt(r.dbIndex)->alignment();
+            r.controlsMin=r.controls->minimumSize();r.controlsMax=r.controls->maximumSize();
+            r.controlsPolicy=r.controls->sizePolicy();r.controlsAlignment=root->itemAt(5)->alignment();
+            // Match the two native 24px button targets, not the entire
+            // channel width. Both encoders remain usable at 110px.
+            r.controls->setFixedWidth(52);root->setAlignment(r.controls,Qt::AlignHCenter);
+        }
+        syncStatus(r);
+        const bool integrated=gain->property("_obsUiAugmentKnob").toBool()&&gain->property("_obsUiAugmentIntegratedMeter").toBool();
+        if(!integrated){restoreColumnGain(r);return true;}
+        if(!r.columnGain){
+            const int frameIndex=root->indexOf(frame);
+            if(frameIndex<0||r.header->indexOf(r.db)<0)return true;
+            r.header->removeWidget(r.db);
+            root->setStretch(frameIndex,0);root->setAlignment(frame,Qt::AlignHCenter|Qt::AlignTop);
+            root->insertWidget(frameIndex+1,r.db,0,Qt::AlignHCenter);
+            // Keep the small rotary group together. Extra dock height is
+            // not inserted between the gain knob and its native buttons.
+            root->addStretch(1);r.columnSpacer=root->itemAt(root->count()-1)->spacerItem();
+            r.columnGain=true;
+        }
+        return true;
+    }
     void restoreRotary(Row &r){
+        restoreColumn(r);
         restoreStatus(r);
         if(!r.center)return;
         if(r.root&&r.body&&r.header&&r.frame&&r.db&&r.controls){
@@ -726,7 +838,7 @@ struct FrontAudioControls::State {
     }
     void syncLayout(Row &r){
         if(!r.controls)return;
-        const bool compact=syncRotary(r);
+        const bool compact=syncColumn(r)||syncRotary(r);
         if(compact){
             if(r.panLabel)r.panLabel->hide();
             if(r.offsetLabel)r.offsetLabel->hide();
@@ -837,6 +949,7 @@ bool FrontAudioControls::setKnobs(bool enabled){
     if(state->useKnobs==enabled)return false;
     state->useKnobs=enabled;
     for(auto &row:state->rows)state->syncLayout(row);
+    state->refreshGrid();
     state->save();
     return true;
 }
@@ -935,7 +1048,7 @@ void FrontAudioControls::populateSettingsMenu(QMenu *menu){
     }
     auto *autoGrid=menu->addAction("Auto mixer grid");
     autoGrid->setCheckable(true);autoGrid->setChecked(state->autoGrid);
-    autoGrid->setToolTip("Wrap horizontal channels into columns when the dock has room.");
+    autoGrid->setToolTip("Wrap mixer channels into a grid when the dock has room; full-height faders remain in their native row.");
     connect(autoGrid,&QAction::triggered,this,[this,autoGrid](bool enabled){
         const bool previous=state->autoGrid;
         state->autoGrid=enabled;

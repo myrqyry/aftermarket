@@ -3622,3 +3622,40 @@ stale edited filter redo refusal and selection-change confirmation refusal.
 Two unattributed shutdown allocations. No production session touched.
 Docs updated; built not installed/pushed. Unrelated plugin.cpp comment
 unchanged.
+
+## 2026-11-25: compact mixer parity for side-by-side channel strips
+
+User requested same improvements in horizontal mixer (side-by-side native
+vertical-fader channels). Actual OBS 32.2.0 probe
+/tmp/am-column-inspect.x662ZT/obs.log showed capped 110px native strip,
+separate status/name/dB/vertical meter/mute-monitor rows, and hidden
+sync dial at narrow width. Match exact native six-item structure,
+retain gain and meter objects. With Pan and sync as knobs enabled,
+status icons and aligned centered pair of adjustment dials below
+mute/monitor (52px control group); exact sync popup retained. Only
+integrated rotary gain/meter moves dB directly below gain and groups
+controls at top with trailing stretch. Restore captured frame stretch,
+alignment, native dB slot, control constraints and status when switching
+mode/detach; unsupported layouts use previous fallback. Nonintegrated
+full-height faders retain native placement.
+
+Reuse existing Auto mixer grid preference and reversible nested grid for
+visible vMixerScrollArea/vVolumeWidgets horizontal box. Wrap only compact
+integrated strips with capped widths, at least two columns, all rows fit
+available viewport height, and only when count exceeds available columns.
+Otherwise restore native horizontal scrolling; no new timer, routing,
+meter, graphics or audio-thread operations. Existing horizontal-fader
+grid unchanged. Unit RED /tmp/am-columns-red-build2.log then focused
+front-audio-controls fails hidden sync; GREEN geometry, gain, status,
+knob-off and detach restoration. Native initial rotary columns 10/10
+/tmp/am-mixer-columns.44Fx1a/obs.log; new grid RED
+/tmp/am-mixer-columns.ZGoDxO/obs.log. Final native 13/13
+/tmp/am-mixer-columns.LetmiL/obs.log (360x580 five strips 3x2,
+360x260 native row, order, exact and relative offset, gain unchanged).
+Original horizontal-fader native probe 10/10
+/tmp/am-mixer-rotary.CF9xxP/obs.log. Full CTest 41/41
+/tmp/am-columns-final-ctest.log (15.15s). Both probes exit0 with two
+unattributed shutdown allocations. Screenshot inspected and saved to
+README. Live orientation switch with existing grid and other themes/
+platforms not independently qualified. Production OBS untouched, no
+installation or push. Unrelated src/plugin.cpp comment preserved.

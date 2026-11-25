@@ -46,14 +46,16 @@ Keep the familiar native mixer or customize selected channels:
 - Per-source audio-reactive gradient faders and native meter color modulation.
 - Compact Pan and Sync controls that operate native OBS source properties.
 - Channel widths independent of source-name length, with readable labels.
-- Compact rotary mixer channels: native dB value below gain, mute/monitor on the left, pan/sync on the right, status icons in the header. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds.
-- Responsive horizontal mixer grid: up to four columns when space allows, with an Auto mixer grid toggle in the title menu.
+- Compact rotary mixer channels in both orientations: native dB value below gain, aligned mute/monitor and pan/sync controls, status icons in the header. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds.
+- Responsive mixer grid: up to four columns for horizontal-fader rows, and automatic wrapping of compact side-by-side rotary strips when all rows fit. Auto mixer grid toggle in the title menu.
 - Persistent channel order: unlock in the mixer title menu, drag source names,
   then lock again. AudioBus follows the same saved order; reset restores native order.
 
 | Responsive rotary mixer (wide dock) | Native gradient faders |
 | :---: | :---: |
 | ![Four-column rotary mixer with native channels](docs/screenshots/readme/mixer-rotary-grid.png) | ![Native OBS faders with gradient tracks](docs/screenshots/readme/mixer-faders.png) |
+
+![Side-by-side rotary channels wrap into rows when dock height allows](docs/screenshots/readme/mixer-rotary-columns.png)
 
 The rotary screenshots use an isolated OBS 32.2.0 test profile with five synthetic audio sources. To adjust sync, drag vertically or scroll (10 ms per pixel or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
 
