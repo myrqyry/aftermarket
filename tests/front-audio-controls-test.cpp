@@ -22,6 +22,8 @@
 #include <QPushButton>
 #include <QAction>
 #include <QMouseEvent>
+#include <QWheelEvent>
+#include <QKeyEvent>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 int main(int argc,char **argv){
@@ -194,6 +196,36 @@ int main(int argc,char **argv){
  REQUIRE(pans==2&&offsets==2);
  REQUIRE(qAbs(current[0].balance-.65)<.001&&current[0].offsetMs==1000);
  REQUIRE(offset->value()==1000&&pan->value()==65); // immediate sibling control sync
+ // A relative encoder must continue from an offset beyond the old ±2s range.
+ current[0].offsetMs=12345;ui.refresh();
+ REQUIRE(offsetDial->value()==12345);
+ const auto turn=[&](int ticks,Qt::KeyboardModifiers mods=Qt::NoModifier){
+     QPointF p=offsetDial->rect().center();
+     QWheelEvent e(p,offsetDial->mapToGlobal(p.toPoint()),QPoint(),QPoint(0,ticks),Qt::NoButton,mods,Qt::NoScrollPhase,false);
+     QApplication::sendEvent(offsetDial,&e);
+ };
+ turn(120);REQUIRE(current[0].offsetMs==12355&&offset->value()==12355);
+ turn(-120,Qt::ShiftModifier);REQUIRE(current[0].offsetMs==12354);
+ turn(60);REQUIRE(current[0].offsetMs==12354);
+ turn(60);REQUIRE(current[0].offsetMs==12364);
+ // Pressing an arbitrary angle never jumps the value; upward drag adds
+ // relative increments and a fresh press continues the same offset.
+ const QPoint start(3,6);const QPoint global=offsetDial->mapToGlobal(start);
+ QMouseEvent press(QEvent::MouseButtonPress,start,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+ QApplication::sendEvent(offsetDial,&press);REQUIRE(current[0].offsetMs==12364);
+ QMouseEvent move(QEvent::MouseMove,start-QPoint(0,45),global-QPoint(0,45),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
+ QApplication::sendEvent(offsetDial,&move);REQUIRE(current[0].offsetMs==12814);
+ QMouseEvent release(QEvent::MouseButtonRelease,start-QPoint(0,45),global-QPoint(0,45),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+ QApplication::sendEvent(offsetDial,&release);
+ REQUIRE(!offsetDial->isSliderDown()&&current[0].offsetMs==12814);
+ current[0].offsetMs=999995;ui.refresh();
+ turn(120);REQUIRE(current[0].offsetMs==999999);
+ turn(-120);REQUIRE(current[0].offsetMs==999989);
+ current[0].offsetMs=-999995;ui.refresh();
+ turn(-120);REQUIRE(current[0].offsetMs==-999999);
+ turn(120);REQUIRE(current[0].offsetMs==-999989);
+ QKeyEvent key(QEvent::KeyPress,Qt::Key_Up,Qt::ShiftModifier);
+ QApplication::sendEvent(offsetDial,&key);REQUIRE(current[0].offsetMs==-999988);
  REQUIRE(savedProjects==0); // coalesce many dial/slider update events
  QEventLoop waitForSave;
  QTimer::singleShot(650,&waitForSave,&QEventLoop::quit);

@@ -14,6 +14,8 @@
 #include <QToolButton>
 #include <QToolBar>
 #include <QDial>
+#include <QWheelEvent>
+#include <QMouseEvent>
 #include <QSpinBox>
 #include <QMenu>
 #include <QAbstractButton>
@@ -69,7 +71,7 @@ static void probe(){
  }
  QTimer::singleShot(1700,qApp,[]{
   auto all=channels();check("channels",all.size()==5);
-  bool layout=!all.isEmpty(),status=layout,position=layout,values=layout,exact=layout;
+  bool layout=!all.isEmpty(),status=layout,position=layout,values=layout,exact=layout,encoder=false;
   for(auto *w:all){
    auto *center=centerLayout(w->layout());
    auto *db=w->findChild<QLabel*>("volLabel");
@@ -101,12 +103,28 @@ static void probe(){
     auto *edit=menu?menu->findChild<QSpinBox*>("aftermarket-precise-sync-value"):nullptr;
     auto *source=obs_get_source_by_name(w->objectName().toUtf8().constData());
     exact=edit&&source;
-    if(edit&&source){edit->setValue(12345);exact&=obs_source_get_sync_offset(source)==12345000000LL;edit->setValue(0);}
-    if(menu)menu->close();if(source)obs_source_release(source);
+    if(edit&&source){edit->setValue(12345);exact&=obs_source_get_sync_offset(source)==12345000000LL;}
+    if(menu)menu->close();
+    if(source){
+      const QPoint p=offset->rect().center(),global=offset->mapToGlobal(p);
+      QWheelEvent wheel(p,global,QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+      QApplication::sendEvent(offset,&wheel);
+      encoder=obs_source_get_sync_offset(source)==12355000000LL;
+      QMouseEvent press(QEvent::MouseButtonPress,p,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+      QApplication::sendEvent(offset,&press);
+      encoder&=obs_source_get_sync_offset(source)==12355000000LL;
+      QMouseEvent move(QEvent::MouseMove,p-QPoint(0,42),global-QPoint(0,42),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);
+      QApplication::sendEvent(offset,&move);
+      QMouseEvent release(QEvent::MouseButtonRelease,p-QPoint(0,42),global-QPoint(0,42),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+      QApplication::sendEvent(offset,&release);
+      encoder&=obs_source_get_sync_offset(source)==12775000000LL;
+      spin->setValue(0);
+      obs_source_release(source);
+    }
    }
   }
   check("db_below_gain",layout);check("side_controls_aligned",position);check("native_active_icon",status);
-  check("native_db_values",values);check("exact_sync_popup",exact);
+  check("native_db_values",values);check("exact_sync_popup",exact);check("relative_encoder_beyond_2s",encoder);
   dock->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/rotary-grid.png");
   dock->resize(360,580);
  });

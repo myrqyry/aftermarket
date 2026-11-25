@@ -3393,3 +3393,22 @@ and Inactive icons unit/implementation only; no native pinned-state
 fixture. Two unattributed shutdown leaks; other platforms/localized
 statuses not qualified. Docs updated. Existing unrelated plugin.cpp
 comment preserved. Production OBS running, no install or push.
+
+## 2026-11-25: endless sync encoder
+
+Replace the absolute ±2000 ms sync dial with a QDial subclass using the
+actual existing ±999999 ms offset range. Relative vertical drag and wheel
+(10 ms/pixel or detent, Shift 1 ms), arrow keys, page steps; accumulate
+partial wheel deltas. Press does not change offset. Theme style renders
+a wrapping 360 ms indicator; numeric offset saturates at limits, never
+wraps. Cancel drag on hide, disable, ungrab, window deactivate. Release
+resync queued to avoid reentrant teardown. Exact right-click editor,
+native setters, debounce persistence, pan and layout unchanged.
+RED: external 12345 ms clipped on old dial. GREEN: beyond ±2s, relative
+drag/no jump, partial wheel, Shift, limits/reverse, keyboard. Full 39/39
+CTest /tmp/am-encoder-ctest.log; real OBS native rotary probe 10/10
+/tmp/am-mixer-rotary.mFj1kE/obs.log exit0, exact 12345 -> wheel 12355 ->
+drag 12775 -> reset, original gain and geometry retained. Input is
+relative vertical drag/scroll, not cursor warping or angular mouse
+tracking. Production OBS running; no installation or push. Existing
+unrelated plugin.cpp comment preserved.

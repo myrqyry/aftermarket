@@ -22,6 +22,10 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QMouseEvent>
+#include <QWheelEvent>
+#include <QKeyEvent>
+#include <QStylePainter>
+#include <QStyleOptionSlider>
 #include <QCursor>
 #include <QStringList>
 #include <QSaveFile>
@@ -38,7 +42,78 @@
 namespace augment {
 namespace {
 constexpr int maxOffsetMs=999999;
-constexpr int dialOffsetMs=2000; // coarse ±2s; numeric spin edits all offsets
+// Absolute value is the actual sync offset, not the dial's angle. The
+// painted indicator wraps, while input is relative and the value saturates.
+class SyncEncoder final : public QDial {
+public:
+    explicit SyncEncoder(QWidget *parent):QDial(parent){
+        setRange(-maxOffsetMs,maxOffsetMs);
+        setSingleStep(10);setPageStep(100);setNotchesVisible(false);
+    }
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QStyleOptionSlider option;initStyleOption(&option);
+        constexpr int cycle=360;
+        const int phase=((value()%cycle)+cycle)%cycle;
+        option.minimum=0;option.maximum=cycle-1;
+        option.sliderPosition=option.sliderValue=phase;
+        option.dialWrapping=true;option.notchTarget=0;
+        QStylePainter painter(this);
+        painter.drawComplexControl(QStyle::CC_Dial,option);
+    }
+    void mousePressEvent(QMouseEvent *e) override {
+        if(e->button()!=Qt::LeftButton){e->ignore();return;}
+        lastY=e->globalPosition().y();dragging=true;
+        setSliderDown(true);e->accept();
+    }
+    void mouseMoveEvent(QMouseEvent *e) override {
+        if(!dragging){e->ignore();return;}
+        if(!(e->buttons()&Qt::LeftButton)){finish();e->accept();return;}
+        const auto y=e->globalPosition().y();
+        const auto delta=qRound(lastY-y);
+        lastY=y;
+        adjust(qint64(delta)*step(e->modifiers()));e->accept();
+    }
+    void mouseReleaseEvent(QMouseEvent *e) override {
+        if(e->button()==Qt::LeftButton&&dragging){finish();e->accept();}
+        else e->ignore();
+    }
+    void wheelEvent(QWheelEvent *e) override {
+        const int delta=e->angleDelta().y();
+        if(!delta){e->ignore();return;}
+        const int scale=step(e->modifiers());
+        if(scale!=wheelScale){wheelRemainder=0;wheelScale=scale;}
+        const qint64 total=qint64(wheelRemainder)+delta;
+        wheelRemainder=int(total%120);
+        adjust(total/120*scale);e->accept();
+    }
+    void keyPressEvent(QKeyEvent *e) override {
+        const int scale=step(e->modifiers());
+        switch(e->key()){
+        case Qt::Key_Up:case Qt::Key_Right:adjust(scale);break;
+        case Qt::Key_Down:case Qt::Key_Left:adjust(-scale);break;
+        case Qt::Key_PageUp:adjust(scale*10);break;
+        case Qt::Key_PageDown:adjust(-scale*10);break;
+        default:QWidget::keyPressEvent(e);return;
+        }
+        e->accept();
+    }
+    bool event(QEvent *e) override {
+        if(e->type()==QEvent::UngrabMouse||e->type()==QEvent::Hide||
+           e->type()==QEvent::WindowDeactivate||
+           (e->type()==QEvent::EnabledChange&&!isEnabled()))finish();
+        return QDial::event(e);
+    }
+private:
+    bool dragging=false;
+    qreal lastY=0;
+    int wheelRemainder=0,wheelScale=10;
+    static int step(Qt::KeyboardModifiers mods){return mods.testFlag(Qt::ShiftModifier)?1:10;}
+    void adjust(qint64 delta){
+        if(delta)setValue(int(qBound(qint64(minimum()),qint64(value())+delta,qint64(maximum()))));
+    }
+    void finish(){if(dragging){dragging=false;setSliderDown(false);}}
+};
 QString sourceName(QWidget *volume){
     for(auto *button:volume->findChildren<QAbstractButton*>())
         if(button->inherits("VolumeName")||button->objectName()=="VolumeName")
@@ -690,7 +765,7 @@ struct FrontAudioControls::State {
         }
         if(r.offsetDial&&!r.offsetDial->isSliderDown()){
             const QSignalBlocker guard(r.offsetDial);
-            r.offsetDial->setValue(qBound(-dialOffsetMs,source.offsetMs,dialOffsetMs));
+            r.offsetDial->setValue(qBound(-maxOffsetMs,source.offsetMs,maxOffsetMs));
         }
         if(r.panSlider)r.panSlider->setEnabled(source.stereo);
         if(r.panDial)r.panDial->setEnabled(source.stereo);
@@ -699,7 +774,7 @@ struct FrontAudioControls::State {
             if(r.panDial->toolTip()!=tip)r.panDial->setToolTip(tip);
         }
         if(r.offsetDial){
-            const auto tip=QString("Sync offset: %1 ms · right-click to enter exact value").arg(source.offsetMs);
+            const auto tip=QString("Sync offset: %1 ms · drag up/down or scroll · Shift: fine · right-click: exact value").arg(source.offsetMs);
             if(r.offsetDial->toolTip()!=tip)r.offsetDial->setToolTip(tip);
         }
         syncLayout(r);
@@ -1008,11 +1083,10 @@ void FrontAudioControls::refresh(){
             offsetLabel->setFixedWidth(12);
             offsetLabel->setToolTip("Native OBS sync offset (milliseconds)");
             outer->addWidget(offsetLabel);
-            auto *offsetDial=new QDial(controls);
+            auto *offsetDial=new SyncEncoder(controls);
             offsetDial->setObjectName("aftermarket-offset-dial");
-            offsetDial->setRange(-dialOffsetMs,dialOffsetMs);
             offsetDial->setFixedSize(24,24);
-            offsetDial->setToolTip("Coarse sync offset · ±2000 ms · precise value at right");
+            offsetDial->setToolTip("Relative sync encoder · drag or scroll · Shift: fine");
             outer->addWidget(offsetDial);
             auto *offset=new QSpinBox(controls);
             offset->setObjectName("aftermarket-offset-ms");
@@ -1078,6 +1152,7 @@ void FrontAudioControls::refresh(){
                 if(state->offset(id,ms))state->saveDebounce.start();
                 refresh();
             });
+            connect(offsetDial,&QDial::sliderReleased,this,[this]{refresh();},Qt::QueuedConnection);
             State::Row row;
             row.volume=widget;row.controls=controls;row.id=id;
             row.nameHandle=sourceNameLabel(widget);
