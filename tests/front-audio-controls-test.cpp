@@ -3,6 +3,9 @@
 #include <QApplication>
 #include <QWidget>
 #include <QVBoxLayout>
+#include <QGridLayout>
+#include <QPointer>
+#include <QScrollArea>
 #include <QToolButton>
 #include <QSlider>
 #include <QDial>
@@ -318,6 +321,90 @@ int main(int argc,char **argv){
               hSync->mapTo(hAdd,QPoint(0,0)).y())<=14);
  hUi.detach();app.processEvents();
  REQUIRE(hRow->count()==2&&hGain->value()==63);
+ // Responsive grid keeps the real horizontal mixer container and channel
+ // widgets, and restores the original native box on narrow/disabled views.
+ QWidget gridMixer;
+ auto *gridRoot=new QVBoxLayout(&gridMixer);
+ auto *scroll=new QScrollArea(&gridMixer);scroll->setObjectName("hMixerScrollArea");scroll->setWidgetResizable(true);
+ scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);gridRoot->addWidget(scroll);
+ auto *host=new QWidget;host->setObjectName("hVolumeWidgets");
+ auto *nativeBox=new QVBoxLayout(host);nativeBox->setObjectName("hVolControlLayout");
+ nativeBox->setContentsMargins(0,0,0,0);nativeBox->setSpacing(0);
+ scroll->setWidget(host);
+ auto addChannel=[&](const QString &name){
+     auto *w=new QWidget(host);w->setObjectName("VolControl");
+     auto *v=new QVBoxLayout(w);auto *n=new QLabel(name,w);n->setObjectName("OBSSourceLabel");v->addWidget(n);
+     auto *f=new QSlider(Qt::Horizontal,w);f->setValue(42);v->addWidget(f);
+     nativeBox->addWidget(w);return w;
+ };
+ auto *g1=addChannel("Renamed TTS"),*g2=addChannel("Media Source");
+ gridMixer.resize(850,400);gridMixer.show();app.processEvents();
+ augment::FrontAudioControls gridUi(tmp.filePath("grid.json"),[&]{return current;},{},{});
+ REQUIRE(gridUi.attach(&gridMixer));app.processEvents();
+ auto *grid=host->findChild<QGridLayout*>("aftermarket-mixer-grid");
+ REQUIRE(grid&&grid->itemAtPosition(0,0)->widget()==g1&&grid->itemAtPosition(0,1)->widget()==g2);
+ REQUIRE(g1->parentWidget()==host&&g2->parentWidget()==host);
+ REQUIRE(g1->geometry().top()==g2->geometry().top());
+ REQUIRE(g1->findChild<QSlider*>()->value()==42);
+ gridMixer.resize(360,400);app.processEvents();gridUi.refresh();app.processEvents();
+ REQUIRE(!host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ REQUIRE(nativeBox->itemAt(0)->widget()==g1&&nativeBox->itemAt(1)->widget()==g2);
+ gridMixer.resize(850,400);app.processEvents();gridUi.refresh();app.processEvents();
+ REQUIRE(host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ // OBS re-adds its existing channel objects to the original box.
+ nativeBox->addWidget(g1);nativeBox->addWidget(g2);
+ auto *g3=addChannel("New source");
+ current.append({"uuid-new","New source",.5,0,true});app.processEvents();gridUi.refresh();app.processEvents();
+ grid=host->findChild<QGridLayout*>("aftermarket-mixer-grid");
+ REQUIRE(grid&&grid->count()==3);
+ REQUIRE(grid->itemAtPosition(0,0)->widget()==g1);
+ REQUIRE(grid->itemAtPosition(0,1)->widget()==g2);
+ REQUIRE(g3->parentWidget()==host);
+ // Repeated audio-state polling should not rebuild a stable grid.
+ QPointer<QGridLayout> stableGrid=grid;
+ gridUi.refresh();gridUi.refresh();app.processEvents();
+ REQUIRE(stableGrid&&stableGrid==host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ QMenu gridOrder;gridUi.populateSettingsMenu(&gridOrder);
+ QAction *gridUnlock=nullptr;
+ for(auto *a:gridOrder.actions())if(a->text()=="Unlock channel ordering")gridUnlock=a;
+ REQUIRE(gridUnlock);gridUnlock->trigger();
+ drag(g3->findChild<QLabel*>("OBSSourceLabel"),g1);
+ grid=host->findChild<QGridLayout*>("aftermarket-mixer-grid");
+ REQUIRE(grid&&grid->itemAtPosition(0,0)->widget()==g3);
+ REQUIRE(gridUi.channelOrder().first()=="uuid-new");
+ gridUnlock->trigger();
+ QMenu gridReset;gridUi.populateSettingsMenu(&gridReset);
+ QAction *resetGridOrder=nullptr;
+ for(auto *a:gridReset.actions())if(a->text()=="Reset channel order")resetGridOrder=a;
+ REQUIRE(resetGridOrder&&resetGridOrder->isEnabled());resetGridOrder->trigger();
+ grid=host->findChild<QGridLayout*>("aftermarket-mixer-grid");
+ REQUIRE(grid&&grid->itemAtPosition(0,0)->widget()==g1&&gridUi.channelOrder().isEmpty());
+ QMenu gridMenu;gridUi.populateSettingsMenu(&gridMenu);
+ QAction *autoGrid=nullptr;
+ for(auto *a:gridMenu.actions())if(a->text()=="Auto mixer grid")autoGrid=a;
+ REQUIRE(autoGrid&&autoGrid->isChecked());
+ autoGrid->trigger();app.processEvents();
+ REQUIRE(!host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ REQUIRE(nativeBox->itemAt(0)->widget()==g1&&nativeBox->itemAt(1)->widget()==g2);
+ autoGrid->trigger();app.processEvents();
+ REQUIRE(host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ // Exercise the resize debounce without forcing a state refresh.
+ gridMixer.resize(360,400);
+ QEventLoop gridSettle;QTimer::singleShot(150,&gridSettle,&QEventLoop::quit);gridSettle.exec();
+ REQUIRE(!host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ gridMixer.resize(850,400);
+ QTimer::singleShot(150,&gridSettle,&QEventLoop::quit);gridSettle.exec();
+ REQUIRE(host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ autoGrid->trigger();gridUi.detach();app.processEvents();
+ REQUIRE(nativeBox->count()==3&&nativeBox->itemAt(2)->widget()==g3);
+ augment::FrontAudioControls gridRestored(tmp.filePath("grid.json"),[&]{return current;},{},{});
+ REQUIRE(gridRestored.attach(&gridMixer));app.processEvents();
+ REQUIRE(!host->findChild<QGridLayout*>("aftermarket-mixer-grid"));
+ QMenu persistedGridMenu;gridRestored.populateSettingsMenu(&persistedGridMenu);
+ QAction *persistedGrid=nullptr;
+ for(auto *a:persistedGridMenu.actions())if(a->text()=="Auto mixer grid")persistedGrid=a;
+ REQUIRE(persistedGrid&&!persistedGrid->isChecked());gridRestored.detach();
+ current.removeLast();
  // A long source name must not determine vertical mixer channel width.
  // OBS 32.x uses VolControl + OBSSourceLabel (QLabel), while older
  // integrations can expose VolumeControl + VolumeName (QToolButton).

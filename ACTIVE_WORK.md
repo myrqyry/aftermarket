@@ -3333,3 +3333,31 @@ eliminating stutter or reducing overall render latency. Native tests
 predate minor root native-surface guard refinement (unit tested).
 Docs and probe preserved. OBS running, no install or push.
 Existing unstaged plugin.cpp comment preserved.
+
+## 2026-11-25: responsive horizontal audio mixer grid
+
+User asked for a grid when room permits. Auto grid defaults on inside the
+existing AudioBus/front-control integration; persistent toggle in mixer
+title overflow. Horizontal native hMixerScrollArea/hVolumeWidgets
+TopToBottom QBoxLayout only (installed OBS 32.2 has unnamed layout).
+2–4 columns based on viewport, minimum 240 logical px per native channel
+or larger actual minimum, 6px spacing. Narrow returns original list;
+vertical-fader mode unchanged. Keep original native box, native source
+widgets, parent, meters, faders and controls; reversible nested grid.
+Preserve native stretch/alignment on restoration. Coalesce dock resize
+65ms; stable grid not rebuilt by ordinary polling. Reconcile native
+reinsertions/deletions through existing refresh; manual UUID ordering,
+reset, detach and preference persistence covered. No changes to routing,
+gain or OBS source settings. Native test first found unnamed layout, then
+isolated OBS defaulted vertical despite config; corrected to use actual
+native toolbar orientation. Unit RED failed missing grid; GREEN focused
+front-audio-controls including grid drag/order/reset, resize debounce,
+persistence, native reinsertion and stable layout. Full CTest 39/39
+/tmp/am-grid-final-ctest.log. Real OBS 32.2.0 isolated Xvfb
+/tmp/am-mixer-grid.HVqrpX/obs.log 10/10 checks, exit0; five sources
+at 1050px into four columns; at 360px same widgets returned to native box;
+wide reflow, native add/remove, gains unchanged. Screenshot grid.png in
+same evidence directory. Two unattributed shutdown leaks. Native probe
+floating horizontal mixer; manual ordering tested in Qt fixture, other
+platforms not qualified. Docs updated. Existing plugin.cpp unrelated
+comment preserved. Production OBS running; not installed/pushed.

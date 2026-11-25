@@ -3,6 +3,7 @@
 #include <QWidget>
 #include <QBoxLayout>
 #include <QGridLayout>
+#include <QScrollArea>
 #include <QAbstractButton>
 #include <QSlider>
 #include <QDial>
@@ -108,12 +109,115 @@ struct FrontAudioControls::State {
         QList<QPointer<QWidget>> order;
     };
     QList<LayoutBaseline> baselines;
+    bool autoGrid=true;
+    QPointer<QBoxLayout> gridBox;
+    QPointer<QGridLayout> grid;
+    struct GridSlot {QPointer<QWidget> widget;int stretch;Qt::Alignment alignment;};
+    QList<GridSlot> gridSlots;
+    int gridColumns=0;
+    QTimer gridDebounce;
+
+    int gridIndex()const{
+        if(!grid||!gridBox)return -1;
+        for(int i=0;i<gridBox->count();++i)if(gridBox->itemAt(i)->layout()==grid)return i;
+        return -1;
+    }
+    void restoreGrid(){
+        if(grid&&gridBox){
+            const int index=gridIndex();
+            // Native OBS can move widgets out of our nested layout. Only
+            // restore items still owned by it; don't duplicate native moves.
+            QList<GridSlot> remaining;
+            for(const auto &slot:gridSlots)if(slot.widget&&grid->indexOf(slot.widget)>=0)
+                remaining.append(slot);
+            while(grid->count())delete grid->takeAt(0);
+            gridBox->removeItem(grid);delete grid.data();
+            int position=index<0?0:index;
+            for(const auto &slot:remaining)
+                gridBox->insertWidget(position++,slot.widget,slot.stretch,slot.alignment);
+        }
+        grid.clear();gridBox.clear();gridSlots.clear();gridColumns=0;
+    }
+    QBoxLayout *horizontalBox()const{
+        if(!native)return nullptr;
+        auto *scroll=native->findChild<QScrollArea*>("hMixerScrollArea");
+        if(!scroll||!scroll->widget()||scroll->widget()->objectName()!="hVolumeWidgets")return nullptr;
+        auto *box=qobject_cast<QBoxLayout*>(scroll->widget()->layout());
+        if(!box||box->direction()!=QBoxLayout::TopToBottom||
+           box->parentWidget()!=scroll->widget())return nullptr;
+        return box;
+    }
+    bool gridIntact()const{
+        if(!grid||!gridBox||gridIndex()<0)return false;
+        if(grid->count()!=gridSlots.size())return false;
+        for(const auto &slot:gridSlots)if(!slot.widget||grid->indexOf(slot.widget)<0)return false;
+        for(int i=0;i<gridBox->count();++i){
+            auto *item=gridBox->itemAt(i);
+            if(item->layout()!=grid&&!item->spacerItem())return false;
+        }
+        return true;
+    }
+    int columnsFor(QBoxLayout *box,const QList<QWidget*> &widgets)const{
+        if(!autoGrid||!box||widgets.size()<2||!box->parentWidget()->isVisible())return 1;
+        auto *host=box->parentWidget();
+        QScrollArea *scroll=nullptr;
+        for(auto *p=host->parentWidget();p;p=p->parentWidget())
+            if((scroll=qobject_cast<QScrollArea*>(p)))break;
+        if(!scroll||scroll->widget()!=host)return 1;
+        const auto margins=box->contentsMargins();
+        const int width=scroll->viewport()->width()-margins.left()-margins.right();
+        int minimum=240;
+        for(auto *w:widgets){
+            if(w->isHidden()||w->property("aftermarket-foreign").toBool())return 1;
+            minimum=qMax(minimum,qMax(w->minimumWidth(),w->minimumSizeHint().width()));
+        }
+        constexpr int spacing=6;
+        return qBound(1,(width+spacing)/(minimum+spacing),qMin(4,int(widgets.size())));
+    }
+    void refreshGrid(){
+        auto *box=horizontalBox();
+        if(grid&&(!gridIntact()||gridBox!=box))restoreGrid();
+        if(!box||!autoGrid){restoreGrid();return;}
+        auto widgets=orderedWidgets(box);
+        const int cols=columnsFor(box,widgets);
+        if(grid&&cols==gridColumns)return;
+        if(grid)restoreGrid();
+        if(cols<2)return;
+        // Limit the adapter to a contiguous native channel run, optionally
+        // followed by spacers. Leave unknown extensions/layouts untouched.
+        int first=-1;
+        QList<GridSlot> captured;
+        for(int i=0;i<box->count();++i){
+            auto *item=box->itemAt(i);
+            if(item->spacerItem())continue;
+            auto *w=item->widget();
+            if(!w||!volumeControl(w)||w->property("aftermarket-foreign").toBool())return;
+            if(first<0)first=i;
+            if(i!=first+captured.size())return;
+            captured.append({w,box->stretch(i),item->alignment()});
+        }
+        if(captured.size()!=widgets.size()||first<0)return;
+        for(int i=0;i<captured.size();++i)delete box->takeAt(first);
+        auto *layout=new QGridLayout;
+        layout->setObjectName("aftermarket-mixer-grid");
+        layout->setContentsMargins(0,0,0,0);
+        layout->setSpacing(6);
+        for(int i=0;i<captured.size();++i)layout->addWidget(captured[i].widget,i/cols,i%cols);
+        for(int i=0;i<cols;++i)layout->setColumnStretch(i,1);
+        box->insertLayout(first,layout);
+        gridBox=box;grid=layout;gridSlots=captured;gridColumns=cols;
+    }
+
 
     static QBoxLayout *containingBox(QLayout *layout,QWidget *widget){
         if(!layout)return nullptr;
         for(int i=0;i<layout->count();++i){
             auto *item=layout->itemAt(i);
-            if(item->widget()==widget)return qobject_cast<QBoxLayout*>(layout);
+            if(item->widget()==widget){
+                if(layout->objectName()=="aftermarket-mixer-grid")
+                    return qobject_cast<QBoxLayout*>(layout->parent());
+                return qobject_cast<QBoxLayout*>(layout);
+            }
             if(auto *nested=containingBox(item->layout(),widget))return nested;
         }
         return nullptr;
@@ -133,11 +237,19 @@ struct FrontAudioControls::State {
             auto *widget=box->itemAt(i)->widget();
             if(widget&&volumeControl(widget)&&!widget->property("aftermarket-foreign").toBool())
                 result.append(widget);
+            else if(grid&&box==gridBox&&box->itemAt(i)->layout()==grid)
+                for(const auto &slot:gridSlots)if(slot.widget&&grid->indexOf(slot.widget)>=0)result.append(slot.widget);
         }
         return result;
     }
-    static void arrange(QBoxLayout *box,const QList<QWidget*> &desired){
+    void arrange(QBoxLayout *box,const QList<QWidget*> &desired){
         if(!box||desired.size()<2)return;
+        if(grid&&gridBox==box){
+            QList<QWidget*> current;
+            for(auto *w:orderedWidgets(box))if(desired.contains(w))current.append(w);
+            if(current==desired)return;
+            restoreGrid();
+        }
         // Move only channel items. Preserve every native widget, spacer,
         // layout slot, stretch and alignment (including unrelated toolbar).
         QList<int> positions;
@@ -217,7 +329,7 @@ struct FrontAudioControls::State {
         int index=0;
         for(auto &id:channelOrder)if(visible.contains(id))id=visible[index++];
         if(!save()){channelOrder=previous;return false;}
-        applyOrder();
+        applyOrder();refreshGrid();
         return true;
     }
 
@@ -288,6 +400,7 @@ struct FrontAudioControls::State {
         const auto object=document.object();
         if(object.value("version").toInt()!=1||!object.value("knobs").isBool())return false;
         useKnobs=object.value("knobs").toBool();
+        autoGrid=object.value("autoGrid").toBool(true);
         for(const auto &value:object.value("channelOrder").toArray()){
             const auto id=value.toString();
             if(!id.isEmpty()&&!channelOrder.contains(id))channelOrder.append(id);
@@ -299,7 +412,7 @@ struct FrontAudioControls::State {
         if(!f.open(QIODevice::WriteOnly))return false;
         QJsonArray order;
         for(const auto &id:channelOrder)order.append(id);
-        const auto bytes=QJsonDocument(QJsonObject{{"version",1},{"knobs",useKnobs},{"channelOrder",order}})
+        const auto bytes=QJsonDocument(QJsonObject{{"version",1},{"knobs",useKnobs},{"autoGrid",autoGrid},{"channelOrder",order}})
             .toJson(QJsonDocument::Indented);
         return f.write(bytes)==bytes.size()&&f.commit();
     }
@@ -435,6 +548,11 @@ FrontAudioControls::FrontAudioControls(QString settingsFile,Query q,SetPan p,
         if(state->persist)state->persist();
     });
     state->load();
+    state->gridDebounce.setInterval(65);
+    state->gridDebounce.setSingleShot(true);
+    connect(&state->gridDebounce,&QTimer::timeout,this,[this]{
+        if(state->native&&!state->busy&&!state->dragHandle)state->refreshGrid();
+    });
     state->poll.setInterval(900);
     connect(&state->poll,&QTimer::timeout,this,[this]{
         if(state->native&&state->native->isVisible())refresh();
@@ -444,6 +562,7 @@ FrontAudioControls::~FrontAudioControls(){detach();}
 bool FrontAudioControls::attach(QWidget *nativeMixer){
     if(state->native||!nativeMixer)return false;
     state->native=nativeMixer;
+    nativeMixer->installEventFilter(this);
     state->findAndHideFooter();
     refresh();
     state->poll.start();
@@ -451,6 +570,9 @@ bool FrontAudioControls::attach(QWidget *nativeMixer){
 }
 void FrontAudioControls::detach(){
     state->poll.stop();
+    state->gridDebounce.stop();
+    if(state->native)state->native->removeEventFilter(this);
+    state->restoreGrid();
     state->orderingUnlocked=false;
     state->dragHandle.clear();
     state->restoreOrder();
@@ -482,6 +604,8 @@ bool FrontAudioControls::setMenuButton(QToolButton *button){
     return true;
 }
 bool FrontAudioControls::eventFilter(QObject *watched,QEvent *event){
+    if(watched==state->native&&(event->type()==QEvent::Resize||event->type()==QEvent::Show))
+        state->gridDebounce.start();
     if(watched==state->menuButton&&
        (event->type()==QEvent::Show||event->type()==QEvent::Hide)){
         QTimer::singleShot(0,this,[this]{state->syncFooterVisibility();});
@@ -556,6 +680,15 @@ void FrontAudioControls::populateSettingsMenu(QMenu *menu){
         }else addProxy("Mixer options",state->optionsButton);
         menu->addSeparator();
     }
+    auto *autoGrid=menu->addAction("Auto mixer grid");
+    autoGrid->setCheckable(true);autoGrid->setChecked(state->autoGrid);
+    autoGrid->setToolTip("Wrap horizontal channels into columns when the dock has room.");
+    connect(autoGrid,&QAction::triggered,this,[this,autoGrid](bool enabled){
+        const bool previous=state->autoGrid;
+        state->autoGrid=enabled;
+        if(!state->save()){state->autoGrid=previous;autoGrid->setChecked(previous);return;}
+        state->refreshGrid();
+    });
     auto *unlock=menu->addAction("Unlock channel ordering");
     unlock->setCheckable(true);
     unlock->setChecked(state->orderingUnlocked);
@@ -570,7 +703,7 @@ void FrontAudioControls::populateSettingsMenu(QMenu *menu){
     connect(reset,&QAction::triggered,this,[this]{
         const auto before=state->channelOrder;
         state->channelOrder.clear();
-        if(state->save())state->restoreOrder();
+        if(state->save()){state->restoreOrder();state->refreshGrid();}
         else state->channelOrder=before;
     });
     auto *channels=menu->addMenu("Channel settings");
@@ -770,7 +903,9 @@ void FrontAudioControls::refresh(){
             state->remove(state->rows[i]);
             state->rows.removeAt(i);
         }
+    if(state->grid&&!state->gridIntact())state->restoreGrid();
     state->applyOrder();
+    if(!state->dragHandle)state->refreshGrid();
     if(!state->dragHandle)state->updateHandles();
     state->busy=false;
 }
