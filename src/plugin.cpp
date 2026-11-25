@@ -315,13 +315,6 @@ static void quickFindHotkeyState(obs_data_t *data,bool saving,void *){
         if(bindings){obs_hotkey_load(quickFindHotkey,bindings);obs_data_array_release(bindings);}
     }
 }
-static void showCueDeck(){
-    if(!uiActive||!frontendReady||!cueDeck)return;
-    auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
-    if(!main)return;
-    auto *dialog=cueDeck->createManager(main);
-    dialog->show();dialog->raise();dialog->activateWindow();
-}
 static bool setHamburgerMenuBar(bool enabled) {
     if(!compactBar)return false;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -459,6 +452,25 @@ static void stopCustomUi(){
     panels.reset(); // return original center preview (if docked)
     uiActive=false;
     if(toolsMenu)toolsMenu->setState(false,frontendReady);
+}
+// Workspace editors/checkpoints may be stack-owned modal dialogs. Unwind
+// their nested event loops before destroying the workspace in recovery.
+static void restoreEmergencyUi(){
+    if(!emergency||!emergency->active())return;
+    if(inspector){
+        auto *modal=qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        // QWidget::isAncestorOf stops at window boundaries. Modal dialogs
+        // are windows but are still QObject-owned by the workspace.
+        bool owned=false;
+        for(QObject *p=modal;p;p=p->parent())if(p==inspector.data()){owned=true;break;}
+        if(modal&&owned){
+            modal->reject();
+            QTimer::singleShot(0,[]{restoreEmergencyUi();});
+            return;
+        }
+    }
+    stopCustomUi();
+    blog(LOG_WARNING,"[aftermarket] emergency safe mode enabled; native UI restored");
 }
 static bool startCustomUi(){
     if(uiActive)return true;
@@ -643,10 +655,7 @@ MODULE_EXPORT bool obs_module_load(void) {
             // Do not delete dock/menu widgets inside an active QMenu signal
             // or a keyboard event filter; the marker is already on disk.
             QTimer::singleShot(0,[] {
-                if(emergency&&emergency->active()){
-                    stopCustomUi();
-                    blog(LOG_WARNING,"[aftermarket] emergency safe mode enabled; native UI restored");
-                }
+                restoreEmergencyUi();
             });
         },
         []{return startCustomUi();});
@@ -660,37 +669,16 @@ MODULE_EXPORT bool obs_module_load(void) {
     toolsMenu=std::make_unique<augment::ToolsMenu>(
         static_cast<QAction*>(obs_frontend_add_tools_menu_qaction("Aftermarket")));
     using Command=augment::ToolsMenu::Command;
-    auto *toolsAction=toolsMenu->action(Command::Inspector);
-    if(toolsAction)QObject::connect(toolsAction,&QAction::triggered,controller,[]{
-        if(!inspector)inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
-        inspector->show();inspector->raise();inspector->activateWindow();
-    });
-    auto *panelsAction=toolsMenu->action(Command::Panels);
-    if(panelsAction)QObject::connect(panelsAction,&QAction::triggered,controller,[]{
-        if(!panels)return;
-        if(!inspector)inspector=new augment::Inspector(*controller,
-            static_cast<QWidget*>(obs_frontend_get_main_window()),panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get());
-        inspector->openPanels();inspector->show();inspector->raise();inspector->activateWindow();
-    });
-    auto *stripAction=toolsMenu->action(Command::Strip);
-    if(stripAction)QObject::connect(stripAction,&QAction::triggered,controller,[]{
-        if(!actionStrip)return;
+    auto *workspaceAction=toolsMenu->action(Command::Workspace);
+    if(workspaceAction)QObject::connect(workspaceAction,&QAction::triggered,controller,[]{
+        if(!uiActive||!frontendReady)return;
         auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
-        if(main)QTimer::singleShot(0,[main]{
-            if(actionStrip)actionStrip->showEditor(main,main->menuBar());
-        });
-    });
-    auto *layoutsAction=toolsMenu->action(Command::Layouts);
-    blog(LOG_INFO,"[aftermarket] AFTERMARKET_LAYOUT_TOOLS_20261123 registered=%d",layoutsAction?1:0);
-    if(layoutsAction)QObject::connect(layoutsAction,&QAction::triggered,controller,[]{
-        auto *main=qobject_cast<QMainWindow*>(
-            static_cast<QWidget*>(obs_frontend_get_main_window()));
-        if(!main||!frontendReady)return;
-        // Wait until the native Tools popup closes before opening a modal UI.
+        if(!main)return;
         QPointer<QMainWindow> safeMain=main;
-        QTimer::singleShot(0,[safeMain]{
-            if(safeMain&&dockLayouts&&uiActive)dockLayouts->showManager(safeMain,[safeMain](QWidget *owner){
+        if(!inspector)inspector=new augment::Inspector(*controller,main,
+            panels.get(),propertySections.get(),setAudioMixerBackside,rowStripes.get(),compactBar.get(),actionStrip.get(),
+            dockLayouts.get(),cueDeck.get(),
+            [safeMain](QWidget *owner){
                 if(!safeMain||!frontendReady||!uiActive)return;
                 const auto folder=QFileInfo(stripConfigPath).absolutePath();
                 augment::WorkspaceCheckpoints checkpoints(folder,safeMain,[folder]{return captureCheckpointScene(folder);});
@@ -702,19 +690,13 @@ MODULE_EXPORT bool obs_module_load(void) {
                 if(collectionManagerActionAvailable("scene_collection_manager"))
                     nativeActions->triggerHotkey(augment::NativeActionBridge::binding("frontend","","scene_collection_manager"));
             }):std::function<void()>{});
-            if(actionStrip)actionStrip->refresh();
-        });
+        inspector->show();inspector->raise();inspector->activateWindow();
     });
     auto *findAction=toolsMenu->action(Command::Find);
     blog(LOG_INFO,"[aftermarket] AFTERMARKET_QUICK_FIND_20261123 registered=%d",findAction?1:0);
     if(findAction)QObject::connect(findAction,&QAction::triggered,controller,[]{
         // The tools menu can still be closing when this signal arrives.
         QTimer::singleShot(0,[]{showQuickFind();});
-    });
-    auto *cuesAction=toolsMenu->action(Command::Cues);
-    blog(LOG_INFO,"[aftermarket] AFTERMARKET_CUE_DECK_20261123 registered=%d",cuesAction?1:0);
-    if(cuesAction)QObject::connect(cuesAction,&QAction::triggered,controller,[]{
-        QTimer::singleShot(0,[]{showCueDeck();});
     });
     auto *emergencyAction=toolsMenu->action(Command::Emergency);
     if(emergencyAction)QObject::connect(emergencyAction,&QAction::triggered,controller,[]{

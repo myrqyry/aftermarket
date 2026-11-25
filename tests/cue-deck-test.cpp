@@ -80,7 +80,7 @@ int main(int argc,char **argv) {
  REQUIRE(restored.removeCue(id));
  REQUIRE(!restored.run(id));
  REQUIRE(!restored.removeCue(id));
- auto *manager=restored.createManager();
+ auto *manager=restored.createPage(nullptr);
  REQUIRE(manager);
  REQUIRE(manager->objectName()=="aftermarket-cue-deck-manager");
  REQUIRE(manager->findChild<QListWidget*>("aftermarket-cue-list"));

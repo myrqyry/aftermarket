@@ -328,14 +328,11 @@ bool CueDeck::editCue(QWidget *owner,const QString &id){
     rebuild();
     return dialog.exec()==QDialog::Accepted;
 }
-QDialog *CueDeck::createManager(QWidget *parent){
+QWidget *CueDeck::createPage(QWidget *parent){
     if(manager_)return manager_;
-    auto *dialog=new QDialog(parent);
+    auto *dialog=new QWidget(parent);
     manager_=dialog;
     dialog->setObjectName("aftermarket-cue-deck-manager");
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle("Aftermarket · Cue Deck");
-    dialog->resize(600,480);
     auto *root=new QVBoxLayout(dialog);
     auto *title=new QLabel("Cue Deck · native layouts + OBS and plugin actions",dialog);
     root->addWidget(title);
@@ -357,7 +354,7 @@ QDialog *CueDeck::createManager(QWidget *parent){
     stop->setObjectName("aftermarket-cue-stop");
     for(auto *b:{create,edit,remove,run,stop})buttons->addWidget(b);
     root->addLayout(buttons);
-    QPointer<QDialog> safe=dialog;
+    QPointer<QWidget> safe=dialog;
     auto selected=[list](){auto *item=list->currentItem();return item?item->data(Qt::UserRole).toString():QString{};};
     refreshManager_=[this,safe,list,detail,status,edit,remove,run,stop]{
         if(!safe)return;
@@ -408,6 +405,6 @@ QDialog *CueDeck::createManager(QWidget *parent){
     changed();
     return dialog;
 }
-void CueDeck::closeManager(){if(manager_)manager_->close();}
-void CueDeck::refreshManager(){changed();}
+void CueDeck::closeManager(){delete manager_.data();}
+void CueDeck::refreshPage(){changed();}
 } // namespace augment

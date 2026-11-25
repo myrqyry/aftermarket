@@ -19,7 +19,8 @@
 #include <QPushButton>
 #include <QInputDialog>
 #include <QMessageBox>
-#include <QDialogButtonBox>
+#include <QShowEvent>
+#include <QTimer>
 #include <QLabel>
 #include <algorithm>
 #include <utility>
@@ -214,16 +215,25 @@ bool DockLayouts::undo(){
     return true;
 }
 
-void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> checkpoints,std::function<void()> openCollectionManager){
-    if(!main_)return;
-    QDialog dialog(owner);
-    dialog.setWindowTitle("Aftermarket · Dock layouts");
-    dialog.resize(480,440);
-    auto *root=new QVBoxLayout(&dialog);
+QWidget *DockLayouts::createPage(QWidget *owner,std::function<void(QWidget*)> checkpoints,std::function<void()> openCollectionManager,std::function<void()> changed){
+    if(!main_)return nullptr;
+    class Page final:public QWidget {
+    public:
+        using QWidget::QWidget;
+        std::function<void()> refresh;
+    protected:
+        void showEvent(QShowEvent *event)override{
+            QWidget::showEvent(event);
+            if(refresh)refresh();
+        }
+    };
+    auto *page=new Page(owner);
+    page->setObjectName("aftermarket-dock-layouts-page");
+    auto *root=new QVBoxLayout(page);
     auto *help=new QLabel("Save and switch native OBS dock arrangements. "
-        "These snapshots do not change scenes, audio, or recording settings.",&dialog);
+        "These snapshots do not change scenes, audio, or recording settings.",page);
     help->setWordWrap(true);root->addWidget(help);
-    auto *list=new QListWidget(&dialog);
+    auto *list=new QListWidget(page);
     list->setObjectName("aftermarket-layout-list");
     root->addWidget(list,1);
     auto refresh=[this,list]{
@@ -241,95 +251,96 @@ void DockLayouts::showManager(QWidget *owner,std::function<void(QWidget*)> check
         return list->currentItem()?list->currentItem()->data(Qt::UserRole).toString():QString{};
     };
     auto row1=new QHBoxLayout;
-    auto *save=new QPushButton("Save current…",&dialog);
-    auto *load=new QPushButton("Switch to layout",&dialog);
-    auto *undoBtn=new QPushButton("Undo switch",&dialog);
+    auto *save=new QPushButton("Save current…",page);
+    auto *load=new QPushButton("Switch to layout",page);
+    auto *undoBtn=new QPushButton("Undo switch",page);
     row1->addWidget(save);row1->addWidget(load);row1->addWidget(undoBtn);
     root->addLayout(row1);
     auto row2=new QHBoxLayout;
-    auto *renameBtn=new QPushButton("Rename…",&dialog);
-    auto *replaceBtn=new QPushButton("Update from current",&dialog);
-    auto *deleteBtn=new QPushButton("Delete",&dialog);
+    auto *renameBtn=new QPushButton("Rename…",page);
+    auto *replaceBtn=new QPushButton("Update from current",page);
+    auto *deleteBtn=new QPushButton("Delete",page);
     row2->addWidget(renameBtn);row2->addWidget(replaceBtn);row2->addWidget(deleteBtn);
     root->addLayout(row2);
     if(checkpoints){
-        auto *checkpointBtn=new QPushButton("Workspace checkpoints…",&dialog);
+        auto *checkpointBtn=new QPushButton("Workspace checkpoints…",page);
         checkpointBtn->setObjectName("aftermarket-workspace-checkpoints");
         root->addWidget(checkpointBtn);
-        QObject::connect(checkpointBtn,&QPushButton::clicked,&dialog,[&]{checkpoints(&dialog);});
+        QObject::connect(checkpointBtn,&QPushButton::clicked,page,[checkpoints,page]{checkpoints(page);});
     }
-    bool openManager=false;
     if(openCollectionManager){
-        auto *managerBtn=new QPushButton("Open Scene Collection Manager…",&dialog);
+        auto *managerBtn=new QPushButton("Open Scene Collection Manager…",page);
         managerBtn->setObjectName("aftermarket-open-collection-manager");
         root->addWidget(managerBtn);
-        QObject::connect(managerBtn,&QPushButton::clicked,&dialog,[&]{
-            openManager=true;dialog.accept();
+        QObject::connect(managerBtn,&QPushButton::clicked,page,[openCollectionManager,page]{
+            QTimer::singleShot(0,page,openCollectionManager);
         });
     }
-    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Close,&dialog);
-    root->addWidget(buttons);
-    QObject::connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::accept);
-    QObject::connect(save,&QPushButton::clicked,&dialog,[&,this]{
+    QObject::connect(save,&QPushButton::clicked,page,[=]{
         bool ok=false;
-        const QString name=QInputDialog::getText(&dialog,"Save dock layout","Layout name:",
+        const QString name=QInputDialog::getText(page,"Save dock layout","Layout name:",
             QLineEdit::Normal,QString{},&ok);
         if(!ok)return;
         if(capture(name).isEmpty())
-            QMessageBox::warning(&dialog,"Layout not saved",
+            QMessageBox::warning(page,"Layout not saved",
                 "Choose a unique name and ensure OBS docks are available.");
+        else if(changed)changed();
         refresh();
     });
-    QObject::connect(load,&QPushButton::clicked,&dialog,[&,this]{
+    QObject::connect(load,&QPushButton::clicked,page,[=]{
         if(selected().isEmpty())return;
         if(!restore(selected()))
-            QMessageBox::warning(&dialog,"Cannot switch layout",
+            QMessageBox::warning(page,"Cannot switch layout",
                 "The saved dock layout is unavailable or needs docks that are not loaded. "
                 "The current layout was preserved.");
         undoBtn->setEnabled(canUndo());
     });
-    QObject::connect(undoBtn,&QPushButton::clicked,&dialog,[&,this]{
+    QObject::connect(undoBtn,&QPushButton::clicked,page,[=]{
         if(!undo())
-            QMessageBox::warning(&dialog,"Undo unavailable",
+            QMessageBox::warning(page,"Undo unavailable",
                 "The previous dock arrangement could not be restored.");
         undoBtn->setEnabled(canUndo());
     });
-    QObject::connect(renameBtn,&QPushButton::clicked,&dialog,[&,this]{
+    QObject::connect(renameBtn,&QPushButton::clicked,page,[=]{
         const QString id=selected();
         if(id.isEmpty())return;
         const auto it=std::find_if(presets_.begin(),presets_.end(),
             [&id](const auto &s){return s.id==id;});
         if(it==presets_.end())return;
         bool ok=false;
-        const auto name=QInputDialog::getText(&dialog,"Rename layout","Layout name:",
+        const auto name=QInputDialog::getText(page,"Rename layout","Layout name:",
             QLineEdit::Normal,it->name,&ok);
-        if(ok&&!rename(id,name))QMessageBox::warning(&dialog,"Rename failed",
-            "The layout name must be unique.");
+        if(ok){
+            if(!rename(id,name))QMessageBox::warning(page,"Rename failed",
+                "The layout name must be unique.");
+            else if(changed)changed();
+        }
         refresh();
     });
-    QObject::connect(replaceBtn,&QPushButton::clicked,&dialog,[&,this]{
+    QObject::connect(replaceBtn,&QPushButton::clicked,page,[=]{
         const QString id=selected();
         if(id.isEmpty())return;
-        if(QMessageBox::question(&dialog,"Update dock layout",
+        if(QMessageBox::question(page,"Update dock layout",
             "Replace this saved arrangement with the current OBS dock layout?")!=QMessageBox::Yes)return;
-        if(!replace(id))QMessageBox::warning(&dialog,"Update failed","Could not save the current dock layout.");
+        if(!replace(id))QMessageBox::warning(page,"Update failed","Could not save the current dock layout.");
         refresh();
     });
-    QObject::connect(deleteBtn,&QPushButton::clicked,&dialog,[&,this]{
+    QObject::connect(deleteBtn,&QPushButton::clicked,page,[=]{
         const QString id=selected();
         if(id.isEmpty())return;
-        if(QMessageBox::question(&dialog,"Delete dock layout",
+        if(QMessageBox::question(page,"Delete dock layout",
             "Delete this saved dock arrangement?")!=QMessageBox::Yes)return;
-        if(!remove(id))QMessageBox::warning(&dialog,"Delete failed","Could not delete the layout.");
+        if(!remove(id))QMessageBox::warning(page,"Delete failed","Could not delete the layout.");
+        else if(changed)changed();
         refresh();
     });
-    QObject::connect(list,&QListWidget::itemDoubleClicked,&dialog,[&,this](QListWidgetItem *item){
+    QObject::connect(list,&QListWidget::itemDoubleClicked,page,[=](QListWidgetItem *item){
         if(item&&!restore(item->data(Qt::UserRole).toString()))
-            QMessageBox::warning(&dialog,"Cannot switch layout","One or more saved docks are missing.");
+            QMessageBox::warning(page,"Cannot switch layout","One or more saved docks are missing.");
         undoBtn->setEnabled(canUndo());
     });
-    refresh();undoBtn->setEnabled(canUndo());
-    dialog.exec();
-    if(openManager&&openCollectionManager)openCollectionManager();
+    page->refresh=[this,refresh,undoBtn]{refresh();undoBtn->setEnabled(canUndo());};
+    page->refresh();
+    return page;
 }
 } // namespace augment

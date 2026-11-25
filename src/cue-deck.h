@@ -40,8 +40,9 @@ public:
     void cancel();
     bool running() const{return running_;}
     QString status() const{return status_;}
-    QDialog *createManager(QWidget *parent=nullptr);
+    QWidget *createPage(QWidget *parent);
     void closeManager();
+    void refreshPage();
 private:
     bool validSteps(const QList<CueStep> &steps) const;
     bool preflight(const Cue &cue);
@@ -49,7 +50,6 @@ private:
     void announce(const QString &status);
     void changed();
     bool editCue(QWidget *parent,const QString &id={});
-    void refreshManager();
     QString path_;
     Choices layouts_,hotkeys_;
     Dispatch applyLayout_,triggerHotkey_;
@@ -59,7 +59,7 @@ private:
     int cursor_=0, dispatched_=0;
     bool running_=false;
     QString status_="Ready";
-    QPointer<QDialog> manager_;
+    QPointer<QWidget> manager_;
     std::function<void()> refreshManager_;
 };
 }

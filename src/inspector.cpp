@@ -21,6 +21,8 @@
 #include "visual-polish.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
+#include "dock-layouts.h"
+#include "cue-deck.h"
 #include <QMenuBar>
 #include <QGroupBox>
 #include <QGridLayout>
@@ -452,8 +454,8 @@ struct Inspector::Ui {
     explicit Ui(Controller &c):controller(c){}
 };
 
-Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar,ActionStrip *actionStrip):QDialog(parent),ui(new Ui(controller)) {
-    setWindowTitle("Aftermarket · Inspector");
+Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,PropertySections *sections,std::function<bool(bool)> mixerToggle,RowStripes *rowStripes,MenuBarCompact *compactBar,ActionStrip *actionStrip,DockLayouts *layouts,CueDeck *cues,std::function<void(QWidget*)> checkpoints,std::function<void()> openCollectionManager):QDialog(parent),ui(new Ui(controller)) {
+    setWindowTitle("Aftermarket · Workspace");
     setObjectName("aftermarket-inspector");
     // Colorway and other OBS themes may make every control bold. Apply only
     // font weights inside this plugin-owned dialog: inherit the theme's
@@ -950,6 +952,16 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
         });
         ui->tabs->addTab(page,"Action strip");
     }
+    QPointer<ActionStrip> safeStrip(actionStrip);
+    QPointer<CueDeck> safeCues(cues);
+    if(layouts)if(auto *page=layouts->createPage(ui->tabs,std::move(checkpoints),std::move(openCollectionManager),
+        [safeStrip,safeCues]{
+            if(safeStrip)safeStrip->refresh();
+            if(safeCues)safeCues->refreshPage();
+        }))
+        ui->tabs->addTab(page,"Dock layouts");
+    if(cues)if(auto *page=cues->createPage(ui->tabs))
+        ui->tabs->addTab(page,"Cue Deck");
     ui->footer->hide();
     connect(ui->tabs,&QTabWidget::currentChanged,this,[this](int index){
         ui->footer->setVisible(index==1||index==2);
@@ -1083,7 +1095,6 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
         ui->status->setText("Captured mixer source: "+snapshot.mixerSource+". Select sources and apply changes.");
     }
 }
-void Inspector::openPanels(){if(ui->tabs->count()>3)ui->tabs->setCurrentIndex(3);}
 void Inspector::selectRow(int row) {
     const auto target=targetFor(ui->snapshot,row);
     const auto rule=target.isEmpty()?QJsonObject{}:ui->controller.effectiveRule(target,actionLabels(ui->snapshot,row));

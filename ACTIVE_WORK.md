@@ -3168,3 +3168,24 @@ resume marker removal with seven commands restored, third-party Source
 Dock entry unchanged throughout, normal exit 0, two unattributed memory
 leaks. Evidence /tmp/aftermarket-tools-menu-native-20261124/obs.log.
 No install or push; other plugins not modified.
+
+## Unified Workspace — 2026-11-24
+
+Replaced seven active Tools commands with Workspace, Find Sources, Emergency
+restore. Resume alone in recovery. Existing Inspector renamed Workspace;
+native Dock layouts and Cue Deck managers converted from standalone windows
+to actual QWidget tab pages, not launcher buttons. No duplicate manager
+paths retained; existing Action strip and Panels tabs unchanged. Layout
+mutations refresh dependent cue labels and action strip; layout list/undo
+refresh on show. Checkpoints and optional Scene Collection Manager remain
+accessible from Dock layouts. Native Settings page remains separate.
+Emergency restore rejects workspace-owned modal dialogs (QObject ancestry
+across window boundaries) before deleting the workspace; first native
+modal test aborted on the QWidget ancestry check, corrected run exited 0.
+Focused regression tests and full 38/38 CTest passed; isolated OBS 32.2.0
+probe verified three commands, seven tabs, saving layout, opening checkpoint
+dialog, embedded Cue Deck, emergency with open checkpoint, resume and
+persisted layouts. Cue dispatch from embedded page tested in Qt fixture.
+Two unattributed libobs leaks remain. Native evidence
+/tmp/aftermarket-unified-workspace-20261124/obs-recovery2.log; docs screenshot
+replaced. No production install or push.

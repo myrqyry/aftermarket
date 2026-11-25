@@ -28,7 +28,10 @@ int main(int argc,char **argv){
   REQUIRE(!find->isEnabled()&&!resume->isVisible());
   menu.setState(true,true);
   REQUIRE(find->isEnabled()&&find->isVisible());
-  REQUIRE(menu.action(Cmd::Layouts)->isEnabled());
+  REQUIRE(menu.action(Cmd::Workspace)->isEnabled());
+  QStringList labels;
+  for(auto *a:anchor->menu()->actions())if(a->isVisible()&&!a->isSeparator())labels<<a->text();
+  REQUIRE(labels==QStringList({"Workspace","Find Sources…","Emergency restore (Ctrl+Alt+Shift+F12)"}));
   find->trigger();REQUIRE(invoked==1);
   augment::MenuBarCompact compact;
   REQUIRE(compact.setEnabled(bar,true));app.processEvents();

@@ -64,7 +64,7 @@ supported collapse, float, and close operations. Roll up a dock without
 destroying its contents. Restore the original preview or make it a movable
 native dock, including responsive Studio Mode.
 
-Save complete dock arrangements with **Tools → Aftermarket → Dock Layouts…**.
+Save complete dock arrangements with **Tools → Aftermarket → Workspace → Dock layouts**.
 Switch between saved arrangements, or undo the last switch. Layout snapshots
 preserve native dock placement, not scene or audio settings.
 
@@ -88,7 +88,7 @@ Source Dock's rendering or controls.
 
 | Native dock headers | Saved dock arrangements |
 | :---: | :---: |
-| ![Native OBS docks with compact title controls](docs/screenshots/readme/dock-all-overflows.webp) | ![Dock Layouts manager with a saved arrangement](docs/screenshots/readme/dock-layouts.webp) |
+| ![Native OBS docks with compact title controls](docs/screenshots/readme/dock-all-overflows.webp) | ![Workspace Dock layouts tab with saved arrangements](docs/screenshots/readme/dock-layouts.webp) |
 
 | Compact Studio Mode | Wide floating Studio Mode |
 | :---: | :---: |
@@ -108,7 +108,7 @@ of being clipped. The optional hamburger menu frees additional space.
 
 ### Cue Deck
 
-Use **Tools → Aftermarket → Cue Deck…** to create named sequences of saved
+Use **Tools → Aftermarket → Workspace → Cue Deck** to create named sequences of saved
 dock-layout changes, native OBS or plugin hotkeys, and timed waits. Reorder
 steps, run or stop a cue, and optionally pin it to the Action Strip.
 Existing plugin hotkeys—including Exeldro Move actions when registered by
@@ -195,7 +195,7 @@ Appearance, Menus, Mixer, Panels, and Action strip.
 
 ![Aftermarket's native OBS Settings page](docs/screenshots/readme/aftermarket-obs-settings.webp)
 
-All Aftermarket tools are grouped in a single **Tools → Aftermarket** submenu. For advanced per-target rules, open **Tools → Aftermarket → Inspector**.
+All Aftermarket tools are grouped in a single **Tools → Aftermarket** submenu. For advanced per-target rules, open **Tools → Aftermarket → Workspace**.
 Capture an actual menu or widget, browse its native identity, and customize
 supported targets. Detailed gradient and mixer editors are available there too.
 

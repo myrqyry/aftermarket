@@ -27,6 +27,8 @@
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
+#include "dock-layouts.h"
+#include "cue-deck.h"
 #include <QMenuBar>
 #include <iostream>
 #define REQUIRE(x) do { if (!(x)) { std::cerr << "FAILED line " << __LINE__ << ": " << #x << '\n'; return 1; } } while(false)
@@ -350,9 +352,33 @@ int main(int argc,char **argv) {
         main.resize(800,600);main.show();app.processEvents();
         augment::Panels panels;
         augment::ActionStrip strip(temp.filePath("second-strip.json"));
-        augment::Inspector inspector(c,&main,&panels,nullptr,{},nullptr,nullptr,&strip);
+        dock->setObjectName("test-scenes");
+        augment::DockLayouts layouts(temp.filePath("workspace-layouts.json"),&main);
+        const auto layoutId=layouts.capture("Editing");REQUIRE(!layoutId.isEmpty());
+        augment::CueDeck cues(temp.filePath("workspace-cues.json"),
+            [&]{return QList<augment::CueChoice>{{layoutId,"Editing","Layouts"}};},
+            [&](const QString &id){return layouts.restore(id);},{},{});
+        const auto cueId=cues.addCue("Editing cue");REQUIRE(!cueId.isEmpty());
+        REQUIRE(cues.updateCue(cueId,"Editing cue",{{"layout",layoutId,0}}));
+        int checkpoints=0;
+        augment::Inspector inspector(c,&main,&panels,nullptr,{},nullptr,nullptr,&strip,
+            &layouts,&cues,[&](QWidget*){++checkpoints;});
+
         auto *tabs=inspector.findChild<QTabWidget*>("augment-workspace");
-        REQUIRE(tabs&&tabs->count()==5);
+        REQUIRE(tabs&&tabs->count()==7);
+        REQUIRE(inspector.windowTitle()=="Aftermarket · Workspace");
+        REQUIRE(tabs->tabText(5)=="Dock layouts"&&tabs->tabText(6)=="Cue Deck");
+        auto *layoutList=tabs->widget(5)->findChild<QListWidget*>("aftermarket-layout-list");
+        REQUIRE(layoutList&&layoutList->count()==1);
+        auto *checkpoint=tabs->widget(5)->findChild<QPushButton*>("aftermarket-workspace-checkpoints");
+        REQUIRE(checkpoint);checkpoint->click();REQUIRE(checkpoints==1);
+        auto *cueList=tabs->widget(6)->findChild<QListWidget*>("aftermarket-cue-list");
+        REQUIRE(cueList&&cueList->count()==1);
+        auto *runCue=tabs->widget(6)->findChild<QPushButton*>("aftermarket-cue-run");
+        REQUIRE(runCue&&runCue->isEnabled());runCue->click();app.processEvents();
+        REQUIRE(cues.status().contains("completed",Qt::CaseInsensitive));
+        tabs->setCurrentIndex(0);
+
         auto *stripToggle=inspector.findChild<QCheckBox*>("augment-action-strip-enable");
         auto *stripEditor=inspector.findChild<QPushButton*>("augment-action-strip-edit");
         REQUIRE(stripToggle&&stripEditor&&!stripToggle->isChecked());

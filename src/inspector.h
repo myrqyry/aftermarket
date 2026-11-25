@@ -15,6 +15,8 @@ class PropertySections;
 class RowStripes;
 class MenuBarCompact;
 class ActionStrip;
+class DockLayouts;
+class CueDeck;
 struct ActionSnapshot {
     QString text, objectName;
     bool checkable=false, custom=false, visible=false, enabled=false, nativeIcon=false;
@@ -42,9 +44,11 @@ public:
     explicit Inspector(Controller &controller, QWidget *parent=nullptr, Panels *panels=nullptr,
                        PropertySections *sections=nullptr,
                        std::function<bool(bool)> mixerToggle={}, RowStripes *rowStripes=nullptr,
-                       MenuBarCompact *compactBar=nullptr,ActionStrip *actionStrip=nullptr);
+                       MenuBarCompact *compactBar=nullptr,ActionStrip *actionStrip=nullptr,
+                       DockLayouts *layouts=nullptr,CueDeck *cues=nullptr,
+                       std::function<void(QWidget*)> checkpoints={},
+                       std::function<void()> openCollectionManager={});
     ~Inspector() override;
-    void openPanels();
     void capture(const WidgetSnapshot &snapshot);
 protected:
     void reject() override;
