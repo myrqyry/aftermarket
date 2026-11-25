@@ -63,6 +63,8 @@ QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform,bool pi
     :QDialog(parent),provider_(std::move(provider)),perform_(std::move(perform)) {
     setObjectName("aftermarket-quick-find");
     setWindowTitle("Aftermarket · Find sources");
+    // Native popup stack handles outside clicks and nested context menus.
+    setWindowFlags(Qt::Popup|Qt::FramelessWindowHint);
     setWindowModality(Qt::NonModal);
     resize(600,480);
     auto *layout=new QVBoxLayout(this);

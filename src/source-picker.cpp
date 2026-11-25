@@ -222,9 +222,10 @@ void SourcePicker::embed(QDialog *dialog){
     // list, visibility checkbox and Add existing button to a compact shell.
     // Native creation, undo, selection, refresh and properties remain intact.
     // A QWidget child can be occluded by OBSQTDisplay's native graphics
-    // surface. Keep a real modal transient, with no desktop chrome, so its
-    // stacking is owned by the window system and remains above that surface.
-    dialog->setParent(main_,Qt::Dialog|Qt::FramelessWindowHint);
+    // surface. Keep a real native popup, with no desktop chrome, above
+    // that surface. Qt dismisses it on an outside press while the original
+    // native dialog retains its modal exec/accept/reject lifecycle.
+    dialog->setParent(main_,Qt::Popup|Qt::FramelessWindowHint);
     dialog->setWindowModality(Qt::WindowModal);
     dialog->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Preferred);
     dialog->setMinimumSize(0,0);

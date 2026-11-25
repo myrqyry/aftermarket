@@ -8,6 +8,9 @@
 #include <QListWidget>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QMouseEvent>
+#include <QMenu>
+#include <QTimer>
 #include <iostream>
 
 #define REQUIRE(expr) do { if(!(expr)){std::cerr<<"FAIL "<<__LINE__<<" "<<#expr<<"\n";return 1;} }while(false)
@@ -53,6 +56,13 @@ int main(int argc,char**argv){
     REQUIRE(list->item(0)->text().contains("Blur Pass"));
     REQUIRE(palette.activate(augment::QuickFind::Filters));
     REQUIRE(!palette.isVisible());
+    palette.open();
+    QMouseEvent inside(QEvent::MouseButtonPress,QPointF(10,10),QPointF(input->mapToGlobal(QPoint(10,10))),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+    QApplication::sendEvent(input,&inside);
+    REQUIRE(palette.isVisible());
+    QMouseEvent outside(QEvent::MouseButtonPress,QPointF(-12,-12),QPointF(palette.mapToGlobal(QPoint(-12,-12))),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+    QApplication::sendEvent(&palette,&outside);
+    REQUIRE(!palette.isVisible());
     data[2].performanceAvailable=true;
     QString configured;
     augment::QuickFind performancePalette(&main,[&]{return data;},[&](const QuickFindEntry &hit,augment::QuickFind::Action action){
@@ -79,6 +89,17 @@ int main(int argc,char**argv){
     pinInput->setText("blur");
     REQUIRE(!pin->isEnabled()&&!pinPalette.activate(augment::QuickFind::PinSource));
     pinInput->setText("web view");
+    auto *pinList=pinPalette.findChild<QListWidget*>("aftermarket-quick-find-results");
+    bool nested=false;
+    QTimer::singleShot(0,&pinPalette,[&]{
+        auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        nested=menu&&pinPalette.isVisible();
+        if(menu)menu->close();
+    });
+    REQUIRE(QMetaObject::invokeMethod(pinList,"customContextMenuRequested",Qt::DirectConnection,
+        Q_ARG(QPoint,pinList->visualItemRect(pinList->item(0)).center())));
+    REQUIRE(nested&&pinPalette.isVisible());
+
     REQUIRE(pin->isEnabled());
     pin->click();
     REQUIRE(pinned=="source-b"&&!pinPalette.isVisible());

@@ -3286,3 +3286,21 @@ load/undo. Linux/Xvfb only; mixed AV chains and third-party special filter
 initialization not separately qualified. Docs updated. Production OBS
 running untouched; no install/push. Prior unstaged plugin.cpp comment
 preserved.
+
+## 2026-11-25: dismiss Add Source and Quick Find on outside click
+
+Use Qt native popup window flags for both compact pickers, preserving
+Add Source's WindowModal exec/accept/reject lifecycle, real native controls,
+owner geometry, and thumbnail refresh. Quick Find now frameless; popup
+stack keeps nested context menu and Add Existing type dropdown working.
+No change to native fallback picker. RED focused outside-press tests failed
+both; GREEN offscreen and Xcb focused tests (including nested Quick Find
+menu), full CTest 39/39 in 12.27s. Native XTest real mouse probe in isolated
+OBS 32.2.0 /tmp/am-popup-native.Fpqr64/obs.log: 11/11 checks, exit0;
+inside clicks, nested combo, outside dismissal without source creation,
+both reopen, native Color source creation. First fixture opened too early
+via action at startup and first Add popup disappeared; retest after startup
+settled via native toolbar button passed. Two unattributed shutdown leaks
+and existing source-clear warning in isolated run; other platforms and
+special naming dialogs not independently qualified. Docs updated.
+Preserve preexisting unrelated plugin.cpp comment.

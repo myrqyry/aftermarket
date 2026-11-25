@@ -147,6 +147,8 @@ remains available in Settings.
 
 ### Quick Find
 
+Click outside either the compact Add Source picker or the Quick Find popup to dismiss it.
+
 Open **Tools → Aftermarket → Find Sources…** to search the current scene
 collection by source, scene, filter, type, file path, or URL. Open native
 Properties or Filters, or jump to the scene. Studio Mode navigation targets

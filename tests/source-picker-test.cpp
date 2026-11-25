@@ -20,6 +20,7 @@
 #include <QImage>
 #include <QPixmap>
 #include <QEventLoop>
+#include <QMouseEvent>
 #include <iostream>
 #define CHECK(expr) do {if(!(expr)){std::cerr<<"FAILED "<<__LINE__<<": "<<#expr<<"\n";return 1;}}while(false)
 #define EXPECT(expr) do {if(!(expr)){std::cerr<<"FAILED callback "<<__LINE__<<": "<<#expr<<"\n";valid=false;}}while(false)
@@ -153,6 +154,18 @@ int main(int argc,char **argv){
   });
   QTimer::singleShot(900,&n.dialog,&QDialog::reject);
   CHECK(n.dialog.exec()==QDialog::Accepted);CHECK(valid&&n.added==1&&n.addedName=="Backdrop"&&n.created==0);
+ }
+ {
+  Native n(&main);bool valid=true;
+  QTimer::singleShot(40,&n.dialog,[&]{
+   // Qt delivers grabbed popup presses in popup-local coordinates.
+   const QPoint outside(-12,-12);
+   QMouseEvent press(QEvent::MouseButtonPress,QPointF(outside),QPointF(n.dialog.mapToGlobal(outside)),Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+   QApplication::sendEvent(&n.dialog,&press);
+   EXPECT(!n.dialog.isVisible());
+  });
+  QTimer::singleShot(800,&n.dialog,&QDialog::reject);
+  CHECK(n.dialog.exec()==QDialog::Rejected);CHECK(valid&&n.created==0&&n.added==0);
  }
  CHECK(picker.setEnabled(false));
  {Native n(&main);bool valid=true;

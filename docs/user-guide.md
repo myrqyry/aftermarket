@@ -595,13 +595,15 @@ source frames. Select a row, then use the native Add existing action. Both modes
 Make source visible.
 
 The original large thumbnail layout is hidden, not resized into the small
-panel. The picker is a frameless modal dialog owned by OBS and positioned
+panel. The picker is a frameless modal popup owned by OBS and positioned
 inside the main window bounds, rather than an ordinary child widget. This
 keeps it above native graphics surfaces; custom transform handles yield
 while a modal dialog is active. OBS still owns source identity, creation, selection, add-existing
 callbacks, undo and Properties. The panel stays within the main client area;
 unknown dialog structures, hidden Sources docks and insufficient initial
-space retain OBS's original picker.
+space retain OBS's original picker. Click outside the compact picker to
+dismiss it without creating or adding a source; clicks inside its controls
+and dropdowns remain active.
 
 The option is **enabled by default** on compatible OBS installations and
 can be turned off under **OBS → Settings → Aftermarket → Appearance →
@@ -619,7 +621,9 @@ Open **Tools → Aftermarket → Find Sources…** to search the current OBS sce
 collection in a compact, temporary palette. The search matches **source,
 scene, and filter names**, OBS source types, and common source file paths or
 URLs. Results show a parent-scene context when known. Filtering is local to
-OBS; it doesn't send content elsewhere.
+OBS; it doesn't send content elsewhere. Click outside the palette or press
+Escape to dismiss it; opening its result context menu does not dismiss
+the palette.
 
 - **Enter** opens the selected result: a scene/source with an available parent
   scene navigates to that scene, while a filter opens its **owning source's**
