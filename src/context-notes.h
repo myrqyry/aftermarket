@@ -16,10 +16,12 @@ public:
  explicit ContextNotes(QString path);
  QString get(const QString &key)const;
  bool reload();
+ void onChanged(std::function<void()> fn){changed_=std::move(fn);}
  bool put(const QString &key,const QString &expected,const QString &text);
 private:
  QString path_;
  QJsonObject notes_;
+ std::function<void()> changed_;
  bool read(QJsonObject &)const;
 };
 constexpr int NoteTextRole=Qt::UserRole+87;

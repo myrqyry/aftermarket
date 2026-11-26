@@ -184,7 +184,9 @@ Transform loads and filter edits participate in OBS Edit → Undo/Redo. [Command
 ### Contextual notes
 
 Private notes attach to scenes, shared sources, filters or specific scene
-items. In Quick Find, right-click a result and choose Add note; in the
+items. Right-click a native Scenes or Sources row and choose Add note; its
+small information glyph appears on the row when a note exists. In Quick
+Find, right-click a result and choose Add note; in the
 command center, right-click an @ result. The Source Inspector supports notes
 on its source heading, transform context and filter rows. A small circled
 information symbol appears only when a note exists: hover to read the native

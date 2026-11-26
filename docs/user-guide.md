@@ -742,7 +742,16 @@ text and save to delete the note. Notes are plain text (up to 4096 characters);
 HTML characters remain literal. The normal tooltip theme and maximum-width
 preference apply. Scene/source/filter note text participates in Quick Find
 and @ search; item notes are visible in their scene-item inspector context.
-Native OBS Scenes and Sources list rows do not yet carry note glyphs.
+Right-click a native Scenes or Sources row and choose **Add note…** or
+**Edit note…**. The same note appears as a small theme-aware circled glyph
+beside the source visibility/lock controls or at the trailing edge of a
+scene list row. Hover to read, click to edit; objects without notes have
+no extra glyph. A source row attaches to the shared source, not a specific
+placement (use the inspector for placement notes). Scene grid mode,
+actively edited scene rows, and scene rows without sufficient spare width
+retain their native appearance; the context-menu note action is still
+available. Native filter dialogs are unchanged. Notes on filters remain
+accessible in the inspector and search.
 
 Notes are stored locally in Aftermarket's `context-notes.json` using stable
 OBS UUIDs, with the parent UUID for filters and owner scene UUID plus scene-item

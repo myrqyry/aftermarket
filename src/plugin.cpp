@@ -16,6 +16,7 @@
 #include "command-center.h"
 #include "source-inspector-dock.h"
 #include "obs-note-targets.h"
+#include "native-notes.h"
 #include "source-dock-pin.h"
 #include "source-performance.h"
 #include "dock-layouts.h"
@@ -71,6 +72,7 @@ static QPointer<augment::QuickFind> quickFind;
 static std::unique_ptr<augment::CommandCenter> commandCenter;
 static QPointer<augment::SourceInspectorDock> sourceInspector;
 static std::shared_ptr<augment::ContextNotes> contextNotes;
+static std::unique_ptr<augment::NativeNotes> nativeNotes;
 static std::unique_ptr<augment::ToolsMenu> toolsMenu;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
@@ -308,7 +310,7 @@ static bool openEntryNote(const augment::QuickFindEntry &entry){
     const auto collection=augment::noteCollection();
     augment::editContextNote(main,contextNotes,augment::entryNoteKey(entry),entry.name,
         [collection,entry]{return uiActive&&frontendReady&&collection==augment::noteCollection()&&augment::noteEntryExists(entry);},
-        []{if(sourceInspector)sourceInspector->refresh();});
+        []{if(sourceInspector)sourceInspector->refresh();if(nativeNotes)nativeNotes->schedule();});
     return true;
 }
 static void showQuickFind(){
@@ -476,6 +478,7 @@ static void stopCustomUi(){
     commandCenter.reset();
     if(auto *main=static_cast<QWidget*>(obs_frontend_get_main_window()))
         for(auto *editor:main->findChildren<QDialog*>("aftermarket-note-editor"))delete editor;
+    nativeNotes.reset();
     contextNotes.reset();
     if(sourceInspector){obs_frontend_remove_dock("aftermarket-source-inspector-dock");sourceInspector.clear();}
     delete quickFind.data();
@@ -636,6 +639,7 @@ static bool startCustomUi(){
     uiActive=true;
     contextNotes=std::make_shared<augment::ContextNotes>(QFileInfo(stripConfigPath).dir().filePath("context-notes.json"));
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()))){
+        nativeNotes=std::make_unique<augment::NativeNotes>(main,contextNotes,openEntryNote);
         auto *dock=new augment::SourceInspectorDock(main,QFileInfo(stripConfigPath).dir().filePath("property-presets.json"),contextNotes);
         if(obs_frontend_add_dock_by_id("aftermarket-source-inspector-dock","Source Inspector",dock))sourceInspector=dock;
         else delete dock;
@@ -681,6 +685,7 @@ static void cleanupUi(){
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
     if(nativeActions&&event!=OBS_FRONTEND_EVENT_EXIT)nativeActions->onFrontendEvent(event);
+    if(nativeNotes&&event!=OBS_FRONTEND_EVENT_EXIT)nativeNotes->schedule();
     if(sourceInspector){
         if(event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING||event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP)
             sourceInspector->clearSelection();

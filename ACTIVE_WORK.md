@@ -4055,3 +4055,35 @@ RED unequal editor origins across runs; GREEN 44/44 CTests and 7/7
 native checks, Fluffy Dark density -2/font 10: 102px labels and 285px
 editors in each column of synthetic native camera properties.
 Evidence /tmp/am-section-layout.PuU0J1. No physical camera accessed.
+
+## 2026-11-25: native Scenes/Sources contextual note entry points
+
+User asked to add notes after the Colorway icon palette changes finished.
+Existing notes implementation was already installed and synchronized with
+icon work; add direct native row affordances to remove inspector detour.
+NativeNotes event-driven adapter shares ContextNotes store and editor.
+Right-click actual native scene/source row adds note action to existing
+popup; captured persistent index and UUID revalidated before editing.
+Source row verified model accessible name agrees with native OBSSourceLabel
+then resolves live source; scene row resolves unique live scene name.
+Shared source/scene keys reused, not placement notes. Source glyph inserted
+beside native visibility/lock widgets without replacing native controls.
+Scene glyph uses spare space only, never replaces SceneRenameDelegate;
+grid, narrow/long-name rows and inline rename skip glyph, context action
+still available. Theme selection/disabled/active foreground, native
+tooltip limit, only existing notes draw badges. Cached store mutation
+notification plus native model/geometry events, no periodic timer.
+Safe mode removes owned badges and note UI; native filter dialog unchanged.
+No new broadcast output or visual drawing.
+
+RED isolated native probe against previous binary failed missing menu
+and badge, /tmp/am-native-notes.e6X9Ki/obs.log. GREEN native 11/11
+/tmp/am-native-notes.YfV4Jy/obs.log; final 11/11
+/tmp/am-native-notes.hWHcQa/obs.log, source-notes.png and scene-notes.png
+inspected. Source menu/add/save/hover/click, scene menu/save/badge,
+rename persistence, deletion removal. Existing context notes 24/24
+/tmp/am-context-notes.bpmZ2y/obs.log; both isolated OBS exit0, two
+unattributed shutdown allocations each. Full 44/44 CTest
+/tmp/am-native-notes-ctest.log. Grid/narrow/inline rename behavior and
+other themes not independently native-tested. Docs updated. Preserve
+unrelated plugin.cpp comment; do not restart running production OBS.

@@ -114,7 +114,7 @@ bool ContextNotes::read(QJsonObject &out)const{
   if(!validKey(it.key())||!it.value().isString()||it.value().toString().isEmpty()||it.value().toString().size()>maxText||it.value().toString().contains(QChar(0)))return false;
  return true;
 }
-bool ContextNotes::reload(){QJsonObject next;if(!read(next))return false;notes_=next;return true;}
+bool ContextNotes::reload(){QJsonObject next;if(!read(next))return false;if(notes_!=next){notes_=next;if(changed_)changed_();}return true;}
 bool ContextNotes::put(const QString &key,const QString &expected,const QString &text){
  if(!validKey(key)||text.size()>maxText||text.contains(QChar(0))||!QDir().mkpath(QFileInfo(path_).absolutePath()))return false;
  QLockFile lock(path_+".lock");if(!lock.tryLock(0))return false;
@@ -124,7 +124,7 @@ bool ContextNotes::put(const QString &key,const QString &expected,const QString 
  if(bytes.size()>maxFile)return false;
  QSaveFile f(path_);f.setDirectWriteFallback(false);
  if(!f.open(QIODevice::WriteOnly)||!f.setPermissions(QFileDevice::ReadOwner|QFileDevice::WriteOwner)||f.write(bytes)!=bytes.size()||!f.commit())return false;
- notes_=next;return true;
+ notes_=next;if(changed_)changed_();return true;
 }
 QString noteTooltip(const QString &text){return "<span>"+text.toHtmlEscaped().replace("\n","<br>")+"</span>";}
 QRect noteBadgeRect(const QRect &row,Qt::LayoutDirection direction){
