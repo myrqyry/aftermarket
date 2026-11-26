@@ -23,6 +23,11 @@
 #include <iostream>
 #define REQUIRE(x) do {if(!(x)){std::cerr<<"FAILED "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 
+class QuickAccessDock : public QWidget {
+ Q_OBJECT
+ public: using QWidget::QWidget;
+};
+
 int main(int argc,char **argv){
  QApplication app(argc,argv);app.setStyle("Fusion");
  using Kind=augment::DockTitleIcons::Kind;
@@ -362,6 +367,30 @@ int main(int argc,char **argv){
    REQUIRE(bool(entry.dock->features() & QDockWidget::DockWidgetClosable)==
            (entry.dock!=docks[0].dock));
  }
+ // QAU registers arbitrary IDs and titles, but an exact native Qt
+ // content class. Test the actual renderer rather than only registry lookup.
+ {
+   QMainWindow qauWindow;
+   qauWindow.setCentralWidget(new QWidget(&qauWindow));
+   auto *dock=new QDockWidget("Camera controls",&qauWindow);
+   dock->setObjectName("quick-access-dock_custom-id");
+   dock->setWidget(new QuickAccessDock(dock));
+   dock->setMinimumWidth(230);
+   qauWindow.addDockWidget(Qt::LeftDockWidgetArea,dock);
+   qauWindow.resize(650,400);qauWindow.show();app.processEvents();
+   augment::Panels panels;
+   augment::DockTitleIcons icons(&qauWindow,&panels,tmp.filePath("qau.ini"));
+   icons.refresh();app.processEvents();
+   auto *glyph=icons.glyph(dock);
+   REQUIRE(glyph&&glyph->isVisible());
+   const auto img=glyph->grab().toImage();
+   const auto expected=qGray(glyph->palette().color(QPalette::WindowText).rgb())>=128?QColor("#e0def4"):QColor("#191724");
+   REQUIRE(img.pixelColor(img.width()/2,img.height()/2)==expected);
+   dock->setWindowTitle("Renamed controls");icons.refresh();app.processEvents();
+   REQUIRE(glyph->grab().toImage()==img);
+ }
  std::cout<<"native OBS dock title icons verified\n";
  return 0;
 }
+
+#include "dock-title-icons-test.moc"

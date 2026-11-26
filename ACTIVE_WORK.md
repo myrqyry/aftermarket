@@ -3939,3 +3939,12 @@ Evidence /tmp/am-mixer-columns.f9FZHG and /tmp/am-mixer-rotary.ffF6Bo.
 Default isolated theme, not exact user Colorway theme. Actual physical
 right-click release without menu selection not separately tested.
 Unrelated plugin.cpp comment remains unstaged.
+
+## SVG Source and QAU icon identity — 2026-11-25
+Colorway c723cc0 supplies both inks and exact svg_source input mapping.
+QAU upstream QuickAccessDock is a Q_OBJECT content widget registered under
+dynamic quick-access-dock_<id> dock IDs. Extend the existing SourceDock
+class recognition only to that verified class. Fixture regression initially
+failed on generic title glyph, then passed exact rendered ink and rename
+invariance. 43/43 CTests passed. Actual third-party QAU and SVG Source
+modules are not installed here; native end-to-end appearance unverified.

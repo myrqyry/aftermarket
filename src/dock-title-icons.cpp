@@ -294,7 +294,13 @@ void DockTitleIcons::refresh(){
     const PluginThemeIcons pluginIcons;
     for(auto *dock:docks){
         if(!dock)continue;
-        const QString contentClass=dock->widget()&&dock->widget()->inherits("SourceDock")?"SourceDock":QString{};
+        // These third-party docks use dynamic IDs. Match their verified
+        // native Qt content types, never the user-editable dock title.
+        QString contentClass;
+        if(auto *content=dock->widget()){
+            if(content->inherits("SourceDock"))contentClass="SourceDock";
+            else if(content->inherits("QuickAccessDock"))contentClass="QuickAccessDock";
+        }
         const auto kind=classify(dock->objectName(),originalTitle(dock),contentClass);
         const auto pluginGlyph=pluginIcons.dock(dock->objectName(),contentClass);
         if(icons_.contains(dock)&&icons_.value(dock)){
