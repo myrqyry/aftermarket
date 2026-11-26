@@ -16,10 +16,11 @@ versioned workflow only after the pilots qualify.
 3. Configure a clean Release build with explicit SDK CMake package paths.
 4. Require the native CTest suite to register at least the baseline number
    of tests and pass under Xvfb/software rendering without skipped tests.
-5. Stage the module via CMake install, enforce the exact module-only
-   payload, reject embedded runtime search paths, and check shared libraries.
+5. Stage the module via CMake install, enforce the exact plugin module and
+   required third-party notice payload, reject embedded runtime search paths,
+   and check shared libraries.
 6. Create a temporary archive, verify its SHA-256, extract it separately,
-   and compare the extracted module to the staged module.
+   and compare the extracted module and notice against their expected contents.
 
 The workflow runs on pull requests, pushes to main/master, and manual
 dispatch. It has read-only repository permissions and no automatic
@@ -54,7 +55,7 @@ claim that the latest package was requalified against that SDK.
 
 The local build at `f111fbe` passed all **44/44 CTests** using the installed
 OBS 32.2.0 SDK and Qt 6.4.2. The CI minimum now follows the expanded
-45-test baseline; the gate runs every registered test and rejects skipped
+46-test baseline; the gate runs every registered test and rejects skipped
 or failing tests.
 
 The latest completed hosted run before this documentation refresh,
@@ -77,7 +78,13 @@ A local Release verification of the CI fix on the `1011155` baseline
 passed all 45 CTests, the installed local SDK dependency checks, and the
 module-only archive checksum/extraction checks. This was not a hosted
 verification or a release.
-A passing hosted run is still required to qualify the pinned CI environment.
+Hosted run [45762058216](https://github.com/myrqyry/aftermarket/actions/runs/45762058216)
+passed at `2a56611` (45 tests, before loudness integration). The combined
+loudness package has a separate 46-test qualification baseline and requires
+the bundled libebur128 notice at `aftermarket/data/THIRD_PARTY_NOTICES.txt`.
+Local Release verification against the installed SDK passed all 46 CTests
+and both staged/extracted file checks, including the notice. Its hosted
+qualification is separate.
 A new push to main/master triggers the existing workflow, not a release.
 
 Run local relative-link checks for the maintained documentation with:
