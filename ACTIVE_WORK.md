@@ -3776,3 +3776,23 @@ copy of the previous binary; verified installed bytes. Existing user theme
 files and scene/settings state were not rewritten for the probe.
 Remaining: dialog/menu-action identities, transition consumer, other unmapped
 glyphs and broader real-UI checks of sources, filters, and fixed-ID docks.
+
+## Native plugin row icons — 2026-11-25
+Extended the optional Colorway registry into the actual OBS SourceTree and
+OBSBasicFilters dialog. SourceTree's AccessibleTextRole is the exact source
+name (verified against upstream SourceTreeModel and OBSSourceLabel); resolve
+through libobs to an unversioned source type ID, and retain the native icon
+slot. Native filter rows carry OBSSource in UserRole; insert a mouse-transparent
+16px glyph beside their existing name, leaving the checkbox and model intact.
+Scoped layout/model/selection/palette events coalesce updates; no periodic
+polling. Restore only our own decoration on safe mode/unload. Unmapped types
+and native Sources icon visibility are preserved.
+Verified: new regression test covers mapped/unmapped source rows, selection
+polarity, filter insertion/removal, original pixmap/control restoration.
+43/43 CTests and full module build passed. Isolated real OBS 32.2.0 with
+installed Source Clone and emulens: newly created clone source and emulens
+filter in native rows matched the selected registry SVGs pixel-for-pixel in
+Rosé Pine and Rosé Pine Dawn. Both isolated sessions shut down normally,
+reporting the previously observed three unattributed memory leaks.
+Tools menu, scene transition selector, native filter add menu, and Unscene's
+nested source rows are not integrated in this slice.

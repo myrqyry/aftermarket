@@ -79,7 +79,13 @@ native dock, including responsive Studio Mode.
 
 When the Colorway theme package provides its plugin-icon registry, Aftermarket
 uses the registered source/filter types and exact dock IDs (or the verified SourceDock widget class for dynamically named docks) to display the custom
-glyphs in its source picker, Source Inspector, Quick Find and dock title bars.
+glyphs in its source picker, Source Inspector, Quick Find, dock title bars,
+and the native Sources list and Filters dialog. Native Sources rows reuse
+the existing icon slot; filter rows receive a mouse-transparent glyph beside
+their native name. The exact native source model name resolves to a libobs
+source, and native filter item data resolves directly to a libobs filter.
+Selection changes follow the view palette; emergency recovery restores
+original pixmaps and removes only Aftermarket-owned filter glyphs.
 Both ink polarities follow the current palette; unknown IDs and missing
 assets retain the original or generic icon. No external plugin is required
 or patched, and the stock OBS source tree is not rewritten.

@@ -31,6 +31,9 @@
 #include "dock-title-icons.h"
 #include "obs-settings-page.h"
 #include "source-picker.h"
+#include "native-plugin-icons.h"
+#include <obs.hpp>
+#include <QVariant>
 #include "native-audio-settings.h"
 #include "obs-signal-levels.h"
 #include <QToolButton>
@@ -57,6 +60,7 @@
 #include "config-identity.h"
 #include "obs-audio.h"
 #include "obs-transform.h"
+Q_DECLARE_METATYPE(OBSSource);
 OBS_DECLARE_MODULE()
 static augment::Controller *controller = nullptr;
 static std::unique_ptr<augment::ObsAudio> audio;
@@ -82,6 +86,7 @@ static std::unique_ptr<augment::DockFaces> dockFaces;
 static std::unique_ptr<augment::DockTitleIcons> dockTitleIcons;
 static std::unique_ptr<augment::ObsSettingsPage> nativeSettings;
 static std::unique_ptr<augment::SourcePicker> sourcePicker;
+static std::unique_ptr<augment::NativePluginIcons> nativePluginIcons;
 static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
@@ -461,6 +466,7 @@ static void stopCustomUi(){
     dockFaces.reset(); // unwrap original mixer widget before panel teardown
     dockTitleIcons.reset(); // remove only plugin-painted native title icons
     compactBar.reset(); // return original OBS QAction identities
+    nativePluginIcons.reset(); // restore native source pixmaps and remove filter glyphs
     rowStripes.reset();
     propertyPresetFooter.reset();
     propertyColumns.reset();
@@ -497,6 +503,19 @@ static bool startCustomUi(){
     propertyColumns=std::make_unique<augment::PropertyColumns>();
     propertyColumns->setMode(controller->propertyColumns());
     propertyPresetFooter=std::make_unique<augment::PropertyPresetFooter>(QFileInfo(stripConfigPath).dir().filePath("property-presets.json"));
+    nativePluginIcons=std::make_unique<augment::NativePluginIcons>(
+        [](const QString &name)->QString{
+            const auto bytes=name.toUtf8();
+            OBSSourceAutoRelease source=obs_get_source_by_name(bytes.constData());
+            if(!source||obs_source_removed(source)||obs_source_get_type(source)!=OBS_SOURCE_TYPE_INPUT)return {};
+            return QString::fromUtf8(obs_source_get_unversioned_id(source));
+        },
+        [](const QVariant &value)->QString{
+            if(value.metaType()!=QMetaType::fromType<OBSSource>())return {};
+            OBSSource filter=value.value<OBSSource>();
+            if(!filter||obs_source_removed(filter)||obs_source_get_type(filter)!=OBS_SOURCE_TYPE_FILTER)return {};
+            return QString::fromUtf8(obs_source_get_unversioned_id(filter));
+        });
     rowStripes=std::make_unique<augment::RowStripes>();
     rowStripes->configure(controller->listRowSettings());
     compactBar=std::make_unique<augment::MenuBarCompact>();
