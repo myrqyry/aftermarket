@@ -41,7 +41,7 @@ jobs:
       - name: Prepare pinned OBS SDK
         run: bash .github/scripts/prepare-obs32-sdk.sh "$RUNNER_TEMP/obs32"
       - name: Build, test and verify the local install archive
-        run: bash .github/scripts/verify-linux.sh "$RUNNER_TEMP/obs32/sdk" "$RUNNER_TEMP/plugin-ci" aftermarket 45
+        run: bash .github/scripts/verify-linux.sh "$RUNNER_TEMP/obs32/sdk" "$RUNNER_TEMP/plugin-ci" aftermarket 46
       - name: Record checksums in job summary
         run: |
           echo '### Verified local test archive (not uploaded)' >> "$GITHUB_STEP_SUMMARY"

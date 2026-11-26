@@ -60,7 +60,7 @@ cmake --install "$build" --prefix "$stage/$module"
 binary="$stage/$module/bin/64bit/$module.so"
 test -s "$binary"
 # Exact payload allowlist: no configuration, source, bundled runtimes,
-# or build outputs accidentally enter this preliminary module-only package.
+# or build outputs accidentally enter this preliminary plugin package.
 expected=$(printf '%s\n' "$module/bin/64bit/$module.so")
 if [[ "$module" == aftermarket ]]; then
   expected=$(printf '%s\n' "$module/bin/64bit/$module.so" "$module/data/THIRD_PARTY_NOTICES.txt")
@@ -79,5 +79,9 @@ grep -Fx "$module/bin/64bit/$module.so" "$work/package-members.txt"
 (cd "$work" && sha256sum "$module-linux-x86_64-obs32-test.tar.gz" > SHA256SUMS && sha256sum -c SHA256SUMS)
 mkdir "$work/extracted"
 tar -xzf "$work/$module-linux-x86_64-obs32-test.tar.gz" -C "$work/extracted"
+test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
 cmp "$binary" "$work/extracted/$module/bin/64bit/$module.so"
+if [[ "$module" == aftermarket ]]; then
+  cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$work/extracted/$module/data/THIRD_PARTY_NOTICES.txt"
+fi
 echo "Native tests and local package validation passed; not a release."
