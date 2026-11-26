@@ -329,6 +329,8 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto *sliders=check("Sliders and rotary rings","augment-gradient-sliders",gl,gradient);
     auto *progress=check("Progress bars","augment-gradient-progress",gl,gradient);
     auto *titlebars=check("Dock titlebar accents","augment-gradient-titlebars",gl,gradient);
+    auto *titlebarFill=check("Gradient dock headers","augment-gradient-titlebar-fill",gl,gradient);
+    titlebarFill->setToolTip("Tint the whole native dock header instead of only its underline.");
     auto *form=new QFormLayout;
     auto *pattern=new QComboBox(gradient);pattern->setObjectName("augment-gradient-pattern");
     for(const auto &id:GradientSpec::patterns())pattern->addItem(GradientSpec::patternLabel(id),id);
@@ -393,7 +395,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto draft=[=]{
         auto next=state->baseline;
         QJsonArray palette;const auto text=colors->text().trimmed();if(!text.isEmpty())for(const auto &c:text.split(','))palette.append(c.trimmed());
-        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();next["progress"]=progress->isChecked();next["titlebars"]=titlebars->isChecked();next["pattern"]=pattern->currentData().toString();
+        next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();next["progress"]=progress->isChecked();next["titlebars"]=titlebars->isChecked();next["titlebarFill"]=titlebarFill->isChecked();next["pattern"]=pattern->currentData().toString();
         next["knobs"]=knobs->isChecked();next["knobSources"]=QJsonArray::fromStringList(all->isChecked()?QStringList{}:checkedNames());next["knobMeters"]=knobMeters->isChecked();
         next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
         return next;
@@ -408,11 +410,11 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
         state->baseline=controller.gradientSettings();GradientSpec spec;GradientSpec::parse(state->baseline,spec);
         {const QSignalBlocker blocker(modernTransforms);modernTransforms->setChecked(controller.modernTransformFrame());}
         knobs->setChecked(spec.knobs);knobMeters->setChecked(spec.knobMeters);all->setChecked(spec.knobSources.isEmpty());populate(spec.knobSources);
-        reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);titlebars->setChecked(spec.titlebars);pattern->setCurrentIndex(pattern->findData(spec.pattern));
+        reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);titlebars->setChecked(spec.titlebars);titlebarFill->setChecked(spec.titlebarFill);pattern->setCurrentIndex(pattern->findData(spec.pattern));
         QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());colors->setText(hex.join(", "));period->setValue(spec.period);
         enablement();updatePreview();*normalized=draft();changed();
     };
-    for(auto *box:{knobs,knobMeters,all,reactive,meters,enable,sliders,progress,titlebars})
+    for(auto *box:{knobs,knobMeters,all,reactive,meters,enable,sliders,progress,titlebars,titlebarFill})
         QObject::connect(box,&QCheckBox::toggled,footer,changed);
     QObject::connect(sources,&QListWidget::itemChanged,footer,changed);
     QObject::connect(colors,&QLineEdit::textChanged,footer,changed);

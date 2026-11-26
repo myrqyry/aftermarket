@@ -419,6 +419,8 @@ int main(int argc,char **argv) {
         auto *titlebars=dialog->findChild<QCheckBox*>("augment-gradient-titlebars");
         auto *pattern=dialog->findChild<QComboBox*>("augment-gradient-pattern");
         REQUIRE(enable&&colors&&period&&apply&&titlebars&&pattern);
+        auto *headerFill=dialog->findChild<QCheckBox*>("augment-gradient-titlebar-fill");
+        REQUIRE(headerFill&&!headerFill->isChecked());headerFill->setChecked(true);
         titlebars->setChecked(true);pattern->setCurrentIndex(pattern->findData("bounce"));
         auto *reactive=dialog->findChild<QCheckBox*>("augment-gradient-reactive");
         auto *meters=dialog->findChild<QCheckBox*>("augment-gradient-meters");
@@ -440,6 +442,7 @@ int main(int argc,char **argv) {
         REQUIRE(c.gradientSettings().value("colors").toArray().size()==3);
         REQUIRE(c.gradientSettings().value("period").toInt()==2300);
         REQUIRE(c.gradientSettings().value("pattern").toString()=="bounce"&&c.gradientSettings().value("titlebars").toBool());
+        REQUIRE(c.gradientSettings().value("titlebarFill").toBool());
         REQUIRE(c.gradientSettings().value("audioReactive").toBool());
         REQUIRE(c.gradientSettings().value("meters").toBool());
         REQUIRE(c.gradientSettings().value("knobs").toBool());

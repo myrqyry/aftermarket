@@ -224,6 +224,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
     checkbox("slider-gradients","Sliders and rotary rings",mixer.second,mixer.first,spec.sliders);
     checkbox("progress-gradients","Progress bars",mixer.second,mixer.first,spec.progress);
     checkbox("title-gradients","Dock titlebar accents",mixer.second,mixer.first,spec.titlebars);
+    checkbox("titlebar-fill","Gradient dock headers",mixer.second,mixer.first,spec.titlebarFill);
     checkbox("reactive","Audio-reactive mixer gradients",mixer.second,mixer.first,spec.audioReactive);
     checkbox("meter-pulse","Pulse native meter colors",mixer.second,mixer.first,spec.meters);
     auto *mixerForm=new QFormLayout;
@@ -480,7 +481,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
         {"knobs","knobs"},{"knob-meters","knobMeters"},
         {"gradients","enabled"},{"slider-gradients","sliders"},
         {"progress-gradients","progress"},{"reactive","audioReactive"},
-        {"meter-pulse","meters"},{"title-gradients","titlebars"}
+        {"meter-pulse","meters"},{"title-gradients","titlebars"},{"titlebar-fill","titlebarFill"}
     };
     for(const auto &field:fields){
         const bool before=entry->baseline.value(field.first,false);

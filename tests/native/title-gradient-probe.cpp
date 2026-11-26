@@ -13,11 +13,12 @@ static QPointer<QDockWidget> dock;
 static QPointer<QWidget> body;
 static QImage before;
 static QString title;
+static bool full(){return qEnvironmentVariableIntValue("FULL_HEADER")==1;}
 static void check(const char *name,bool pass){blog(pass?LOG_INFO:LOG_ERROR,"GRADIENTCHECK %s=%d",name,pass);}
 static QWidget *accent(){return dock?dock->findChild<QWidget*>("aftermarket-title-gradient",Qt::FindDirectChildrenOnly):nullptr;}
 static bool settings(bool motion,bool titlebars){
  QSaveFile f(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/home/.config/obs-studio/plugin_config/aftermarket/rules.json");
- const auto json=QString("{\"enabled\":true,\"motion\":%1,\"rules\":[],\"gradient\":{\"enabled\":true,\"sliders\":false,\"progress\":false,\"titlebars\":%2,\"pattern\":\"shimmer\",\"period\":1200,\"colors\":[\"#31748f\",\"#c4a7e7\"]}}").arg(motion?"true":"false",titlebars?"true":"false").toUtf8();
+ const auto json=QString("{\"enabled\":true,\"motion\":%1,\"rules\":[],\"gradient\":{\"enabled\":true,\"sliders\":false,\"progress\":false,\"titlebars\":%2,\"titlebarFill\":%3,\"pattern\":\"shimmer\",\"period\":1200,\"colors\":[\"#31748f\",\"#c4a7e7\"]}}").arg(motion?"true":"false",titlebars&&!full()?"true":"false",titlebars&&full()?"true":"false").toUtf8();
  return f.open(QIODevice::WriteOnly)&&f.write(json)==json.size()&&f.commit();
 }
 static void probe(){
@@ -28,7 +29,7 @@ static void probe(){
  check("native_dock",body&&dock->isVisible());
  QTimer::singleShot(300,qApp,[]{
   auto *s=accent();
-  check("accent",s&&s->isVisible()&&s->height()==2&&s->geometry().bottom()<body->geometry().top()&&s->testAttribute(Qt::WA_TransparentForMouseEvents));
+  check("accent",s&&s->isVisible()&&(full()?s->height()>10:s->height()==2)&&s->geometry().bottom()<body->geometry().top()&&s->testAttribute(Qt::WA_TransparentForMouseEvents));
   if(s)before=s->grab().toImage();
  });
  QTimer::singleShot(510,qApp,[]{

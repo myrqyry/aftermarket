@@ -141,6 +141,29 @@ int main(int argc,char **argv) {
     dock->setFloating(false);wait(60);REQUIRE(stripe->isVisible());
     spec["titlebars"]=false;REQUIRE(controller.setGradientSettings(spec));wait(40);
     REQUIRE(!dock->findChild<QWidget*>("aftermarket-title-gradient"));
+    dock->setMinimumWidth(250);
+    dock->setStyleSheet("QDockWidget::title { background: #282828; color: #eeeeee; padding: 4px; }");
+    wait(40);
+    const auto plain=dock->grab().toImage();
+    spec["titlebarFill"]=true;spec["pattern"]="static";
+    REQUIRE(controller.setGradientSettings(spec));wait(60);
+    auto *header=dock->findChild<QWidget*>("aftermarket-title-gradient");
+    REQUIRE(header&&header->isVisible()&&header->height()>10);
+    REQUIRE(header->geometry().bottom()<native->geometry().top());
+    auto decorated=dock->grab().toImage();
+    int changed=0,ink=0,damaged=0;
+    for(int y=0;y<native->geometry().top();++y)for(int x=0;x<dock->width();++x){
+        const auto p=plain.pixelColor(x,y),q=decorated.pixelColor(x,y);
+        if(p!=q)++changed;
+        if(y>=1&&y<native->geometry().top()-2&&x<100&&p!=QColor("#282828")){++ink;if(p!=q)++damaged;}
+    }
+    std::cerr<<"header changed="<<changed<<" ink="<<ink<<" damaged="<<damaged<<" body top="<<native->geometry().top()<<" layer="<<header->geometry().x()<<","<<header->geometry().y()<<","<<header->width()<<","<<header->height()<<"\n";
+    REQUIRE(changed>100&&ink>5&&damaged==0);
+    REQUIRE(dock->widget()==native&&dock->windowTitle()==title&&!dock->titleBarWidget());
+    dock->setFloating(true);wait(60);REQUIRE(!header->isVisible());
+    dock->setFloating(false);wait(60);REQUIRE(header->isVisible());
+    spec["titlebarFill"]=false;REQUIRE(controller.setGradientSettings(spec));wait(40);
+    REQUIRE(!dock->findChild<QWidget*>("aftermarket-title-gradient"));
     REQUIRE(controller.setGradientSettings(QJsonObject{{"enabled",false}}));wait(40);
     REQUIRE(!slider->findChild<QWidget*>("aftermarket-gradient"));
     REQUIRE(!progress->findChild<QWidget*>("aftermarket-gradient"));

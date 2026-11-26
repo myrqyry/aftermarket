@@ -253,7 +253,7 @@ palette. Optional refinements include:
 - Theme-aware Settings gear at the far-right edge of the native menu bar, independent of the optional Action Strip.
 - Responsive source/filter property columns (Auto, 1, up to 2, or up to 3), including independently reflowing collapsible native property groups.
 - Named source/filter property and whole filter-chain presets directly in the native Defaults/OK/Close footer, with portable JSON import/export.
-- Gradient tracks and optional native dock titlebar accents: Flow, Reverse, Ping-pong, Breathing, Shimmer and Static, using one shared palette, loop and clock.
+- Gradient tracks and optional native dock titlebar accents or full-header gradients: Flow, Reverse, Ping-pong, Breathing, Shimmer and Static, using one shared palette, loop and clock.
 - Animated menu artwork (soft, pop, spin, fade and lift), dock collapse, and a two-sided perspective flip between Audio Mixer and AudioBus. Aftermarket-owned dock, Studio and Action Strip toggle controls have subtle animated state feedback. Bounded elapsed-time steps, partial repaint regions and idle timers reduce GUI work. Disable Motion for immediate transitions.
 
 | List backgrounds | Transform selection |

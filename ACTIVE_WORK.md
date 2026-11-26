@@ -4112,3 +4112,18 @@ native action enable state and restoration. Native OBS 32.2.0 Fluffy Dark:
 3/3 checks, right edge 1198/1200, actual native Settings opened and
 closed. Evidence /tmp/am-menu-settings.5n1jxt. Native OS menu bars
 untouched. User OBS left running; no push.
+
+## Full gradient dock headers — 2026-11-25
+Existing titlebars preference is a two-pixel underline; added independent
+titlebarFill boolean (default false), exposed as Gradient dock headers in
+native Settings and Workspace. Full mode takes precedence if both enabled.
+Reuse shared animation clock, palette/custom colors, pattern, period and
+global Motion. Translucent 22% tint on native dock header, bounded cached
+native-style ink mask with physical pixel AA guard; lower layer below
+native child controls. No title replacement, floating/custom/vertical
+excluded. Regression verifies native text pixels unchanged in styled Qt
+fixture; 44/44 CTests including both settings paths. Native Fluffy Dark
+OBS 32.2.0 full header probe 8/8: geometry, animated pixels, native
+identity, reduced motion and removal. Evidence /tmp/am-title-gradient.bo1jTB.
+Native pixel-perfect text preservation across all themes not established;
+no user config preference automatically changed. No push.

@@ -1047,11 +1047,12 @@ inside meter bars remain future work.
 
 ### Animated gradient tracks
 
-Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gradient tracks**, select sliders, progress bars and/or dock titlebar accents, choose an animation, and apply. Enable the Workspace's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
+Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gradient tracks**, select sliders, progress bars and/or dock header gradients, choose an animation, and apply. Enable the Workspace's global **Motion** toggle for flowing gradients. The defaults leave existing configurations untouched.
 
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
 - Dock titlebar accents: a two-logical-pixel gradient underline on supported native dock titles. The original title, glyphs, menu controls and drag targets are unchanged. Floating, vertical and custom titlebars are excluded.
+- **Gradient dock headers:** a subtle full-width palette-derived background wash, using the same animation, colors, loop duration and Motion preference. Native title lettering and child controls are retained. Full-header mode takes precedence over the underline if both are selected. Find it in Gradients in Workspace or Mixer in OBS Settings → Aftermarket. Off by default.
 - Colors: leave blank for the native palette, or specify 2–6 opaque colors separated by commas. Loop duration is adjustable from 400–12000 ms.
 - Animation: **Flow** (existing behavior), **Reverse flow**, **Ping-pong**, **Breathing** (stationary gradient with changing brightness), **Shimmer** (a narrow sweeping highlight using the first two palette colors), or **Static** (no decorative animation). The pattern applies to slider fills, progress accents, rotary gain rings and title accents together; it does not change the native meter scale or actual values.
 

@@ -38,9 +38,10 @@ bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     if(value.isUndefined()) {out=next;return true;}
     if(!value.isObject())return false;
     const auto o=value.toObject();
-    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs","knobMeters","titlebars"})
+    for(auto k:{"enabled","sliders","progress","audioReactive","meters","knobs","knobMeters","titlebars","titlebarFill"})
         if(o.contains(k)&&!o.value(k).isBool())return false;
     next.titlebars=o.value("titlebars").toBool(false);
+    next.titlebarFill=o.value("titlebarFill").toBool(false);
     if(o.contains("pattern")){
         if(!o.value("pattern").isString()||!patterns().contains(o.value("pattern").toString()))return false;
         next.pattern=o.value("pattern").toString();
@@ -108,7 +109,7 @@ bool eligible(const QWidget *w,const GradientSpec &spec) {
     for(auto *p=w;p;p=p->parentWidget())
         if(p->objectName()=="aftermarket-overlay"||p->objectName()=="aftermarket-gradient"||
            p->objectName()=="aftermarket-inspector"||p->objectName()=="aftermarket-panels")return false;
-    return knobTarget(w,spec)||(spec.enabled&&((spec.titlebars&&qobject_cast<const QDockWidget*>(w))||(spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
+    return knobTarget(w,spec)||(spec.enabled&&(((spec.titlebars||spec.titlebarFill)&&qobject_cast<const QDockWidget*>(w))||(spec.sliders&&qobject_cast<const QSlider*>(w))||(spec.progress&&qobject_cast<const QProgressBar*>(w))));
 }
 }
 namespace {
@@ -224,6 +225,12 @@ QRect titleAccent(const QDockWidget *dock){
     const int top=body.top();
     if(top<16||top>48||body.width()<32)return {};
     return QRect(body.left()+2,top-3,body.width()-4,2).intersected(dock->rect());
+}
+QRect titleBackground(const QDockWidget *dock){
+    const auto accent=titleAccent(dock);
+    if(!accent.isValid())return {};
+    const auto body=dock->widget()->geometry();
+    return QRect(body.left()+1,1,body.width()-2,body.top()-3).intersected(dock->rect());
 }
 double patternOffset(const QString &pattern,double phase){
     if(pattern=="reverse")return -phase;
@@ -555,6 +562,62 @@ public:
         setFocusPolicy(Qt::NoFocus);
         hide();
     }
+    QImage titleMask;
+    QString maskTitle;
+    QRect titleMaskGeometry;
+    QFont titleMaskFont;
+    QPalette titleMaskPalette;
+    QDockWidget::DockWidgetFeatures titleMaskFeatures;
+    const QStyle *titleMaskStyle=nullptr;
+    qreal titleMaskDpr=0;
+    Qt::LayoutDirection titleMaskDirection=Qt::LeftToRight;
+    QStyle::State titleMaskState;
+    void paintTitleBackground(QPainter &p,QDockWidget *dock,const QLinearGradient &gradient){
+        const qreal dpr=devicePixelRatioF();
+        const QSize physical(qCeil(width()*dpr),qCeil(height()*dpr));
+        if(physical.isEmpty()||physical.width()>8192||physical.height()>192)return;
+        QStyleOptionDockWidget opt;
+        opt.initFrom(dock);
+        const auto body=dock->widget()->geometry();
+        opt.rect=QRect(body.left(),0,body.width(),body.top());
+        opt.title=dock->windowTitle();
+        opt.closable=dock->features()&QDockWidget::DockWidgetClosable;
+        opt.floatable=dock->features()&QDockWidget::DockWidgetFloatable;
+        opt.movable=dock->features()&QDockWidget::DockWidgetMovable;
+        opt.verticalTitleBar=false;
+        if(titleMask.isNull()||maskTitle!=opt.title||titleMaskGeometry!=geometry()||
+           titleMaskFont!=dock->font()||titleMaskPalette!=dock->palette()||
+           titleMaskFeatures!=dock->features()||titleMaskStyle!=dock->style()||
+           titleMaskDpr!=dpr||titleMaskDirection!=opt.direction||titleMaskState!=opt.state){
+            maskTitle=opt.title;titleMaskGeometry=geometry();titleMaskFont=dock->font();
+            titleMaskPalette=dock->palette();titleMaskFeatures=dock->features();
+            titleMaskStyle=dock->style();titleMaskDpr=dpr;titleMaskDirection=opt.direction;titleMaskState=opt.state;
+            auto render=[&](const QStyleOptionDockWidget &o){
+                QImage image(physical,QImage::Format_ARGB32_Premultiplied);image.setDevicePixelRatio(dpr);image.fill(Qt::transparent);
+                QPainter painter(&image);painter.translate(-pos());painter.setFont(dock->font());
+                dock->style()->drawControl(QStyle::CE_DockWidgetTitle,&o,&painter,dock);
+                return image;
+            };
+            const auto painted=render(opt);auto blank=opt;blank.title.clear();
+            const auto background=render(blank);
+            titleMask=QImage(physical,QImage::Format_ARGB32_Premultiplied);titleMask.setDevicePixelRatio(dpr);titleMask.fill(Qt::transparent);
+            // The offscreen style render and the backing store can differ
+            // in subpixel AA. Leave a physical-pixel guard around ink.
+            titleMask.fill(Qt::white);
+            for(int y=0;y<physical.height();++y)for(int x=0;x<physical.width();++x){
+                if(painted.pixel(x,y)==background.pixel(x,y))continue;
+                for(int yy=qMax(0,y-1);yy<=qMin(physical.height()-1,y+1);++yy)
+                    for(int xx=qMax(0,x-1);xx<=qMin(physical.width()-1,x+1);++xx)
+                        titleMask.setPixel(xx,yy,0);
+            }
+        }
+        // Keep native text pixels untouched, including antialiased edges.
+        // A restrained translucent wash keeps the active theme readable.
+        QImage tint(physical,QImage::Format_ARGB32_Premultiplied);tint.setDevicePixelRatio(dpr);tint.fill(Qt::transparent);
+        {QPainter layer(&tint);layer.setOpacity(.22);layer.fillRect(rect(),gradient);
+         layer.setOpacity(1);layer.setCompositionMode(QPainter::CompositionMode_DestinationIn);layer.drawImage(QPoint(0,0),titleMask);}
+        p.drawImage(QPoint(0,0),tint);
+    }
     void paintEvent(QPaintEvent *) override {
         if(!parentWidget())return;
         QPainter painter(this);painter.setRenderHint(QPainter::Antialiasing);
@@ -573,6 +636,9 @@ public:
                                  h?QPointF(wavelength-offset,0):QPointF(0,wavelength-offset));
         gradient.setSpread(QGradient::RepeatSpread);
         setPatternStops(gradient,colors,spec.pattern,phase);
+        if(auto *dock=qobject_cast<QDockWidget*>(parentWidget());dock&&spec.titlebarFill){
+            paintTitleBackground(painter,dock,gradient);return;
+        }
         if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
             const auto track=sliderTrack(s);
             if(!track.fill.isValid())return;
@@ -663,7 +729,7 @@ void GradientController::setAudioProvider(AudioProvider provider,AudioReset rese
 void GradientController::configure(const GradientSpec &spec,bool motion) {
     const auto &old=state->spec;
     if(old.enabled==spec.enabled&&old.sliders==spec.sliders&&old.progress==spec.progress&&
-       old.period==spec.period&&old.pattern==spec.pattern&&old.titlebars==spec.titlebars&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
+       old.period==spec.period&&old.pattern==spec.pattern&&old.titlebars==spec.titlebars&&old.titlebarFill==spec.titlebarFill&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
     state->spec=spec;state->motion=motion;
     if((!motion||!spec.enabled||!spec.audioReactive)&&!(spec.knobs&&spec.knobMeters))if(state->reset)state->reset();
     for(auto *w:state->meters.keys())if(!motion||!eligibleMeter(w,spec))removeMeter(w);
@@ -688,6 +754,8 @@ void GradientController::reconcile(QWidget *w) {
         state->layers.insert(w,layer);
         connect(w,&QObject::destroyed,this,[this,w]{state->layers.remove(w);refreshClock();});
         if(auto *dock=qobject_cast<QDockWidget*>(w)){
+            connect(dock,&QDockWidget::windowTitleChanged,this,[this,w]{if(auto l=state->layers.value(w))l->update();});
+            connect(dock,&QDockWidget::featuresChanged,this,[this,w]{sync(w);if(auto l=state->layers.value(w))l->update();refreshClock();});
             connect(dock,&QDockWidget::topLevelChanged,this,[this,w]{
                 QPointer<QWidget> safe(w);
                 QTimer::singleShot(0,this,[this,safe]{if(safe){sync(safe);refreshClock();}});
@@ -709,6 +777,8 @@ void GradientController::sync(QWidget *w,bool frame) {
     if(!l)return;
     if(!state->meterProvider||!l->knob||!state->spec.knobMeters)l->restoreMeter();
     auto fill=l->knob?w->rect():gradientFill(w);
+    const bool fullTitle=state->spec.titlebarFill&&qobject_cast<QDockWidget*>(w);
+    if(fullTitle&&w->isEnabled())fill=titleBackground(qobject_cast<QDockWidget*>(w));
 
     if(!w->isVisible()||!fill.isValid()) {if(l->isVisible())l->hide();return;}
     if(frame||!state->meterProvider||!l->knob||!state->spec.knobMeters) {
@@ -719,7 +789,8 @@ void GradientController::sync(QWidget *w,bool frame) {
     const bool changed=l->geometry()!=fill;
     if(changed)l->setGeometry(fill);
     const bool newlyVisible=!l->isVisible();
-    if(newlyVisible){l->raise();l->show();}
+    if(newlyVisible){if(fullTitle)l->lower();else l->raise();l->show();}
+    if(fullTitle&&changed)l->lower();
     // Only the shared clock advances the phase. A parent paint must not
     // schedule another animated paint (which would create a busy loop).
     double phase=l->phase;
@@ -830,7 +901,7 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
         if(state->layers.contains(w)) {
             sync(w);
             if(e->type()==QEvent::PaletteChange||e->type()==QEvent::StyleChange||e->type()==QEvent::EnabledChange)
-                if(auto l=state->layers.value(w)){l->invalidateThumb();l->update();}
+                if(auto l=state->layers.value(w)){l->invalidateThumb();l->titleMask=QImage{};l->update();}
             refreshClock();
         }
         break;

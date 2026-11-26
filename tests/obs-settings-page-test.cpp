@@ -163,6 +163,8 @@ int main(int argc,char **argv){
         auto *titleGrad=dialog->findChild<QCheckBox*>("aftermarket-setting-title-gradients");
         auto *pattern=dialog->findChild<QComboBox*>("aftermarket-setting-gradient-pattern");
         REQUIRE(titleGrad&&pattern&&pattern->currentData().toString()=="flow");
+        auto *headerFill=dialog->findChild<QCheckBox*>("aftermarket-setting-titlebar-fill");
+        REQUIRE(headerFill&&!headerFill->isChecked());headerFill->setChecked(true);
         titleGrad->setChecked(true);pattern->setCurrentIndex(pattern->findData("shimmer"));
         REQUIRE(!controller.mixerBacksideEnabled()&&titles.ellipsisMode()==Qt::ElideRight);
         REQUIRE(controller.listRowSettings().value("scenes").toBool()==false);
@@ -181,6 +183,7 @@ int main(int argc,char **argv){
         REQUIRE(stripEnabled&&stripCalls==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
         REQUIRE(controller.gradientSettings().value("titlebars").toBool());
+        REQUIRE(controller.gradientSettings().value("titlebarFill").toBool());
         REQUIRE(controller.gradientSettings().value("pattern").toString()=="shimmer");
         REQUIRE(titles.ellipsisMode()==Qt::ElideMiddle);
         REQUIRE(QSettings(dir.filePath("dock-title-settings.ini"),QSettings::IniFormat)

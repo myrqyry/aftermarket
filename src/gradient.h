@@ -10,7 +10,7 @@
 class QWidget;
 namespace augment {
 struct GradientSpec {
-    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false, knobs=false, knobMeters=true, titlebars=false;
+    bool enabled=false, sliders=true, progress=true, audioReactive=false, meters=false, knobs=false, knobMeters=true, titlebars=false, titlebarFill=false;
     QString pattern="flow";
     static QStringList patterns();
     static QString patternLabel(const QString &);
