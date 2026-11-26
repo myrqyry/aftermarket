@@ -10,7 +10,7 @@ layout, and presentation.
 
 | Native mixer, reimagined | AudioBus routing |
 | :---: | :---: |
-| ![Compact rotary native mixer with dB readouts, side controls and status icons](docs/screenshots/readme/mixer-rotary-current.png) | ![The alternate AudioBus patchbay inside the Audio Mixer dock](docs/screenshots/readme/audiohub-activity-outlines.webp) |
+| ![Compact rotary native mixer with dB readouts, side controls](docs/screenshots/readme/mixer-rotary-current.png) | ![The alternate AudioBus patchbay inside the Audio Mixer dock](docs/screenshots/readme/audiohub-activity-outlines.webp) |
 
 [Audio and routing](#audio-and-routing) · [Workspace](#workspace) · [Sources and navigation](#sources-and-navigation) · [Menus](#menus) · [Appearance and motion](#appearance-and-motion) · [Install](#install-locally-linux) · [User guide](docs/user-guide.md)
 
@@ -46,7 +46,7 @@ Keep the familiar native mixer or customize selected channels:
 - Per-source audio-reactive gradient faders and native meter color modulation.
 - Compact Pan and Sync controls that operate native OBS source properties.
 - Channel widths independent of source-name length, with readable labels.
-- Compact rotary mixer channels in both orientations: native dB value below gain, orientation-aware control pairs spaced to the gain face (left/right in stacked channels, above/below in side-by-side channels), title state styling and a right-aligned three-dot source menu in the header. Pan and sync use 32px theme-aware two-ring faces and the gain knob’s relative drag direction. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds. Double-click any mixer knob to reset (gain 0 dB, pan center, sync 0 ms); reset actions are also available in the knob context menus.
+- Compact rotary mixer channels in both orientations: native dB value below gain, orientation-aware control pairs spaced to the gain face (left/right in stacked channels, above/below in side-by-side channels), title state styling and a right-aligned three-dot source menu in the header. Pan and sync use 32px theme-aware single-scale faces (no center pointer on sync) and the gain knob’s relative drag direction. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds. Double-click any mixer knob to reset (gain 0 dB, pan center, sync 0 ms); reset actions are also available in the knob context menus.
 - Responsive mixer grid: up to four columns for horizontal-fader rows, and automatic wrapping of compact side-by-side rotary strips when all rows fit. Auto mixer grid toggle in the title menu.
 - Persistent channel order: unlock in the mixer title menu, drag source names,
   then lock again. AudioBus follows the same saved order; reset restores native order.
@@ -57,7 +57,7 @@ Keep the familiar native mixer or customize selected channels:
 
 ![Side-by-side rotary channels wrap into rows when dock height allows](docs/screenshots/readme/mixer-rotary-columns.png)
 
-The rotary screenshots use an isolated OBS 32.2.0 test profile with five synthetic audio sources and the Fluffy Dark Colorway theme. To adjust sync, drag up/right or down/left, or scroll (10 ms per pixel of combined drag or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
+The rotary screenshots show an earlier compact layout in an isolated OBS 32.2.0 test profile with five synthetic audio sources and the Fluffy Dark Colorway theme. To adjust sync, drag up/right or down/left, or scroll (10 ms per pixel of combined drag or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
 
 **Optional independent device sends:** install [Exeldro's Audio Monitor](https://obsproject.com/forum/resources/audio-monitor.1186/) to expose playback devices below the native track nodes. Drag a source to a device; right-click its wire for independent mute, gain, pan and delay. Choose visible destinations from the mixer title menu. Existing Audio Monitor filters are not taken over by Aftermarket. Without the plugin, the native graph works normally.
 
@@ -90,7 +90,7 @@ The registered monochrome artwork is tinted at runtime to the actual Qt
 foreground, selected text or disabled text color, preserving its alpha and
 scaling. Palette changes retint existing decorations without altering list
 selection or filter settings. Colorway still ships both fixed-ink polarities
-for standalone use. Unknown IDs and missing assets retain the original or
+for standalone use. See [Colorway plugin icons](https://github.com/myrqyry/colorway/blob/main/docs/PLUGIN_ICONS.md) for the artwork and exact registration coverage. Unknown IDs and missing assets retain the original or
 generic icon. No external plugin is required
 or patched, and the stock OBS source tree is not rewritten.
 

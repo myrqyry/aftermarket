@@ -50,6 +50,33 @@ up the stock binary outside the OBS plugin directory. Its versioned API
 and preview properties are optional capabilities, detected at runtime.
 Aftermarket's installer does not download companion plugins.
 
+### Optional Colorway plugin icons
+
+Install a current [Colorway theme package](https://github.com/myrqyry/colorway)
+with its complete `icons/colorway/plugins/` directory and registry in the
+OBS theme search path. Aftermarket detects the registry automatically; there
+is no separate icon-pack toggle or required third-party plugin.
+
+Registered source and filter types receive custom icons in Add Source,
+Source Inspector, Quick Find, and the native Sources and Filters lists.
+Registered dock IDs and the verified SourceDock and QuickAccessDock content
+classes receive matching dock-header icons. Existing source thumbnails are
+preserved. Artwork without a verified binding, missing assets, and unknown
+types fall back to native or generic icons.
+
+The shared renderer recolors the monochrome SVG artwork to the widget's
+Qt foreground, highlighted text and disabled text roles. Palette changes
+refresh existing decorations without rebuilding the list, changing selection
+or editing filters. Opacity and display scaling are retained. Colorway's
+packaged light and dark SVGs remain unchanged and usable without Aftermarket.
+Other native QSS/MingCute icons and arbitrary plugin-owned controls are not
+retinted by this integration. Transition and Tools-menu icon bindings are
+not supported by this registry consumer yet.
+
+Verified on OBS 32.2.0 with Gruvbox and Rosé Pine Dawn, including live
+palette changes in native source and filter rows. The actual Appearance
+theme-picker workflow and other platforms have not been separately tested.
+
 ### Settings inside OBS
 
 Open **OBS → Settings → Aftermarket** from OBS's normal Settings dialog.
@@ -72,7 +99,7 @@ remain in the Workspace; the regular preferences now have their own home.
 
 ### Unified Workspace
 
-The native Tools menu has one Aftermarket submenu: Workspace, Find Sources, and Emergency restore. The Workspace contains Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts, and Cue Deck tabs. In emergency safe mode only Resume UI customizations is visible. Open **Tools → Aftermarket → Workspace** for advanced per-target editing and
+The native Tools menu has one Aftermarket submenu: Workspace, Find Sources, Command Center, and Emergency restore. The Workspace contains Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts, and Cue Deck tabs. In emergency safe mode only Resume UI customizations is visible. Open **Tools → Aftermarket → Workspace** for advanced per-target editing and
 richer visual editors. Its specialized pages remain available for:
 
 - **Menus & widgets:** Pick target with an adjustable 2–10 second delay,
