@@ -4015,3 +4015,18 @@ tests/native/run-plugin-icon-palette.sh. Actual theme chooser workflow and
 other platforms not independently tested. No changes to user themes or
 scene collection. Colorway docs e2e1205; existing plugin.cpp comment left
 unstaged. No push.
+
+## Narrow side-by-side mixer channel regression — 2026-11-25
+User screenshot showed short-name Media strip narrower than neighbors,
+integrated gain halfway down, dB in title and clipped sync spinbox.
+Reproduced width-guard failure at 70px in front-audio-controls-test:
+syncColumn previously restored native layout below 80px despite
+integrated gain. Recognize native structure/orientation rather than
+temporary assigned width; request measured compact minimum (floor 80,
+bounded to native max) and restore original minimum on detach.
+No gain geometry, source parameters or theme assets changed.
+44/44 CTests, 19/19 isolated OBS 32.2.0 native checks with Fluffy Dark
+and three differently named sources at requested 320px dock width.
+Each strip 110px, gain frame y54, dB y132, sync y148, no clipped controls
+within strips. Native horizontal scrolling remains available if needed.
+Evidence /tmp/am-mixer-columns.5Qrbk2. Actual user session not restarted.

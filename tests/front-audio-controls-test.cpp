@@ -603,6 +603,17 @@ int main(int argc,char **argv){
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()-stripGain->mapTo(strip,QPoint()).y()-stripGain->height()<30);
  REQUIRE(stripGain->value()==63&&stripGain->parentWidget()==stripFrame);
+ // A short-name channel can be allocated 70px during native reflow.
+ // Do not revert it to a full-height fader layout, clip the sync
+ // spinbox, or leave its gain halfway down the row.
+ strip->resize(70,strip->height());
+ columnUi.refresh();
+ REQUIRE(strip->findChild<QBoxLayout*>("aftermarket-column-side-controls"));
+ REQUIRE(!columnSpin->isVisible()&&columnSync->isVisible());
+ app.processEvents();
+ REQUIRE(strip->width()>=80&&strip->width()<=110);
+ REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);
+
  stripGain->setProperty("_obsUiAugmentKnob",false);stripGain->setProperty("_obsUiAugmentIntegratedMeter",false);columnUi.refresh();app.processEvents();
  REQUIRE(dr->indexOf(stripDb)==0&&stripRoot->stretch(stripRoot->indexOf(stripFrame))==1&&br->direction()==QBoxLayout::LeftToRight&&strip->maximumWidth()==110);
  REQUIRE(columnSync->isVisible()&&!columnSpin->isVisible());

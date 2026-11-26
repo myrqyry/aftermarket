@@ -308,7 +308,7 @@ struct FrontAudioControls::State {
         bool twoLineTitle=false;
         bool columnMode=false,columnGain=false;
         QSpacerItem *columnSpacer=nullptr;
-        int originalColumnMax=0,appliedColumnMax=0;
+        int originalColumnMin=0,appliedColumnMin=0;
         int columnButtonsStretch=0;
         Qt::Alignment columnButtonsAlignment;
         QMargins columnButtonMargins;
@@ -776,8 +776,8 @@ struct FrontAudioControls::State {
             r.controls->setMaximumHeight(r.controlsMax.height());
             r.controls->setSizePolicy(r.controlsPolicy);
         }
-        if(r.volume&&r.volume->maximumWidth()==r.appliedColumnMax)
-            r.volume->setMaximumWidth(r.originalColumnMax);
+        if(r.volume&&r.volume->minimumWidth()==r.appliedColumnMin)
+            r.volume->setMinimumWidth(r.originalColumnMin);
         r.columnBody.clear();r.columnCenter.clear();r.columnSpacer=nullptr;r.columnGain=false;
     }
     void restoreColumn(Row &r){
@@ -797,7 +797,7 @@ struct FrontAudioControls::State {
         r.columnMode=false;r.root.clear();r.header.clear();r.frame.clear();r.db.clear();r.status.clear();
     }
     bool syncColumn(Row &r){
-        if(!r.volume||!r.controls||!useKnobs||r.volume->width()<80){
+        if(!r.volume||!r.controls||!useKnobs){
             restoreColumn(r);return false;
         }
         auto *root=qobject_cast<QBoxLayout*>(r.volume->layout());
@@ -856,7 +856,7 @@ struct FrontAudioControls::State {
                root->indexOf(r.controls)!=5)return true;
             // Compact side-by-side channels: buttons above the gain face,
             // adjustment dials below it. Preserve native strip width.
-            r.originalColumnMax=r.volume->maximumWidth();
+            r.originalColumnMin=r.volume->minimumWidth();
             r.columnButtonsStretch=root->stretch(4);
             r.columnButtonsAlignment=buttons->alignment();
             r.columnButtonMargins=buttons->contentsMargins();
@@ -892,7 +892,15 @@ struct FrontAudioControls::State {
             root->insertLayout(frameIndex,body);
             root->addStretch(1);r.columnSpacer=root->itemAt(root->count()-1)->spacerItem();
             r.columnBody=body;r.columnCenter=middle;r.columnGain=true;
-            r.appliedColumnMax=r.originalColumnMax;
+            // Native Maximum size policy can allocate a short-name strip
+            // below the rotary footprint. Measure required content instead
+            // of using current width as an eligibility test (which leaves
+            // an already-integrated gain floating in the full-height row).
+            const auto margins=root->contentsMargins();
+            const int minWidth=qMax(80,qMax(frame->minimumSizeHint().width(),
+                r.controls->width())+margins.left()+margins.right());
+            r.appliedColumnMin=qMax(r.originalColumnMin,qMin(r.volume->maximumWidth(),minWidth));
+            r.volume->setMinimumWidth(r.appliedColumnMin);
             r.volume->updateGeometry();
         }
         return true;

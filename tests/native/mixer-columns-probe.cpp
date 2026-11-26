@@ -234,6 +234,38 @@ static void probe(){
   check("short_dock_native_row",!grid()&&channels().size()==5);
   bool unchanged=true;for(auto *s:sources)unchanged&=std::abs(obs_source_get_volume(s)-.42f)<.001f&&obs_source_get_sync_offset(s)==0;
   check("gain_and_offset_preserved",unchanged);
+  // Reproduce three uneven source titles at the reported narrow dock
+  // width, including a newly created short-name channel.
+  for(int i=0;i<3;++i){auto *s=sources.takeLast();obs_source_remove(s);obs_source_release(s);}
+  obs_source_set_name(sources[0],"Live Latent: TTS");
+  obs_source_set_name(sources[1],"Streaming Media (YouTube)");
+  dock->resize(320,580);
+  auto *media=obs_source_create("am_grid_probe_audio","Media",nullptr,nullptr);
+  if(media){obs_source_set_volume(media,.42f);sources.append(media);obs_scene_add(scene,media);}
+ });
+ QTimer::singleShot(6500,qApp,[]{
+  auto all=channels();bool compact=all.size()==3,contained=compact;
+  int minY=99999,maxY=0;
+  for(auto *w:all){
+    auto *body=w->findChild<QBoxLayout*>("aftermarket-column-side-controls");
+    auto *pan=w->findChild<QDial*>("aftermarket-pan-dial");
+    auto *sync=w->findChild<QDial*>("aftermarket-offset-dial");
+    auto *spin=w->findChild<QSpinBox*>("aftermarket-offset-ms");
+    auto *frame=w->findChild<QWidget*>("volMeterFrame");
+    auto *db=w->findChild<QLabel*>("volLabel");
+    compact&=body&&pan&&sync&&spin&&pan->isVisible()&&sync->isVisible()&&!spin->isVisible()&&frame&&db;
+    if(!frame||!db||!sync||!pan){contained=false;continue;}
+    minY=qMin(minY,frame->y());maxY=qMax(maxY,frame->y());
+    contained&=w->width()>=80&&w->width()<=110&&
+       sync->mapTo(w,QPoint(sync->width(),sync->height())).x()<=w->width()&&
+       db->mapTo(w,QPoint()).y()>=frame->geometry().bottom()&&
+       sync->mapTo(w,QPoint()).y()<250;
+    blog(LOG_INFO,"GRIDDETAIL narrow short-name width=%d frame=%d db=%d sync=%d",w->width(),frame->y(),db->y(),sync->mapTo(w,QPoint()).y());
+  }
+  check("short_name_compact",compact);
+  check("narrow_controls_contained_aligned",contained&&maxY-minY<=3);
+  dock->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/rotary-three-narrow.png");
+
   for(auto *s:sources){obs_source_remove(s);obs_source_release(s);}sources.clear();
   obs_scene_release(scene);scene=nullptr;mainWindow->close();
  });
