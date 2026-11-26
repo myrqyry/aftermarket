@@ -2,12 +2,14 @@
 #include "visual-polish.h"
 #include <QToolButton>
 #include <QPainter>
+#include <QPainterPath>
+#include <cmath>
 #include <QStyle>
 #include <QStyleOptionFocusRect>
 #include <QPaintEvent>
 
 namespace augment {
-enum class DockHeaderGlyph { Previous, Next, Flip, Knobs, More };
+enum class DockHeaderGlyph { Previous, Next, Flip, Knobs, More, Settings };
 
 // Only used for Aftermarket-owned dock header controls. Original OBS buttons,
 // docking behavior, stylesheet and palette remain untouched.
@@ -64,6 +66,22 @@ protected:
             for(int dy=-4;dy<=4;dy+=4)
                 painter.drawEllipse(QPointF(cx,cy+dy),1.3,1.3);
             break;
+        case DockHeaderGlyph::Settings: {
+            // Eight compact gear teeth, matching the rounded line glyphs.
+            constexpr double pi=3.141592653589793;
+            QPainterPath outline;
+            for(int i=0;i<32;++i){
+                const qreal angle=(i-1.5)*pi/16;
+                const qreal radius=(i%4==1||i%4==2)?7.0:5.4;
+                const QPointF point(cx+radius*std::cos(angle),cy+radius*std::sin(angle));
+                if(i==0)outline.moveTo(point);else outline.lineTo(point);
+            }
+            outline.closeSubpath();
+            painter.setPen(QPen(foreground,1.15,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
+            painter.drawPath(outline);
+            painter.drawEllipse(QPointF(cx,cy),2.2,2.2);
+            break;
+        }
         case DockHeaderGlyph::Knobs: {
             painter.drawEllipse(QPointF(cx,cy),5.5,5.5);
             painter.drawLine(QPointF(cx,cy),QPointF(cx+3.2,cy-3.2));

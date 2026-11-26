@@ -520,6 +520,13 @@ The remaining menu-bar space can hold the optional Action Strip described below.
 
 ![Native OBS menus inside Aftermarket's compact hamburger bar](screenshots/readme/hamburger-menu-bar.webp)
 
+### Menu bar Settings shortcut
+
+The gear at the far-right edge opens the original OBS Settings action. It
+uses the current palette, remains available with either the classic or
+hamburger menu bar, and stays outside the editable Action Strip. Emergency
+restore removes the shortcut along with other Aftermarket UI additions.
+
 ### Action Strip
 
 **OBS Settings → Aftermarket → Action strip** controls visibility and

@@ -197,9 +197,10 @@ bool ActionStrip::setEnabled(QMenuBar *bar,bool enabled){
         host_->setObjectName("aftermarket-action-strip-host");
         auto *layout=new QHBoxLayout(host_);
         layout->setContentsMargins(0,0,0,0);layout->setSpacing(5);
+        const bool settingsCorner=originalCorner_&&originalCorner_->objectName()=="aftermarket-menu-settings-host";
         if(originalCorner_){
             originalCorner_->setParent(host_);
-            layout->addWidget(originalCorner_);
+            if(!settingsCorner)layout->addWidget(originalCorner_);
         }
         auto *content=new StripHost(host_);
         content_=content;
@@ -208,6 +209,7 @@ bool ActionStrip::setEnabled(QMenuBar *bar,bool enabled){
         inside->setContentsMargins(1,0,1,0);
         inside->setSpacing(3);
         layout->addWidget(content);
+        if(settingsCorner)layout->addWidget(originalCorner_);
         content->dropped=[this](const QString &id,int position){
             // QDrag::exec still owns the source widget while Drop is dispatched.
             // Rebuilding synchronously would delete that widget mid-drag.
@@ -253,6 +255,12 @@ bool ActionStrip::setEnabled(QMenuBar *bar,bool enabled){
         if(originalCorner_){
             originalCorner_->setParent(bar_);
             bar_->setCornerWidget(originalCorner_,Qt::TopRightCorner);
+            if(originalCorner_->objectName()=="aftermarket-menu-settings-host"){
+                originalCorner_->adjustSize();
+                originalCorner_->show();
+                originalCorner_->move(qMax(0,bar_->width()-originalCorner_->width()),0);
+                bar_->updateGeometry();bar_->update();
+            }
         }else bar_->setCornerWidget(nullptr,Qt::TopRightCorner);
     }
     delete host_.data();

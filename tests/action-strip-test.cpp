@@ -1,4 +1,5 @@
 #include "action-strip.h"
+#include "menu-settings-corner.h"
 #include "menu-bar-compact.h"
 #include <QApplication>
 #include <QMainWindow>
@@ -253,6 +254,38 @@ int main(int argc,char **argv){
  REQUIRE(control&&control->isVisible());
  const QPoint farEdge=control->mapTo(narrow.menuBar(),QPoint(control->width(),0));
  REQUIRE(farEdge.x()<=narrow.menuBar()->width());
+ // The Settings shortcut stays outside the editable strip and
+ // survives both strip toggles and compact menu transitions.
+ QMainWindow gearWindow;auto *bar=gearWindow.menuBar();
+ auto *nativeFile=bar->addMenu("File");
+ auto *settings=nativeFile->addAction("Settings");settings->setObjectName("action_Settings");
+ auto *nativeCorner=new QLabel("Native",bar);bar->setCornerWidget(nativeCorner);
+ gearWindow.resize(650,320);gearWindow.show();app.processEvents();
+ int opens=0;QObject::connect(settings,&QAction::triggered,[&]{++opens;});
+ {
+  augment::MenuSettingsCorner gear(bar,settings);
+  app.processEvents();
+  auto *button=bar->findChild<QToolButton*>("aftermarket-menu-settings");
+  REQUIRE(button&&button->isVisible()&&button->defaultAction()==settings);
+  REQUIRE(button->mapTo(bar,QPoint(button->width(),0)).x()>=bar->width()-5);
+  button->click();REQUIRE(opens==1);
+  settings->setEnabled(false);REQUIRE(!button->isEnabled());button->click();REQUIRE(opens==1);
+  settings->setEnabled(true);
+  augment::ActionStrip accessories(temp.filePath("gear-strip.json"));
+  for(int i=0;i<6;++i)REQUIRE(accessories.addItem({QString::number(i),"status","recording",""}));
+  REQUIRE(accessories.setEnabled(bar,true));app.processEvents();
+  REQUIRE(button->isVisible()&&button->mapTo(bar,QPoint(button->width(),0)).x()>=bar->width()-5);
+  REQUIRE(accessories.widget()->mapTo(bar,QPoint(accessories.widget()->width(),0)).x()<=button->mapTo(bar,QPoint()).x());
+  gearWindow.resize(390,320);app.processEvents();
+  REQUIRE(button->isVisible()&&button->mapTo(bar,QPoint(button->width(),0)).x()<=bar->width());
+  augment::MenuBarCompact compact;REQUIRE(compact.setEnabled(bar,true));app.processEvents();
+  button->click();REQUIRE(opens==2);
+  REQUIRE(accessories.setEnabled(bar,false));app.processEvents();
+  REQUIRE(button->isVisible()&&button->mapTo(bar,QPoint(button->width(),0)).x()>=bar->width()-5);
+ }
+ REQUIRE(bar->cornerWidget()==nativeCorner&&nativeCorner->parentWidget()==bar);
+ REQUIRE(!bar->findChild<QToolButton*>("aftermarket-menu-settings"));
+
  std::cout<<"action strip persistence, routing, recovery and status verified\n";
  return 0;
 }

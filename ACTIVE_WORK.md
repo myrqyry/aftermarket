@@ -4099,3 +4099,16 @@ unattributed shutdown allocations each. Full 44/44 CTest
 /tmp/am-native-notes-ctest.log. Grid/narrow/inline rename behavior and
 other themes not independently native-tested. Docs updated. Preserve
 unrelated plugin.cpp comment; do not restart running production OBS.
+
+## Menu bar Settings gear — 2026-11-25
+Permanent rightmost palette-painted gear uses native action_Settings via
+QToolButton::setDefaultAction, preserving action enabled state and native
+Settings semantics. Existing native corner retained. Optional Action
+Strip wraps the corner after its own items, reserves its width and
+restores visibility/placement on disable. Safe-mode teardown destroys
+strip before settings corner and restores native corner. No config
+migration. 44/44 CTests including classic/compact, overflow, toggling,
+native action enable state and restoration. Native OBS 32.2.0 Fluffy Dark:
+3/3 checks, right edge 1198/1200, actual native Settings opened and
+closed. Evidence /tmp/am-menu-settings.5n1jxt. Native OS menu bars
+untouched. User OBS left running; no push.

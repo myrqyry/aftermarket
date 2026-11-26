@@ -12,6 +12,7 @@
 #include "row-stripes.h"
 #include "menu-bar-compact.h"
 #include "action-strip.h"
+#include "menu-settings-corner.h"
 #include "quick-find.h"
 #include "command-center.h"
 #include "source-inspector-dock.h"
@@ -81,6 +82,7 @@ static std::unique_ptr<augment::PropertyPresetFooter> propertyPresetFooter;
 static std::unique_ptr<augment::RowStripes> rowStripes;
 static std::unique_ptr<augment::MenuBarCompact> compactBar;
 static std::unique_ptr<augment::ActionStrip> actionStrip;
+static std::unique_ptr<augment::MenuSettingsCorner> menuSettings;
 static std::unique_ptr<augment::DockLayouts> dockLayouts;
 static std::unique_ptr<augment::CueDeck> cueDeck;
 static std::unique_ptr<augment::NativeActionBridge> nativeActions;
@@ -487,7 +489,8 @@ static void stopCustomUi(){
     sourcePicker.reset(); // existing native source dialogs finish normally
     if(panels)panels->restoreAll();
     mixerRetry.reset();
-    actionStrip.reset(); // preserve desired state, restore OBS-owned menu corner
+    actionStrip.reset(); // preserve desired state, restore Settings corner
+    menuSettings.reset(); // restore OBS-owned menu corner
     frontAudio.reset(); // remove pan/offset controls before original mixer is restored
     dockFaces.reset(); // unwrap original mixer widget before panel teardown
     dockTitleIcons.reset(); // remove only plugin-painted native title icons
@@ -574,6 +577,10 @@ static bool startCustomUi(){
     // Motion off preserves all original immediate UI behavior.
     auto uiMotion=[]{return controller&&controller->cachedMotionEnabled();};
     actionStrip->setMotionProvider(uiMotion);
+    if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
+        if(auto *settings=main->findChild<QAction*>("action_Settings"))
+            menuSettings=std::make_unique<augment::MenuSettingsCorner>(main->menuBar(),settings,uiMotion);
+
     panels=std::make_unique<augment::Panels>(nullptr,uiMotion);
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         dockTitleIcons=std::make_unique<augment::DockTitleIcons>(
