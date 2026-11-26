@@ -18,6 +18,9 @@ static void settle(){QEventLoop loop;QTimer::singleShot(80,&loop,&QEventLoop::qu
 int main(int argc,char **argv){
  QApplication app(argc,argv);
  QMainWindow main;main.menuBar()->addMenu("File");main.menuBar()->addMenu("Edit");
+ // Exercise the supported launcher geometry independently of default font DPI.
+ // The launcher deliberately hides below a 20px menu bar.
+ main.menuBar()->setMinimumHeight(24);
  auto *corner=new QLabel("Action strip");corner->setFixedWidth(180);main.menuBar()->setCornerWidget(corner);
  main.resize(1000,500);main.show();settle();
  int searches=0,commands=0,runs=0;QString invoked;
@@ -58,6 +61,8 @@ int main(int argc,char **argv){
  popup->reject();main.resize(300,500);settle();CHECK(!field->isVisible());
  center.open("/workspace");settle();CHECK(popup->isVisible()&&list->count()==1);popup->reject();
  main.resize(1000,500);settle();CHECK(field->isVisible());
+ main.menuBar()->setFixedHeight(18);settle();CHECK(!field->isVisible());
+ main.menuBar()->setFixedHeight(24);settle();CHECK(field->isVisible());
  center.detach();CHECK(!main.findChild<QLineEdit*>("aftermarket-command-center")&&main.menuBar()->cornerWidget()==corner);
  return 0;
 }

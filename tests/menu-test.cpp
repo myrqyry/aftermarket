@@ -340,6 +340,8 @@ int main(int argc, char **argv) {
             QPoint(work.right()-420,work.bottom()-200),
             QPoint(work.center().x(),work.bottom()-20),
             QPoint(work.right()-20,work.center().y()),
+            // Below the midpoint, but the final popup still fits downwards.
+            QPoint(work.right()-20,work.center().y()+30),
             QPoint(work.right()-20,work.bottom()-20),
             QPoint(work.left()+30,work.top()+30)
         };
@@ -355,18 +357,20 @@ int main(int argc, char **argv) {
             }
             const auto actual=anchored.geometry();
             REQUIRE(columns.size()>1);
-            const bool nearBottom=anchor.y()>work.center().y();
-            const bool nearRight=anchor.x()>work.center().x();
-            const int verticalRoom=nearBottom ? anchor.y()-work.top()+1
-                                               : work.bottom()-anchor.y()+1;
-            if(actual.height()<=verticalRoom)
-                REQUIRE(qAbs((nearBottom?actual.bottom():actual.top())-anchor.y())<=30);
-            // If there is enough width on the chosen side, preserve the
-            // trigger's horizontal edge. Otherwise Qt may clamp to screen.
-            const int horizontalRoom=nearRight ? anchor.x()-work.left()+1
-                                               : work.right()-anchor.x()+1;
-            if(actual.width()<=horizontalRoom)
-                REQUIRE(qAbs((nearRight?actual.right():actual.left())-anchor.x())<=30);
+            // Native LTR menus prefer down/right if the final compact size
+            // fits; flip only when necessary. Screen midpoint is not a fit test.
+            const QRect inset=work.adjusted(4,4,-4,-4);
+            const bool fitsDown=actual.height()<=inset.bottom()-anchor.y()+1;
+            const bool fitsUp=actual.height()<=anchor.y()-inset.top()+1;
+            const bool fitsRight=actual.width()<=inset.right()-anchor.x()+1;
+            const bool fitsLeft=actual.width()<=anchor.x()-inset.left()+1;
+            std::cerr<<"anchor "<<anchor.x()<<","<<anchor.y()<<" actual "
+                     <<actual.x()<<","<<actual.y()<<" "<<actual.width()<<"x"<<actual.height()<<"\n";
+            REQUIRE(inset.contains(actual));
+            if(fitsDown||fitsUp)
+                REQUIRE(qAbs((fitsDown?actual.top():actual.bottom())-anchor.y())<=30);
+            if(fitsRight||fitsLeft)
+                REQUIRE(qAbs((fitsRight?actual.left():actual.right())-anchor.x())<=30);
             anchored.hide();app.processEvents();
         }
 

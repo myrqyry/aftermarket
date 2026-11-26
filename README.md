@@ -290,8 +290,9 @@ supported targets. Detailed gradient and mixer editors are available there too.
 ## Install locally (Linux)
 
 Requires matching libobs and OBS frontend API development packages,
-Qt 6 Widgets and SVG, CMake, Ninja, and a C++17 compiler. Point CMake to
-the development libraries matching your installed OBS.
+Qt 6 Widgets and SVG, CMake, Ninja, and a C++17 compiler. Linux tests also
+require Xvfb and xauth for isolated native popup geometry checks. Point CMake
+to the development libraries matching your installed OBS.
 
 ```sh
 cmake -S . -B build -G Ninja -Dlibobs_DIR=/usr/local/lib/cmake/libobs -Dobs-frontend-api_DIR=/usr/local/lib/cmake/obs-frontend-api
