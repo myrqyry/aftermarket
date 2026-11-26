@@ -11,12 +11,12 @@ inline bool writePluginThemeFixture(const QString &root){
         return file.open(QIODevice::WriteOnly)&&file.write(data)==data.size();
     };
     const QByteArray svg="<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><rect width='16' height='16' fill='INK'/></svg>";
-    for(const auto &id: {QString("source-clone"),QString("audio-monitor")}){
+    for(const auto &id: {QString("source-clone"),QString("audio-monitor"),QString("source-dock")}){
         auto light=svg;light.replace("INK","#e0def4");
         auto dark=svg;dark.replace("INK","#191724");
         if(!write("normal/"+id+".svg",light)||!write("selected/"+id+".svg",dark))return false;
     }
-    if(!write("bindings.json",R"({"version":1,"sources":{"source-clone":"source-clone"},"docks":{"AudioMonitorDock":"audio-monitor"},"filters":{"source_record_filter":"source-clone"}})"))return false;
+    if(!write("bindings.json",R"({"version":1,"sources":{"source-clone":"source-clone"},"docks":{"AudioMonitorDock":"audio-monitor"},"filters":{"source_record_filter":"source-clone"},"dockClasses":{"SourceDock":"source-dock"}})"))return false;
     QDir::setSearchPaths("theme",{root});
     return true;
 }

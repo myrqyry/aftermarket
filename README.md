@@ -78,7 +78,7 @@ destroying its contents. Restore the original preview or make it a movable
 native dock, including responsive Studio Mode.
 
 When the Colorway theme package provides its plugin-icon registry, Aftermarket
-uses the registered source/filter types and exact dock IDs to display the custom
+uses the registered source/filter types and exact dock IDs (or the verified SourceDock widget class for dynamically named docks) to display the custom
 glyphs in its source picker, Source Inspector, Quick Find and dock title bars.
 Both ink polarities follow the current palette; unknown IDs and missing
 assets retain the original or generic icon. No external plugin is required

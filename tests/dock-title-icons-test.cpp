@@ -11,6 +11,7 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include "plugin-theme-fixture.h"
+#include "plugin-theme-icons.h"
 #include <QStyleOptionDockWidget>
 #include <QStyle>
 #include <QFontMetrics>
@@ -70,6 +71,14 @@ int main(int argc,char **argv){
  QTemporaryDir tmp;
  REQUIRE(tmp.isValid());
  REQUIRE(writePluginThemeFixture(tmp.path()));
+ {
+   const augment::PluginThemeIcons registry;
+   REQUIRE(registry.dock("Camera A","SourceDock").valid());
+   REQUIRE(registry.dock("Camera B","SourceDock").valid());
+   REQUIRE(!registry.dock("Camera A","QSplitter").valid());
+   REQUIRE(registry.dock("AudioMonitorDock","SourceDock").light.endsWith("/source-dock.svg"));
+   REQUIRE(registry.dock("AudioMonitorDock","QSplitter").light.endsWith("/audio-monitor.svg"));
+ }
  const QString settingsPath=tmp.filePath("dock-titles.ini");
  {
    augment::Panels panels;

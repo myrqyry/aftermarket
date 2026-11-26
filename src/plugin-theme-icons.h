@@ -53,11 +53,17 @@ public:
             sources_=object.value("sources").toObject();
             docks_=object.value("docks").toObject();
             filters_=object.value("filters").toObject();
+            dockClasses_=object.value("dockClasses").toObject();
             return;
         }
     }
     Glyph source(const QString &id) const {return glyph(sources_,id);}
-    Glyph dock(const QString &id) const {return glyph(docks_,id);}
+    Glyph dock(const QString &id,const QString &contentClass={}) const {
+        // A dynamic Source Dock title may collide with another plugin ID.
+        // Recognized widget identity wins even when its artwork is missing.
+        if(dockClasses_.contains(contentClass))return glyph(dockClasses_,contentClass);
+        return glyph(docks_,id);
+    }
     Glyph filter(const QString &id) const {return glyph(filters_,id);}
 private:
     Glyph glyph(const QJsonObject &bindings,const QString &id) const {
@@ -70,7 +76,7 @@ private:
         return {light,dark};
     }
     QDir directory_;
-    QJsonObject sources_,docks_,filters_;
+    QJsonObject sources_,docks_,filters_,dockClasses_;
 };
 
 } // namespace augment

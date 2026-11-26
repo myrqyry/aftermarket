@@ -294,12 +294,13 @@ void DockTitleIcons::refresh(){
     const PluginThemeIcons pluginIcons;
     for(auto *dock:docks){
         if(!dock)continue;
-        const auto kind=classify(dock->objectName(),originalTitle(dock),
-            dock->widget()&&dock->widget()->inherits("SourceDock")?"SourceDock":QString{});
+        const QString contentClass=dock->widget()&&dock->widget()->inherits("SourceDock")?"SourceDock":QString{};
+        const auto kind=classify(dock->objectName(),originalTitle(dock),contentClass);
+        const auto pluginGlyph=pluginIcons.dock(dock->objectName(),contentClass);
         if(icons_.contains(dock)&&icons_.value(dock)){
             auto *glyph=static_cast<TitleGlyph*>(icons_.value(dock).data());
             glyph->setKind(kind);
-            glyph->setPluginGlyph(pluginIcons.dock(dock->objectName()));
+            glyph->setPluginGlyph(pluginGlyph);
             continue;
         }
         auto *more=new DockHeaderButton(DockHeaderGlyph::More,dock);
@@ -398,7 +399,7 @@ void DockTitleIcons::refresh(){
         });
         moreButtons_.insert(dock,more);
         auto *icon=new TitleGlyph(kind,dock);
-        icon->setPluginGlyph(pluginIcons.dock(dock->objectName()));
+        icon->setPluginGlyph(pluginGlyph);
         const bool registered=icons_.contains(dock);
         icons_.insert(dock,icon);
         originalTitles_.insert(dock,dock->windowTitle());
