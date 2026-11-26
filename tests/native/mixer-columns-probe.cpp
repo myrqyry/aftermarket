@@ -16,6 +16,7 @@
 #include <QDial>
 #include <QWheelEvent>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include <QSpinBox>
 #include <QMenu>
 #include <QAbstractButton>
@@ -69,7 +70,7 @@ static void probe(){
  }
  QTimer::singleShot(1700,qApp,[]{
   auto all=channels();check("channels",all.size()==5);
-  bool layout=!all.isEmpty(),status=layout,position=layout,values=layout,exact=layout,encoder=false;
+  bool layout=!all.isEmpty(),status=layout,position=layout,values=layout,exact=layout,encoder=false,resetKnobs=false,resetMenus=false;
   for(auto *w:all){
    auto *root=qobject_cast<QBoxLayout*>(w->layout());
    auto *db=w->findChild<QLabel*>("volLabel");
@@ -156,13 +157,47 @@ static void probe(){
       QMouseEvent release(QEvent::MouseButtonRelease,p-QPoint(0,42),global-QPoint(0,42),Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
       QApplication::sendEvent(offset,&release);
       encoder&=obs_source_get_sync_offset(source)==12775000000LL;
+      auto reset=[](QWidget *knob){
+        const QPoint p=knob->rect().center(),global=knob->mapToGlobal(p);
+        QMouseEvent dbl(QEvent::MouseButtonDblClick,p,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+        QApplication::sendEvent(knob,&dbl);
+        QMouseEvent release(QEvent::MouseButtonRelease,p,global,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+        QApplication::sendEvent(knob,&release);
+      };
+      pan->setValue(75);
+      reset(gain);reset(pan);reset(offset);
+      resetKnobs=std::abs(obs_source_get_volume(source)-1.f)<.001f&&
+        std::abs(obs_source_get_balance_value(source)-.5f)<.001f&&
+        obs_source_get_sync_offset(source)==0&&db->text().contains("0.0 dB")&&
+        !gain->isSliderDown()&&!pan->isSliderDown()&&!offset->isSliderDown();
+      // Exercise the actual context menu invocation and action, rather
+      // than only checking the existence of a synthetic QAction.
+      auto resetFromMenu=[](QWidget *knob,const char *id,bool requireNative){
+        const QPoint p=knob->rect().center();
+        QContextMenuEvent context(QContextMenuEvent::Mouse,p,knob->mapToGlobal(p));
+        QApplication::sendEvent(knob,&context);
+        auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if(!menu)return false;
+        auto *action=menu->findChild<QAction*>(id);
+        const bool ok=action&&action->isEnabled()&&(!requireNative||menu->actions().size()>2);
+        if(ok)action->trigger();
+        menu->close();
+        return ok;
+      };
+      gain->setValue(gain->maximum()/2);pan->setValue(75);offset->setValue(1200);
+      resetMenus=resetFromMenu(gain,"aftermarket-reset-gain",true)&&
+        resetFromMenu(pan,"aftermarket-reset-pan",false)&&
+        resetFromMenu(offset,"aftermarket-reset-sync",false)&&
+        std::abs(obs_source_get_volume(source)-1.f)<.001f&&
+        std::abs(obs_source_get_balance_value(source)-.5f)<.001f&&obs_source_get_sync_offset(source)==0;
+      obs_source_set_volume(source,.42f);
       spin->setValue(0);
       obs_source_release(source);
     }
    }
   }
   check("db_below_gain",layout);check("side_controls_aligned",position);check("native_active_icon",status);
-  check("native_db_values",values);check("exact_sync_popup",exact);check("relative_encoder_beyond_2s",encoder);
+  check("native_db_values",values);check("exact_sync_popup",exact);check("relative_encoder_beyond_2s",encoder);check("native_knob_defaults",resetKnobs);check("native_knob_reset_menus",resetMenus);
   dock->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/rotary-columns.png");
   dock->resize(360,580);
  });

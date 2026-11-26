@@ -3878,3 +3878,21 @@ and unchanged source values. Evidence /tmp/am-mixer-columns.HImAij.
 Default native theme in isolated probe; user's exact Colorway theme and
 live populated mixer not separately measured. Existing README images
 predate this layout. No unrelated plugin.cpp comment staged.
+
+## Mixer knob reset gestures and menus — 2026-11-25
+User requested middle click or double click to reset and context menu
+actions. Chose double-click to preserve existing middle-button drag.
+Gain resets native OBS fader deflection to unity (verified 0 dB and source
+volume 1.0), pan to 50% and sync to 0 ms. Reset uses native slider/dial
+value signals and existing setters; no gain curve, styling, layout or
+routing changes. Gain right-click retains the actual synchronous OBS
+VolumeControl channel popup and appends reset; pan has a reset menu and
+sync retains its exact millisecond editor. Enabled-state guards preserve
+locked gain and disabled mono pan. No speculative augmentation of unknown
+context menu implementations. Focused tests failed before implementation,
+then passed. Full build, 43/43 CTests, 17/17 real OBS 32.2.0 native checks
+including actual double-click and context-menu resets of all three source
+values, original menu actions, relative drag, encoder, layout and grid.
+Evidence /tmp/am-mixer-columns.Wu6XOz. Isolated side-by-side mixer runtime;
+other orientation uses same controls but was not separately probed this
+turn. Unrelated plugin.cpp comment left unstaged.

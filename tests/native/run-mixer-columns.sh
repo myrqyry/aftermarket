@@ -19,5 +19,5 @@ set -e
 echo "OBS_EXIT=$rc"
 grep -E "GRIDCHECK|GRIDDETAIL" "$root/obs.log" || true
 [[ "$rc" == 0 ]]
-[[ $(grep -c 'GRIDCHECK .*=[1]$' "$root/obs.log") == 15 ]]
+[[ $(grep -c 'GRIDCHECK .*=[1]$' "$root/obs.log") == 17 ]]
 ! grep -q 'GRIDCHECK .*=[0]$' "$root/obs.log"

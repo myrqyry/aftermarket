@@ -832,6 +832,15 @@ inspect or modify atkAudio PluginHost2 graphs or VST chains. Independent device 
 
 ### Rotary mixer knobs
 
+Double-click the main gain knob to restore unity (0 dB), pan to restore
+center (50%), or sync to clear the offset (0 ms). Middle-button dragging
+remains available. Right-click the gain knob to open the original OBS
+channel context menu with an added reset action; pan has a reset menu and
+sync retains its precise millisecond editor alongside reset. Locked gain
+and disabled mono pan are not reset. The native gain menu augmentation
+is scoped to the supported OBS mixer popup; unrelated menus are untouched.
+
+
 Open **Tools → Aftermarket → Workspace → Mixer** and check
 **Replace mixer faders with knobs**. Enable All mixer sources to replace every
 mixer fader, or select specific sources in the checklist (e.g.

@@ -18,6 +18,8 @@
 #include <QVariant>
 #include <QAbstractButton>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QCursor>
 #include <QtMath>
 #include <cmath>
@@ -422,12 +424,48 @@ public:
         if(side<8)return {};
         return QRectF((width()-side)/2.,(height()-side)/2.,side,side);
     }
+    bool gainTarget(QSlider *s)const{
+        return s&&s->parentWidget()&&s->parentWidget()->objectName()=="volMeterFrame";
+    }
+    bool handleGainMenu(QSlider *s,QContextMenuEvent *event){
+        if(!gainTarget(s)||s->contextMenuPolicy()!=Qt::DefaultContextMenu)return false;
+        QWidget *channel=s->parentWidget();
+        while(channel&&!channel->inherits("VolumeControl"))channel=channel->parentWidget();
+        if(!channel||channel->contextMenuPolicy()!=Qt::CustomContextMenu)return false;
+        // OBS 32.2 synchronously opens its own channel popup from this
+        // signal. Keep that menu and all its original actions intact.
+        QPointer<QWidget> previous=QApplication::activePopupWidget();
+        const QPoint point=event->reason()==QContextMenuEvent::Keyboard?QPoint{}:channel->mapFromGlobal(event->globalPos());
+        QMetaObject::invokeMethod(channel,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,point));
+        auto *menu=qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if(menu&&menu!=previous&&menu->isVisible()&&!menu->actions().isEmpty()){
+            auto *reset=menu->findChild<QAction*>("aftermarket-reset-gain",Qt::FindDirectChildrenOnly);
+            if(!reset){
+                reset=menu->addAction("Reset gain to default (0 dB)");
+                reset->setObjectName("aftermarket-reset-gain");
+                QObject::connect(reset,&QAction::triggered,menu,[safe=QPointer<QSlider>(s)]{
+                    if(safe&&safe->isEnabled()&&safe->property("_obsUiAugmentKnob").toBool())safe->setValue(safe->maximum());
+                });
+            }
+            reset->setEnabled(s->isEnabled()&&s->value()!=s->maximum());
+        }
+        event->accept();return true;
+    }
     bool handleMouse(QSlider *s,QEvent *event) {
         if(event->type()==QEvent::UngrabMouse||event->type()==QEvent::WindowDeactivate) {finishDrag();return false;}
         auto *e=static_cast<QMouseEvent*>(event);
         if(event->type()==QEvent::MouseButtonPress||event->type()==QEvent::MouseButtonDblClick) {
             if(e->button()!=Qt::LeftButton&&e->button()!=Qt::MiddleButton)return false;
             if(!s->isEnabled()||!knobRect().adjusted(-3,-3,3,3).contains(e->position()))return true;
+            // Native mixer gain uses the OBS fader deflection scale:
+            // its maximum represents unity (0 dB). Never reset unrelated
+            // sliders or adjustment controls to their maximum.
+            if(event->type()==QEvent::MouseButtonDblClick&&e->button()==Qt::LeftButton&&
+               gainTarget(s)){
+                finishDrag();
+                s->setValue(s->maximum());
+                e->accept();return true;
+            }
             if(dragging)return true;
             dragging=true;start=e->globalPosition();startValue=s->sliderPosition();
             if(s->focusPolicy()!=Qt::NoFocus)s->setFocus(Qt::MouseFocusReason);
@@ -748,6 +786,7 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
     switch(e->type()) {
     case QEvent::Show:case QEvent::Hide:case QEvent::Resize:case QEvent::EnabledChange:
     case QEvent::LayoutRequest:case QEvent::LayoutDirectionChange:case QEvent::StyleChange:case QEvent::PaletteChange:case QEvent::Paint:
+    case QEvent::ContextMenu:
     case QEvent::MouseButtonPress:case QEvent::MouseButtonDblClick:case QEvent::MouseMove:case QEvent::MouseButtonRelease:
     case QEvent::UngrabMouse:case QEvent::WindowDeactivate:case QEvent::FocusIn:case QEvent::FocusOut:break;
     default:return false;
@@ -764,6 +803,7 @@ bool GradientController::eventFilter(QObject *o,QEvent *e) {
     if(layer&&layer->knob) {
         if(auto *slider=qobject_cast<QSlider*>(w)) {
             switch(e->type()) {
+            case QEvent::ContextMenu:return layer->handleGainMenu(slider,static_cast<QContextMenuEvent*>(e));
             case QEvent::MouseButtonPress:case QEvent::MouseButtonDblClick:case QEvent::MouseMove:case QEvent::MouseButtonRelease:
             case QEvent::UngrabMouse:case QEvent::WindowDeactivate:return layer->handleMouse(slider,e);
             case QEvent::FocusIn:case QEvent::FocusOut:layer->update();return false;

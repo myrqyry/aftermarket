@@ -324,6 +324,27 @@ int main(int argc,char **argv){
  turn(120);REQUIRE(current[0].offsetMs==-999989);
  QKeyEvent key(QEvent::KeyPress,Qt::Key_Up,Qt::ShiftModifier);
  QApplication::sendEvent(offsetDial,&key);REQUIRE(current[0].offsetMs==-999988);
+ auto resetDial=[](QDial *dial){
+     const QPoint p=dial->rect().center(),global=dial->mapToGlobal(p);
+     QMouseEvent dbl(QEvent::MouseButtonDblClick,p,global,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
+     QApplication::sendEvent(dial,&dbl);
+     QMouseEvent release(QEvent::MouseButtonRelease,p,global,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
+     QApplication::sendEvent(dial,&release);
+ };
+ resetDial(panDial);resetDial(offsetDial);
+ REQUIRE(panDial->value()==50&&pan->value()==50&&qAbs(current[0].balance-.5)<.001);
+ REQUIRE(offsetDial->value()==0&&offset->value()==0&&current[0].offsetMs==0);
+ REQUIRE(!panDial->isSliderDown()&&!offsetDial->isSliderDown());
+ panDial->setValue(73);offsetDial->setValue(1400);
+ REQUIRE(QMetaObject::invokeMethod(panDial,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,QPoint(8,8))));
+ auto *panMenu=panDial->findChild<QMenu*>("aftermarket-pan-menu");REQUIRE(panMenu);
+ auto *panReset=panMenu->findChild<QAction*>("aftermarket-reset-pan");REQUIRE(panReset);
+ panReset->trigger();panMenu->close();REQUIRE(current[0].balance==.5);
+ REQUIRE(QMetaObject::invokeMethod(offsetDial,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,QPoint(8,8))));
+ auto *syncMenu=offsetDial->findChild<QMenu*>("aftermarket-precise-sync-menu");REQUIRE(syncMenu);
+ auto *syncReset=syncMenu->findChild<QAction*>("aftermarket-reset-sync");REQUIRE(syncReset);
+ REQUIRE(syncMenu->findChild<QSpinBox*>("aftermarket-precise-sync-value"));
+ syncReset->trigger();syncMenu->close();REQUIRE(current[0].offsetMs==0);
  REQUIRE(savedProjects==0); // coalesce many dial/slider update events
  QEventLoop waitForSave;
  QTimer::singleShot(650,&waitForSave,&QEventLoop::quit);

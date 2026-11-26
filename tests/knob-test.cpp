@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QKeyEvent>
 #include <QSignalBlocker>
 #include <QImage>
@@ -21,7 +23,8 @@ int main(int argc,char **argv) {
  QTemporaryDir tmp;auto path=tmp.filePath("rules.json");QFile f(path);REQUIRE(f.open(QIODevice::WriteOnly));f.write(R"({"enabled":true,"rules":[]})");f.close();
  augment::Controller c(path);
  VolumeControl a,b;VolumeName nameA(&a),nameB(&b);nameA.setText("Music");nameB.setText("Mic");
- QSlider s(Qt::Vertical,&a),other(Qt::Vertical,&b);s.setRange(0,100);s.setValue(40);s.setGeometry(0,0,20,160);other.setGeometry(0,0,20,160);
+ QWidget frame(&a);frame.setObjectName("volMeterFrame");frame.setGeometry(0,0,100,180);
+ QSlider s(Qt::Vertical,&frame),other(Qt::Vertical,&b);s.setRange(0,100);s.setValue(40);s.setGeometry(0,0,20,160);other.setGeometry(0,0,20,160);
  a.resize(100,180);b.resize(100,180);a.show();b.show();app.processEvents();
  auto min=s.minimumSize();auto original=s.grab().toImage();
  REQUIRE(c.setGradientSettings({{"knobs",true},{"knobSources",QJsonArray{"Music"}}}));app.processEvents();
@@ -42,6 +45,30 @@ int main(int argc,char **argv) {
  app.processEvents();REQUIRE(before!=s.grab().toImage());
  QKeyEvent key(QEvent::KeyPress,Qt::Key_Right,Qt::NoModifier);
  QApplication::sendEvent(&s,&key);REQUIRE(s.value()>80);
+ // Reset goes through the original slider value signal, without starting
+ // another drag. A release after double-click must not change the value.
+ int edits=0;QObject::connect(&s,&QSlider::valueChanged,[&]{++edits;});
+ s.setValue(35);edits=0;
+ send(QEvent::MouseButtonDblClick,point,Qt::LeftButton,Qt::LeftButton);
+ REQUIRE(s.value()==s.maximum()&&!s.isSliderDown()&&edits==1);
+ send(QEvent::MouseButtonRelease,point,Qt::LeftButton,Qt::NoButton);
+ REQUIRE(s.value()==s.maximum()&&edits==1);
+ s.setValue(35);send(QEvent::MouseButtonPress,point,Qt::MiddleButton,Qt::MiddleButton);
+ REQUIRE(s.value()==35&&s.isSliderDown());
+ send(QEvent::MouseMove,point-QPointF(0,15),Qt::NoButton,Qt::MiddleButton);
+ REQUIRE(s.value()>35);
+ send(QEvent::MouseButtonRelease,point,Qt::MiddleButton,Qt::NoButton);
+ REQUIRE(!s.isSliderDown());
+ // A native mixer context menu retains its actions and adds reset.
+ a.setContextMenuPolicy(Qt::CustomContextMenu);
+ QMenu nativeMenu(&a);auto *nativeAction=nativeMenu.addAction("Native action");
+ QObject::connect(&a,&QWidget::customContextMenuRequested,[&](QPoint p){nativeMenu.popup(a.mapToGlobal(p));});
+ s.setValue(30);
+ QContextMenuEvent context(QContextMenuEvent::Mouse,point.toPoint(),s.mapToGlobal(point.toPoint()));
+ QApplication::sendEvent(&s,&context);
+ auto *resetAction=nativeMenu.findChild<QAction*>("aftermarket-reset-gain");
+ REQUIRE(resetAction&&nativeMenu.actions().contains(nativeAction));
+ resetAction->trigger();nativeMenu.hide();REQUIRE(s.value()==s.maximum());
  s.setDisabled(true);app.processEvents();REQUIRE(s.property("_obsUiAugmentKnob").toBool());
  s.setEnabled(true);s.setValue(40);
  REQUIRE(!c.setGradientSettings({{"knobs",true},{"knobSources",QJsonArray{1}}}));

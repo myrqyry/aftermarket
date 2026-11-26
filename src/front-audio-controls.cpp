@@ -93,6 +93,12 @@ protected:
         last=e->globalPosition();remainder=0;dragging=true;
         setSliderDown(true);e->accept();
     }
+    void mouseDoubleClickEvent(QMouseEvent *e) override {
+        if(e->button()!=Qt::LeftButton||!isEnabled()){e->ignore();return;}
+        finish();
+        setValue(endless_?0:minimum()+(maximum()-minimum())/2);
+        e->accept();
+    }
     void mouseMoveEvent(QMouseEvent *e) override {
         if(!dragging){e->ignore();return;}
         if(!(e->buttons()&(Qt::LeftButton|Qt::MiddleButton))){finish();e->accept();return;}
@@ -1043,11 +1049,11 @@ struct FrontAudioControls::State {
         if(r.panDial)r.panDial->setEnabled(source.stereo);
         if(r.panDial){
             const auto tip=QString("Stereo pan: %1% (50% center)").arg(panValue);
-            if(r.panDial->toolTip()!=tip)r.panDial->setToolTip(tip);
+            if(r.panDial->toolTip()!=tip+" · Double-click or right-click: reset")r.panDial->setToolTip(tip+" · Double-click or right-click: reset");
         }
         if(r.offsetDial){
             const auto tip=QString("Sync offset: %1 ms · drag up/down or scroll · Shift: fine · right-click: exact value").arg(source.offsetMs);
-            if(r.offsetDial->toolTip()!=tip)r.offsetDial->setToolTip(tip);
+            if(r.offsetDial->toolTip()!=tip+" · Double-click: reset to 0 ms")r.offsetDial->setToolTip(tip+" · Double-click: reset to 0 ms");
         }
         syncLayout(r);
     }
@@ -1379,6 +1385,17 @@ void FrontAudioControls::refresh(){
             offsetDial->setAccessibleName("Audio sync offset");
             // Precise editing stays reachable in floating docks whose
             // native title cannot host Aftermarket's overflow menu.
+            panDial->setContextMenuPolicy(Qt::CustomContextMenu);
+            connect(panDial,&QWidget::customContextMenuRequested,panDial,[panDial](QPoint point){
+                auto *menu=new QMenu(panDial);
+                menu->setObjectName("aftermarket-pan-menu");
+                auto *reset=menu->addAction("Reset pan to center (50%)");
+                reset->setObjectName("aftermarket-reset-pan");
+                reset->setEnabled(panDial->isEnabled()&&panDial->value()!=50);
+                QObject::connect(reset,&QAction::triggered,panDial,[panDial]{if(panDial->isEnabled())panDial->setValue(50);});
+                QObject::connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
+                menu->popup(panDial->mapToGlobal(point));
+            });
             offsetDial->setContextMenuPolicy(Qt::CustomContextMenu);
             connect(offsetDial,&QWidget::customContextMenuRequested,offsetDial,[offsetDial,safe=QPointer<QSpinBox>(offset)](QPoint point){
                 if(!safe)return;
@@ -1391,6 +1408,11 @@ void FrontAudioControls::refresh(){
                 editor->setAccessibleName("Precise audio sync offset");
                 auto *action=new QWidgetAction(menu);action->setDefaultWidget(editor);menu->addAction(action);
                 QObject::connect(editor,&QSpinBox::valueChanged,menu,[safe](int value){if(safe)safe->setValue(value);});
+                auto *reset=menu->addAction("Reset sync to default (0 ms)");
+                reset->setObjectName("aftermarket-reset-sync");
+                reset->setEnabled(offsetDial->isEnabled()&&offsetDial->value()!=0);
+                QObject::connect(reset,&QAction::triggered,offsetDial,[offsetDial]{if(offsetDial->isEnabled())offsetDial->setValue(0);});
+                QObject::connect(editor,&QSpinBox::valueChanged,reset,[reset,offsetDial](int value){reset->setEnabled(offsetDial->isEnabled()&&value!=0);});
                 QObject::connect(menu,&QMenu::aboutToHide,menu,&QObject::deleteLater);
                 menu->popup(offsetDial->mapToGlobal(point));editor->setFocus();
             });
