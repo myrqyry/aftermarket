@@ -53,8 +53,9 @@ claim that the latest package was requalified against that SDK.
 ## Current qualification — 2026-11-25
 
 The local build at `f111fbe` passed all **44/44 CTests** using the installed
-OBS 32.2.0 SDK and Qt 6.4.2. The CI minimum is still 32; the gate runs
-every registered test and rejects skipped or failing tests.
+OBS 32.2.0 SDK and Qt 6.4.2. The CI minimum now follows the expanded
+45-test baseline; the gate runs every registered test and rejects skipped
+or failing tests.
 
 The latest completed hosted run before this documentation refresh,
 [45740037866](https://github.com/myrqyry/aftermarket/actions/runs/45740037866)
@@ -64,9 +65,20 @@ but failed two of 44 tests:
 - `command-center`: line 31, launcher visibility assertion.
 - `menu-augmentation`: line 363, popup anchor-distance assertion.
 
-The package/checksum stages did not complete. The difference between local
-and hosted UI behavior remains to be investigated; neither test is waived.
-A new push triggers the existing workflow, not a release.
+The package/checksum stages did not complete. Neither test is waived.
+The launcher test reproduced the same assertion locally with Qt font DPI 72:
+its fixture had not guaranteed the 20px minimum menu-bar height. It now
+provides a suitable height and explicitly checks hiding and restoring the
+launcher on short menu bars, including a separate 72-DPI CTest case. The popup test runs on Qt XCB inside a dedicated
+1280x1024 Xvfb display (requires `xvfb` and `xauth`), rather than forcing
+Qt offscreen, and checks anchoring against the actual space on each side.
+Other offscreen widget tests keep their existing backend.
+A local Release verification of the CI fix on the `1011155` baseline
+passed all 45 CTests, the installed local SDK dependency checks, and the
+module-only archive checksum/extraction checks. This was not a hosted
+verification or a release.
+A passing hosted run is still required to qualify the pinned CI environment.
+A new push to main/master triggers the existing workflow, not a release.
 
 Run local relative-link checks for the maintained documentation with:
 
