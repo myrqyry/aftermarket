@@ -13,7 +13,7 @@
 #include <QPainter>
 #include <QStylePainter>
 #include <QStyleOptionButton>
-#include <QPainterPath>
+#include <QTextLayout>
 #include <QMenu>
 #include <QToolBar>
 #include <QPushButton>
@@ -43,7 +43,7 @@
 namespace augment {
 namespace {
 constexpr int maxOffsetMs=999999;
-// Reuse the gain dial's palette, two-ring hierarchy and drag direction.
+// Reuse the gain dial's palette and drag direction with a single compact scale.
 constexpr int compactDialSize=32;
 class CompactRotary : public QDial {
 public:
@@ -62,22 +62,19 @@ protected:
         const auto ring=outer.adjusted(4.2,4.2,-4.2,-4.2);
         const auto face=outer.adjusted(7,7,-7,-7);
         const auto accent=pal.color(group,QPalette::Highlight);
-        const double start=endless_?90.:225.,sweep=endless_?-360.:-270.;
         p.setOpacity(isEnabled()?1.:.48);
-        // The outer track is a quiet accent-tinted scale, not a peak meter.
-        p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(rotaryMutedAccent(pal.color(group,QPalette::Window),accent),
-                      2.8,Qt::SolidLine,Qt::FlatCap));
-        p.drawArc(outer,qRound(start*16),qRound(sweep*16));
+        // Only the inner value scale remains. No second decorative ring.
+        auto dialPalette=pal;
+        dialPalette.setColor(group,QPalette::Mid,rotaryMutedAccent(pal.color(group,QPalette::Window),accent));
         const QBrush brush(rotaryThemeGradient(outer.center(),pal,group));
         if(endless_){
             const double angle=90.-((value()%360+360)%360);
-            paintRotaryFace(p,ring,face,pal,group,brush,90,-360,angle+68,-68,angle,.8,true);
+            paintRotaryFace(p,ring,face,dialPalette,group,brush,90,-360,angle+68,-68,angle,.8,true,false);
         }else{
             const double span=double(maximum())-minimum();
             const double fraction=span>0?qBound(0.,(sliderPosition()-double(minimum()))/span,1.):.5;
             const double angle=225.-270.*(invertedAppearance()?1.-fraction:fraction);
-            paintRotaryFace(p,ring,face,pal,group,brush,225,-270,90,angle-90,angle,.8,true);
+            paintRotaryFace(p,ring,face,dialPalette,group,brush,225,-270,90,angle-90,angle,.8,true);
             p.setPen(QPen(pal.color(group,QPalette::ButtonText),1.,Qt::SolidLine,Qt::RoundCap));
             p.drawLine(QPointF(outer.center().x(),outer.top()-.4),QPointF(outer.center().x(),outer.top()+1.8));
         }
@@ -192,26 +189,45 @@ ChannelStatus statusKind(const QString &text){
     if(value=="Inactive")return ChannelStatus::Inactive;
     return ChannelStatus::Unknown;
 }
-void paintStatus(QLabel *label,ChannelStatus kind){
-    QPainter painter(label);
-    painter.setRenderHint(QPainter::Antialiasing);
-    const qreal side=qMin(14,qMin(label->width(),label->height()));
-    if(side<8)return;
-    painter.translate((label->width()-side)/2.,(label->height()-side)/2.);
-    painter.scale(side/16.,side/16.);
-    const auto group=label->isEnabled()?QPalette::Active:QPalette::Disabled;
-    const auto color=label->palette().color(group,label->foregroundRole());
-    painter.setPen(QPen(color,1.5,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
-    painter.setBrush(Qt::NoBrush);
-    if(kind==ChannelStatus::Pinned){
-        QPainterPath pin;pin.moveTo(5,2);pin.lineTo(11,2);pin.lineTo(10,6);
-        pin.lineTo(13,9);pin.lineTo(3,9);pin.lineTo(6,6);pin.closeSubpath();
-        painter.drawPath(pin);painter.drawLine(QPointF(8,9),QPointF(8,14));
-    }else if(kind==ChannelStatus::Active){
-        painter.drawPolyline(QPolygonF{QPointF(1,8),QPointF(4,8),QPointF(6,4),QPointF(9,12),QPointF(11,8),QPointF(15,8)});
-    }else if(kind==ChannelStatus::Inactive){
-        painter.drawEllipse(QRectF(4,4,8,8));
+QColor channelTitleColor(const QWidget *widget,ChannelStatus state){
+    const auto pal=widget->palette();
+    const auto group=widget->isEnabled()?QPalette::Active:QPalette::Disabled;
+    if(state==ChannelStatus::Pinned)return pal.color(group,QPalette::Highlight);
+    if(state==ChannelStatus::Inactive)return pal.color(QPalette::Disabled,QPalette::ButtonText);
+    return pal.color(group,QPalette::ButtonText);
+}
+bool paintChannelTitle(QLabel *label,QAbstractButton *button){
+    if(!label||!button||!button->inherits("VolumeName"))return false;
+    const auto state=statusKind(button->property("aftermarket-channel-state").toString());
+    const bool two=button->property("aftermarket-two-line-title").toBool();
+    if(state==ChannelStatus::Unknown&&!two)return false;
+    QPainter p(label);
+    auto font=label->font();
+    if(state==ChannelStatus::Pinned)font.setBold(true);
+    p.setFont(font);p.setPen(channelTitleColor(button,state));
+    const QFontMetrics metrics(font);
+    QRect area=label->contentsRect();
+    if(area.width()<=0)return true;
+    const QString full=button->text();
+    if(!two){
+        p.drawText(area,Qt::AlignLeft|Qt::AlignVCenter,metrics.elidedText(full,Qt::ElideMiddle,area.width()));
+        return true;
     }
+    // Wrap once at a word boundary (or anywhere for a long token);
+    // the second row is elided, never an unbounded third line.
+    QTextLayout text(full,font);
+    QTextOption option;option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    text.setTextOption(option);text.beginLayout();
+    auto line=text.createLine();
+    int used=0;
+    if(line.isValid()){line.setLineWidth(area.width());used=line.textLength();}
+    text.endLayout();
+    const int h=metrics.lineSpacing();
+    const int y=area.top()+qMax(0,(area.height()-2*h)/2);
+    p.drawText(QRect(area.left(),y,area.width(),h),Qt::AlignLeft|Qt::AlignVCenter,full.left(used).trimmed());
+    if(used<full.size())p.drawText(QRect(area.left(),y+h,area.width(),h),Qt::AlignLeft|Qt::AlignVCenter,
+        metrics.elidedText(full.mid(used).trimmed(),Qt::ElideMiddle,area.width()));
+    return true;
 }
 // OBS 32.2 VolumeName is a QAbstractButton with a child QLabel and
 // explicitly paints PE_IndicatorArrowDown (not a menu-indicator subcontrol).
@@ -224,7 +240,9 @@ bool paintVolumeNameMenu(QAbstractButton *button){
     const auto *style=button->style();
     const int padding=opt.rect.right()-style->subElementRect(QStyle::SE_PushButtonContents,&opt,button).right();
     const int w=style->pixelMetric(QStyle::PM_MenuButtonIndicator,&opt,button);
-    const QRect indicator(opt.rect.right()-w-padding/2,opt.rect.center().y()-w/2,w,w);
+    const int y=button->property("aftermarket-two-line-title").toBool()?
+        qMax(0,(button->fontMetrics().lineSpacing()-w)/2):opt.rect.center().y()-w/2;
+    const QRect indicator(opt.rect.right()-w-padding/2,y,w,w);
     if(w<7||!opt.rect.contains(indicator))return false;
     QStylePainter p(button);
     p.drawControl(QStyle::CE_PushButtonBevel,opt);
@@ -281,9 +299,13 @@ struct FrontAudioControls::State {
         Qt::Alignment dbAlignment,frameAlignment,controlsAlignment;
         QSize controlsMin,controlsMax;
         QSizePolicy controlsPolicy;
-        int statusMin=0,statusMax=QWIDGETSIZE_MAX;
-        QString statusTip,appliedStatusTip;
-        bool statusDecorated=false;
+        bool statusDecorated=false,statusWasHidden=false;
+        QPointer<QLabel> nameText;
+        QPointer<QBoxLayout> statusHeader;
+        struct SpacerBaseline {QSpacerItem *item;QSize size;QSizePolicy policy;};
+        QList<SpacerBaseline> statusSpacers;
+        int titleMin=0,titleMax=QWIDGETSIZE_MAX;
+        bool twoLineTitle=false;
         bool columnMode=false,columnGain=false;
         QSpacerItem *columnSpacer=nullptr;
         int originalColumnMax=0,appliedColumnMax=0;
@@ -391,7 +413,11 @@ struct FrontAudioControls::State {
         // Compact side-control strips are shorter than the former vertically
         // stacked control group. Use their measured size hints, not the old
         // 180px row floor, while still requiring every row to fit.
-        int minimum=strips?80:240,minimumHeight=0;
+        const bool compactRows=!strips&&std::all_of(widgets.cbegin(),widgets.cend(),[this](QWidget *w){
+            const auto r=std::find_if(rows.cbegin(),rows.cend(),[w](const Row &r){return r.volume==w;});
+            return r!=rows.cend()&&r->rotaryGrid;
+        });
+        int minimum=strips?80:compactRows?156:240,minimumHeight=0;
         for(auto *w:widgets){
             if(w->isHidden()||w->property("aftermarket-foreign").toBool())return 1;
             minimum=qMax(minimum,qMax(w->minimumWidth(),w->minimumSizeHint().width()));
@@ -662,26 +688,58 @@ struct FrontAudioControls::State {
     }
     void restoreStatus(Row &r){
         if(!r.statusDecorated)return;
-        if(r.status){
-            r.status->removeEventFilter(owner);
-            if(r.status->minimumWidth()==18&&r.status->maximumWidth()==18){
-                r.status->setMinimumWidth(r.statusMin);r.status->setMaximumWidth(r.statusMax);
+        if(r.status&&!r.statusWasHidden)r.status->show();
+        if(r.statusHeader){
+            for(const auto &entry:r.statusSpacers){
+                bool present=false;
+                for(int i=0;i<r.statusHeader->count();++i)
+                    present|=r.statusHeader->itemAt(i)->spacerItem()==entry.item;
+                if(present)entry.item->changeSize(entry.size.width(),entry.size.height(),
+                    entry.policy.horizontalPolicy(),entry.policy.verticalPolicy());
             }
-            if(r.status->toolTip()==r.appliedStatusTip)r.status->setToolTip(r.statusTip);
-            r.status->update();
+            r.statusHeader->invalidate();
         }
+        r.statusSpacers.clear();r.statusHeader.clear();
+        if(r.nameHandle){r.nameHandle->setProperty("aftermarket-channel-state",QVariant());r.nameHandle->update();}
+        if(r.nameText)r.nameText->update();
         r.statusDecorated=false;
     }
     void syncStatus(Row &r){
-        if(!r.status||statusKind(r.status->text())==ChannelStatus::Unknown){restoreStatus(r);return;}
+        if(!r.status||!r.nameText||statusKind(r.status->text())==ChannelStatus::Unknown){restoreStatus(r);return;}
         if(!r.statusDecorated){
-            r.statusMin=r.status->minimumWidth();r.statusMax=r.status->maximumWidth();
-            r.statusTip=r.status->toolTip();
-            r.status->setFixedWidth(18);r.status->installEventFilter(owner);r.statusDecorated=true;
-            r.status->update();
+            r.statusWasHidden=r.status->isHidden();
+            r.statusDecorated=true;
+            // The status label remains a live native object. Reclaim its
+            // header space, including OBS's expanding status spacer.
+            auto *box=containingBox(r.root,r.status);
+            r.statusHeader=box;
+            if(box)for(int i=0;i<box->count();++i)
+                if(auto *spacer=box->itemAt(i)->spacerItem()){
+                    r.statusSpacers.append({spacer,spacer->sizeHint(),spacer->sizePolicy()});
+                    spacer->changeSize(0,0,QSizePolicy::Fixed,QSizePolicy::Fixed);
+                }
+            if(box)box->invalidate();
         }
-        const auto tip=r.statusTip.isEmpty()?r.status->text():r.statusTip;
-        if(tip!=r.appliedStatusTip){r.status->setToolTip(tip);r.appliedStatusTip=tip;}
+        if(!r.status->isHidden())r.status->hide();
+        if(r.nameHandle&&r.nameHandle->property("aftermarket-channel-state").toString()!=r.status->text()){
+            r.nameHandle->setProperty("aftermarket-channel-state",r.status->text());
+            r.nameHandle->update();r.nameText->update();
+        }
+    }
+    void syncTitleRows(Row &r,bool two){
+        if(!r.nameText||!r.nameHandle)return;
+        if(two){
+            if(!r.twoLineTitle){
+                r.titleMin=r.nameHandle->minimumHeight();r.titleMax=r.nameHandle->maximumHeight();
+                r.twoLineTitle=true;r.nameHandle->setProperty("aftermarket-two-line-title",true);
+            }
+            const int h=2*r.nameText->fontMetrics().lineSpacing()+4;
+            if(r.nameHandle->minimumHeight()!=h||r.nameHandle->maximumHeight()!=h)r.nameHandle->setFixedHeight(h);
+        }else if(r.twoLineTitle){
+            r.nameHandle->setMinimumHeight(r.titleMin);r.nameHandle->setMaximumHeight(r.titleMax);
+            r.nameHandle->setProperty("aftermarket-two-line-title",QVariant());r.twoLineTitle=false;
+        }else return;
+        r.nameHandle->update();r.nameText->update();
     }
     void restoreColumnGain(Row &r){
         if(!r.columnGain)return;
@@ -725,6 +783,7 @@ struct FrontAudioControls::State {
     void restoreColumn(Row &r){
         if(!r.columnMode)return;
         restoreColumnGain(r);
+        syncTitleRows(r,false);
         if(r.columnButtons&&r.columnButtons->spacing()==r.appliedButtonSpacing)
             r.columnButtons->setSpacing(r.originalButtonSpacing);
         r.columnButtons.clear();
@@ -785,6 +844,7 @@ struct FrontAudioControls::State {
                 if(spacing!=r.appliedButtonSpacing){r.columnButtons->setSpacing(spacing);r.appliedButtonSpacing=spacing;}
             }
         }
+        syncTitleRows(r,true);
         syncStatus(r);
         const bool integrated=gain->property("_obsUiAugmentKnob").toBool()&&gain->property("_obsUiAugmentIntegratedMeter").toBool();
         if(!integrated){restoreColumnGain(r);return true;}
@@ -991,6 +1051,8 @@ struct FrontAudioControls::State {
     }
     void remove(Row &r){
         restoreRotary(r);
+        syncTitleRows(r,false);
+        if(r.nameText)r.nameText->removeEventFilter(owner);
         if(r.nameHandle){
             r.nameHandle->update();
             if(r.hadCursor)r.nameHandle->setCursor(r.originalCursor);
@@ -1119,7 +1181,7 @@ struct FrontAudioControls::State {
         if(r.panDial)r.panDial->setEnabled(source.stereo);
         if(r.panDial){
             const auto tip=QString("Stereo pan: %1% (50% center)").arg(panValue);
-            if(r.panDial->toolTip()!=tip+" · Double-click or right-click: reset")r.panDial->setToolTip(tip+" · Double-click or right-click: reset");
+            if(r.panDial->toolTip()!=tip+" · Double-click: reset · Right-click: options")r.panDial->setToolTip(tip+" · Double-click: reset · Right-click: options");
         }
         if(r.offsetDial){
             const auto tip=QString("Sync offset: %1 ms · drag up/down or scroll · Shift: fine · right-click: exact value").arg(source.offsetMs);
@@ -1203,11 +1265,8 @@ bool FrontAudioControls::eventFilter(QObject *watched,QEvent *event){
     if(event->type()==QEvent::Paint){
         for(const auto &row:state->rows)
             if(row.nameHandle==watched&&paintVolumeNameMenu(qobject_cast<QAbstractButton*>(watched)))return true;
-        for(const auto &row:state->rows)if(row.statusDecorated&&row.status==watched){
-            const auto kind=statusKind(row.status->text());
-            if(kind!=ChannelStatus::Unknown){paintStatus(row.status,kind);return true;}
-            break;
-        }
+        for(const auto &row:state->rows)
+            if(row.nameText==watched&&paintChannelTitle(row.nameText,qobject_cast<QAbstractButton*>(row.nameHandle)))return true;
     }
     if(watched==state->native&&(event->type()==QEvent::Resize||event->type()==QEvent::Show))
         state->gridDebounce.start();
@@ -1528,6 +1587,10 @@ void FrontAudioControls::refresh(){
                 row.originalCursor=row.nameHandle->cursor();
                 row.hadCursor=row.nameHandle->testAttribute(Qt::WA_SetCursor);
                 row.nameHandle->installEventFilter(this);
+                if(row.nameHandle->inherits("VolumeName")){
+                    row.nameText=row.nameHandle->findChild<QLabel*>(QString(),Qt::FindDirectChildrenOnly);
+                    if(row.nameText)row.nameText->installEventFilter(this);
+                }
                 row.nameHandle->update();
             }
             row.panSlider=pan;row.panDial=panDial;row.offsetSpin=offset;

@@ -3918,3 +3918,24 @@ passed 10/10 checks (/tmp/am-mixer-rotary.SvnVSu), five channels with pair
 edges within three pixels of the gain-face bounds. No exact user-theme
 runtime measurement this turn. Existing README screenshots predate this
 layout. Unrelated plugin.cpp comment left unstaged.
+
+## Mixer compact visual cleanup — 2026-11-25
+User requested single-ring small knobs, no sync pointer, earlier grid wrap,
+right-edge ellipsis, title styling instead of status badges, and two-line
+horizontal title. Small dials retain the inner scale/face and pan pointer;
+sync has only its accent segment. Existing gain paint and interaction
+unchanged. Recognized native category text styles the full source name:
+Pinned accent/bold, Active normal, Inactive muted; retain native label and
+restore unknown states. Reclaim native header status spacer; two-line
+side-by-side header uses full button text, bounded wrap/ellipsis, original
+native action and drag handle. Ordinary fader floor unchanged; integrated
+stacked rotary grid floor 156 logical px plus actual native minimum.
+Corrected ambiguous pan tooltip (double-click reset; right-click options).
+Focused RED failed on old outer ring; GREEN visual and state/layout tests.
+Full build, 43/43 CTests, 17/17 side-by-side and 11/11 stacked native
+OBS 32.2.0 checks. Full-width header measured 110/110 and 257/257 px in
+respective orientations; two columns at 420px and single column at 280px.
+Evidence /tmp/am-mixer-columns.f9FZHG and /tmp/am-mixer-rotary.ffF6Bo.
+Default isolated theme, not exact user Colorway theme. Actual physical
+right-click release without menu selection not separately tested.
+Unrelated plugin.cpp comment remains unstaged.

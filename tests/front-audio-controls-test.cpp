@@ -262,7 +262,8 @@ int main(int argc,char **argv){
          if(radius>=image.width()*.36&&color.red()>75&&color.red()<155&&color.red()-color.green()>20)++tinted;
          if(radius<image.width()*.24&&color.red()>170&&color.green()>170&&color.blue()>170)++bright;
      }
-     REQUIRE(tinted>=18&&bright>=3);
+     REQUIRE(tinted==0);
+     REQUIRE(dial==offsetDial?bright==0:bright>=3);
  }
  panDial->setPalette(rotaryPalette);offsetDial->setPalette(rotaryPalette);
  const auto oldFace=offsetDial->grab().toImage();
@@ -508,7 +509,7 @@ int main(int argc,char **argv){
  auto *channel=new QWidget(&rotary);channel->setObjectName("VolumeControl");rotaryRoot->addWidget(channel);
  auto *channelBox=new QVBoxLayout(channel);
  auto *header=new QHBoxLayout;channelBox->addLayout(header,3);
- auto *channelName=new QToolButton(channel);channelName->setObjectName("VolumeName");channelName->setText("Media Source");header->addWidget(channelName);
+ auto *channelName=new VolumeName("Media Source",channel);header->addWidget(channelName);
  auto *statusRow=new QHBoxLayout;header->addLayout(statusRow);statusRow->addStretch();
  auto *status=new QLabel("Pinned",channel);statusRow->addWidget(status);
  auto *db=new QLabel("-8.7 dB",channel);db->setObjectName("volLabel");statusRow->addWidget(db);
@@ -540,7 +541,7 @@ int main(int argc,char **argv){
  REQUIRE(qAbs(monitor->mapTo(channel,QPoint(0,monitor->height())).y()-(gc+radius))<=4);
  REQUIRE(qAbs(panRight->mapTo(channel,QPoint(0,2)).y()-(gc-radius))<=4);
  REQUIRE(qAbs(syncRight->mapTo(channel,QPoint(0,syncRight->height()-2)).y()-(gc+radius))<=4);
- REQUIRE(status->text()=="Pinned"&&status->maximumWidth()<=20&&header->stretch(0)==1);
+ REQUIRE(status->text()=="Pinned"&&status->isHidden()&&header->stretch(0)==1&&channelName->property("aftermarket-channel-state").toString()=="Pinned");
  REQUIRE(gain->value()==51);
  REQUIRE(QMetaObject::invokeMethod(syncRight,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,QPoint(8,8))));
  auto *preciseMenu=syncRight->findChild<QMenu*>("aftermarket-precise-sync-menu");
@@ -549,9 +550,9 @@ int main(int argc,char **argv){
  preciseValue->setValue(12345);REQUIRE(precise->value()==12345);
  preciseMenu->close();app.processEvents();
  status->setText("Active");rotaryUi.refresh();app.processEvents();
- REQUIRE(status->text()=="Active"&&status->maximumWidth()<=20);
+ REQUIRE(status->text()=="Active"&&status->isHidden()&&channelName->property("aftermarket-channel-state").toString()=="Active");
  status->setText("Unknown status");rotaryUi.refresh();
- REQUIRE(status->maximumWidth()>20);
+ REQUIRE(!status->isHidden());
  status->setText("Active");rotaryUi.refresh();
  gain->setProperty("_obsUiAugmentKnob",false);rotaryUi.refresh();app.processEvents();
  REQUIRE(!channel->findChild<QBoxLayout*>("aftermarket-rotary-center"));
@@ -567,7 +568,7 @@ int main(int argc,char **argv){
  auto *strip=new QWidget(&columnMixer);strip->setObjectName("VolumeControl");strip->setMaximumWidth(110);columnsRoot->addWidget(strip);
  auto *stripRoot=new QVBoxLayout(strip);stripRoot->setContentsMargins(0,0,0,0);
  auto *stripStatus=new QLabel("Pinned",strip);auto *sr=new QHBoxLayout;sr->addWidget(stripStatus);stripRoot->addLayout(sr);
- auto *stripName=new QToolButton(strip);stripName->setObjectName("VolumeName");stripName->setText("Media Source");
+ auto *stripName=new VolumeName("Media Source",strip);
  auto *nr=new QHBoxLayout;nr->addWidget(stripName);stripRoot->addLayout(nr);
  auto *stripDb=new QLabel("-8.7 dB",strip);stripDb->setObjectName("volLabel");
  auto *dr=new QHBoxLayout;dr->addWidget(stripDb);dr->addStretch();stripRoot->addLayout(dr);
@@ -596,7 +597,9 @@ int main(int argc,char **argv){
  REQUIRE(qAbs((srp.x()+columnSync->width()/2-2)-(middle.x()+diameter/2))<=4);
  REQUIRE(br->direction()==QBoxLayout::LeftToRight&&strip->width()<=110);
 
- REQUIRE(stripStatus->maximumWidth()==18);
+ REQUIRE(stripStatus->isHidden()&&stripName->property("aftermarket-channel-state").toString()=="Pinned");
+ REQUIRE(stripName->height()>=stripName->fontMetrics().lineSpacing()*2);
+ REQUIRE(stripName->property("aftermarket-two-line-title").toBool());
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()-stripGain->mapTo(strip,QPoint()).y()-stripGain->height()<30);
  REQUIRE(stripGain->value()==63&&stripGain->parentWidget()==stripFrame);

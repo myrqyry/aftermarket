@@ -103,9 +103,18 @@ static void probe(){
    }
    bool icon=false;
    for(auto *label:w->findChildren<QLabel*>(QString(),Qt::FindDirectChildrenOnly))
-      if(label->text()=="Active"&&label->maximumWidth()==18&&label->toolTip()=="Active")icon=true;
-   status&=icon;
+      if(label->text()=="Active"&&label->isHidden())icon=true;
+   QAbstractButton *title=nullptr;
+   for(auto *b:w->findChildren<QAbstractButton*>(QString(),Qt::FindDirectChildrenOnly))
+       if(b->inherits("VolumeName"))title=b;
+   status&=icon&&title&&title->property("aftermarket-channel-state").toString()=="Active";
+   if(title){
+       const int right=w->width()-title->mapTo(w,QPoint(title->width(),0)).x();
+       blog(LOG_INFO,"GRIDDETAIL header width=%d channel=%d right-gap=%d height=%d",title->width(),w->width(),right,title->height());
+       status&=right<=8;
+   }
    values&=db->text().contains("dB")&&db->text().contains("-7.5");
+   status&=title&&title->property("aftermarket-two-line-title").toBool()&&title->height()>=2*title->fontMetrics().lineSpacing();
    if(w==all.first()){
     QAbstractButton *nameButton=nullptr;
     for(auto *b:w->findChildren<QAbstractButton*>())if(b->inherits("VolumeName"))nameButton=b;
@@ -114,7 +123,7 @@ static void probe(){
       QStyleOptionButton opt;opt.initFrom(nameButton);
       const int padding=opt.rect.right()-nameButton->style()->subElementRect(QStyle::SE_PushButtonContents,&opt,nameButton).right();
       const int width=nameButton->style()->pixelMetric(QStyle::PM_MenuButtonIndicator,&opt,nameButton);
-      const QRect area(opt.rect.right()-width-padding/2,opt.rect.center().y()-width/2,width,width);
+      const QRect area(opt.rect.right()-width-padding/2,qMax(0,(nameButton->fontMetrics().lineSpacing()-width)/2),width,width);
       const auto img=nameButton->grab().toImage().copy(area);
       // Compare against palette foreground; each dot yields a distinct
       // connected vertical run through the glyph's center.
@@ -202,7 +211,7 @@ static void probe(){
     }
    }
   }
-  check("db_below_gain",layout);check("side_controls_aligned",position);check("native_active_icon",status);
+  check("db_below_gain",layout);check("side_controls_aligned",position);check("native_state_styled_header",status);
   check("native_db_values",values);check("exact_sync_popup",exact);check("relative_encoder_beyond_2s",encoder);check("native_knob_defaults",resetKnobs);check("native_knob_reset_menus",resetMenus);
   dock->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/rotary-columns.png");
   dock->resize(360,580);

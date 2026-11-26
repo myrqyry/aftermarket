@@ -103,8 +103,16 @@ static void probe(){
    }else position=false;
    bool icon=false;
    for(auto *label:w->findChildren<QLabel*>(QString(),Qt::FindDirectChildrenOnly))
-      if(label->text()=="Active"&&label->maximumWidth()==18&&label->toolTip()=="Active")icon=true;
-   status&=icon;
+      if(label->text()=="Active"&&label->isHidden())icon=true;
+   QAbstractButton *title=nullptr;
+   for(auto *b:w->findChildren<QAbstractButton*>(QString(),Qt::FindDirectChildrenOnly))
+       if(b->inherits("VolumeName"))title=b;
+   status&=icon&&title&&title->property("aftermarket-channel-state").toString()=="Active";
+   if(title){
+       const int right=w->width()-title->mapTo(w,QPoint(title->width(),0)).x();
+       blog(LOG_INFO,"GRIDDETAIL header width=%d channel=%d right-gap=%d height=%d",title->width(),w->width(),right,title->height());
+       status&=right<=8;
+   }
    values&=db->text().contains("dB")&&db->text().contains("-7.5");
    if(w==all.first()){
     QMetaObject::invokeMethod(offset,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,QPoint(8,8)));
@@ -132,12 +140,17 @@ static void probe(){
     }
    }
   }
-  check("db_below_gain",layout);check("side_controls_aligned",position);check("native_active_icon",status);
+  check("db_below_gain",layout);check("side_controls_aligned",position);check("native_state_styled_header",status);
   check("native_db_values",values);check("exact_sync_popup",exact);check("relative_encoder_beyond_2s",encoder);
   dock->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/rotary-grid.png");
-  dock->resize(360,580);
+  dock->resize(420,580);
  });
  QTimer::singleShot(3100,qApp,[]{
+  check("compact_two_columns_at_420",grid()&&grid()->columnCount()==2&&grid()->count()==5);
+  dock->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/rotary-two-columns.png");
+  dock->resize(280,580);
+ });
+ QTimer::singleShot(4600,qApp,[]{
   bool narrow=!grid()&&channels().size()==5;
   for(auto *w:channels())narrow&=centerLayout(w->layout())!=nullptr;
   check("narrow_rotary",narrow);

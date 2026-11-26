@@ -28,7 +28,7 @@ inline void paintRotaryFace(QPainter &p,const QRectF &ring,const QRectF &face,
                             const QPalette &palette,QPalette::ColorGroup group,
                             const QBrush &accent,double start,double sweep,
                             double activeStart,double activeSweep,double pointer,
-                            double scale=1.0,bool compact=false){
+                            double scale=1.0,bool compact=false,bool showPointer=true){
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(palette.color(group,QPalette::Mid),qMax(1.,3.*scale),Qt::SolidLine,Qt::RoundCap));
     p.drawArc(ring,qRound(start*16),qRound(sweep*16));
@@ -37,6 +37,7 @@ inline void paintRotaryFace(QPainter &p,const QRectF &ring,const QRectF &face,
     if(!face.isValid())return;
     p.setPen(QPen(palette.color(group,QPalette::Mid),qMax(.65,scale)));
     p.setBrush(palette.color(group,QPalette::Button));p.drawEllipse(face);
+    if(!showPointer)return;
     constexpr double pi=3.141592653589793;
     const auto rad=pointer*pi/180.;
     const QPointF direction(std::cos(rad),-std::sin(rad));
