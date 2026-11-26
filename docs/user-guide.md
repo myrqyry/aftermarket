@@ -272,7 +272,10 @@ heuristic and rule precedence are unchanged.
 ![OBS dock titles with theme-aware icons](screenshots/readme/dock-title-icons.webp)
 
 **Three-dot menus on native dock titles:** Every native-titled OBS or plugin
-dock gets a theme-colored vertical ellipsis. **Collapse / Expand**, **Pop out**
+dock gets a theme-colored vertical ellipsis that appears on header hover,
+keyboard focus, or while its menu is open. The reserved space and title
+layout stay unchanged; the Audio Mixer uses the same reveal behavior.
+**Collapse / Expand**, **Pop out**
 and **Close** live together in that menu instead of giving Pop out and Close
 separate icons in the header. Collapse/Expand still uses the existing Panels
 operation and preserves the original dock content. Pop out invokes the dock's
@@ -292,7 +295,7 @@ restore them. The Audio Mixer uses this **same dock action group** above its
 existing mixer-specific menu items (with no duplicate ellipsis). There is no
 extra dock or floating toolbar.
 
-![Overflow buttons on OBS native docks, including a shortened Scene Transitions title](screenshots/readme/dock-all-overflows.webp)
+![Earlier always-visible overflow buttons on OBS native docks, including a shortened Scene Transitions title](screenshots/readme/dock-all-overflows.webp)
 
 ![Native Scenes dock overflow with Collapse, Pop out and Close](screenshots/readme/dock-window-actions.webp)
 

@@ -10,6 +10,7 @@
 #include <QToolButton>
 #include <QWidget>
 #include <QEvent>
+#include <QHoverEvent>
 #include <QTimer>
 #include <QStyle>
 #include <QAction>
@@ -161,6 +162,8 @@ DockTitleIcons::~DockTitleIcons(){
     for(auto it=icons_.begin();it!=icons_.end();++it){
         if(auto *dock=it.key()){
             dock->removeEventFilter(this);
+            dock->setAttribute(Qt::WA_Hover,originalHover_.value(dock));
+            if(auto *button=dynamic_cast<DockHeaderButton*>(dock->findChild<QToolButton*>("aftermarket-mixer-more",Qt::FindDirectChildrenOnly)))button->setDockHoverReveal(false);
             restoreTitle(dock);
             restoreNativeButtons(dock);
         }
@@ -314,6 +317,7 @@ void DockTitleIcons::refresh(){
         menu->setObjectName("aftermarket-dock-menu");
         more->setMenu(menu);
         more->setPopupMode(QToolButton::InstantPopup);
+        more->setDockHoverReveal(true);
         QPointer<QDockWidget> safe=dock;
         QPointer<Panels> panel=panels_;
         QPointer<DockTitleIcons> owner=this;
@@ -410,6 +414,8 @@ void DockTitleIcons::refresh(){
             // OBS/plugins can add QDockWidget before QMainWindow has assigned
             // usable title geometry; replay placement once layout settles.
             QTimer::singleShot(90,this,[this]{refresh();});
+            originalHover_.insert(dock,dock->testAttribute(Qt::WA_Hover));
+            dock->setAttribute(Qt::WA_Hover,true);
             dock->installEventFilter(this);
             connect(dock,&QDockWidget::topLevelChanged,this,
                     [this](bool){scheduleRefresh();});
@@ -432,6 +438,7 @@ void DockTitleIcons::refresh(){
             });
             connect(dock,&QObject::destroyed,this,[this,dock]{
                 icons_.remove(dock);
+                originalHover_.remove(dock);headerHovered_.remove(dock);
                 originalDockFeatures_.remove(dock);
                 moreButtons_.remove(dock);
                 originalTitles_.remove(dock);
@@ -451,6 +458,11 @@ void DockTitleIcons::scheduleRefresh(){
         refresh();
     });
 }
+void DockTitleIcons::setHeaderHovered(QDockWidget *dock,bool hovered){
+    headerHovered_[dock]=hovered;
+    if(auto *button=dynamic_cast<DockHeaderButton*>(moreButton(dock)))button->setHeaderHovered(hovered);
+    if(auto *button=dynamic_cast<DockHeaderButton*>(dock->findChild<QToolButton*>("aftermarket-mixer-more",Qt::FindDirectChildrenOnly)))button->setHeaderHovered(hovered);
+}
 bool DockTitleIcons::eventFilter(QObject *watched,QEvent *event){
     if(watched==window_){
         switch(event->type()){
@@ -467,6 +479,13 @@ bool DockTitleIcons::eventFilter(QObject *watched,QEvent *event){
     }else if(auto *dock=qobject_cast<QDockWidget*>(watched)){
         if(icons_.contains(dock)){
             switch(event->type()){
+            case QEvent::HoverEnter:case QEvent::HoverMove:{
+                const auto pos=static_cast<QHoverEvent*>(event)->position();
+                setHeaderHovered(dock,dock->widget()&&pos.x()>=0&&pos.x()<dock->width()&&pos.y()>=0&&pos.y()<dock->widget()->geometry().top());
+                break;
+            }
+            case QEvent::HoverLeave:case QEvent::Leave:
+                setHeaderHovered(dock,false);break;
             case QEvent::Resize:
             case QEvent::Move:
             case QEvent::Show:
@@ -533,6 +552,10 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
     auto *mixerMore=dock->findChild<QToolButton*>("aftermarket-mixer-more",
                                                   Qt::FindDirectChildrenOnly);
     const bool specialized=mixerMore&&mixerMore->isVisible();
+    if(auto *button=dynamic_cast<DockHeaderButton*>(mixerMore)){
+        button->setDockHoverReveal(true);
+        button->setHeaderHovered(headerHovered_.value(dock));
+    }
     const int moreSpace=more?more->width()+4:0;
     const int fullRoom=text.width()-titleWidth-moreSpace;
     const int size=glyphSizeForRoom(fullRoom);

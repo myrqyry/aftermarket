@@ -18,6 +18,7 @@
 #include <QEventLoop>
 #include <QTimer>
 #include <QMouseEvent>
+#include <QHoverEvent>
 #include <QPointer>
 #include <QImage>
 #include <iostream>
@@ -156,6 +157,37 @@ int main(int argc,char **argv){
       REQUIRE(icons.titleIndented(dock));
       REQUIRE(dock->toggleViewAction()->text()==entry.title);
       pictures.append(glyph->grab().toImage());
+   }
+   // Paint-only reveal retains the native header layout and click target.
+   {
+      auto *dock=docks[0].dock;
+      auto *other=docks[1].dock;
+      auto *button=icons.moreButton(dock);
+      const auto title=dock->windowTitle();
+      const auto geometry=button->geometry();
+      auto hover=[&](QDockWidget *d,QPointF pos){
+         QHoverEvent e(QEvent::HoverMove,pos,d->mapToGlobal(pos.toPoint()),QPointF(-1,-1));
+         QApplication::sendEvent(d,&e);app.processEvents();
+      };
+      button->clearFocus();
+      hover(dock,QPointF(10,dock->widget()->geometry().top()+10));
+      const auto idle=dock->grab(button->geometry()).toImage();
+      hover(dock,QPointF(20,6));
+      const auto shown=dock->grab(button->geometry()).toImage();
+      REQUIRE(idle!=shown);
+      REQUIRE(other->windowTitle().trimmed()==docks[1].title);
+      REQUIRE(button->geometry()==geometry&&dock->windowTitle()==title&&button->isVisible());
+      hover(dock,QPointF(10,dock->widget()->geometry().top()+10));
+      REQUIRE(dock->grab(button->geometry()).toImage()==idle);
+      button->menu()->popup(button->mapToGlobal(QPoint(0,button->height())));app.processEvents();
+      REQUIRE(dock->grab(button->geometry()).toImage()!=idle);
+      button->menu()->hide();app.processEvents();
+      hover(dock,QPointF(10,dock->widget()->geometry().top()+10));
+      button->setFocus(Qt::TabFocusReason);app.processEvents();
+      REQUIRE(dock->grab(button->geometry()).toImage()!=idle);
+      button->clearFocus();app.processEvents();
+      hover(dock,QPointF(10,dock->widget()->geometry().top()+10));
+      REQUIRE(dock->grab(button->geometry()).toImage()==idle);
    }
    // Real menu action uses the existing Panels implementation, not a fake state.
    auto *scenes=docks[0].dock;

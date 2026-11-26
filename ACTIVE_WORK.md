@@ -4127,3 +4127,17 @@ OBS 32.2.0 full header probe 8/8: geometry, animated pixels, native
 identity, reduced motion and removal. Evidence /tmp/am-title-gradient.bo1jTB.
 Native pixel-perfect text preservation across all themes not established;
 no user config preference automatically changed. No push.
+
+## Hover-revealed dock overflow glyphs — 2026-11-25
+User wanted cleaner dock headers with ellipsis only on hover. Paint-only
+reveal for generic native dock More and specialized mixer More: reserve
+geometry, retain native drag/menu/keyboard actions, and reveal on header
+hover, button hover, keyboard focus, press, or open menu. Ordinary preset
+overflow, source/channel menus and Settings gear unchanged. Track dock
+HoverMove/Leave with WA_Hover and restore original attribute on teardown.
+44/44 CTests. Native OBS 32.2.0 DarkHorizon at font 10/density -2: 16/16
+checks across Sources and Audio Mixer using actual cursor movement,
+stable title geometry, body concealment, menu open/close and keyboard
+focus. Evidence /tmp/am-dock-hover.o4veOp; repeatable run-dock-hover.sh.
+Other platforms and native custom-title docks not separately tested.
+Existing unrelated src/plugin.cpp comment remains unstaged. No push.

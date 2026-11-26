@@ -53,6 +53,9 @@ private:
     Qt::TextElideMode ellipsisMode_=Qt::ElideRight;
     QHash<QDockWidget*,QPointer<QWidget>> icons_;
     QHash<QDockWidget*,QPointer<QToolButton>> moreButtons_;
+    QHash<QDockWidget*,bool> originalHover_;
+    QHash<QDockWidget*,bool> headerHovered_;
+    void setHeaderHovered(QDockWidget *dock,bool hovered);
     QHash<QDockWidget*,QString> originalTitles_;
     QHash<QDockWidget*,QDockWidget::DockWidgetFeatures> originalDockFeatures_;
     QHash<QDockWidget*,QString> displayedTitles_;

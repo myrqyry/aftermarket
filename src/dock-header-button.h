@@ -7,6 +7,8 @@
 #include <QStyle>
 #include <QStyleOptionFocusRect>
 #include <QPaintEvent>
+#include <QFocusEvent>
+#include <QMenu>
 
 namespace augment {
 enum class DockHeaderGlyph { Previous, Next, Flip, Knobs, More, Settings };
@@ -24,8 +26,38 @@ public:
         setToolButtonStyle(Qt::ToolButtonIconOnly);
         setCheckable(glyph==DockHeaderGlyph::Flip||glyph==DockHeaderGlyph::Knobs);
     }
+    // The button stays in the native layout and tab chain. Only its
+    // presentation is concealed; other More buttons are unaffected.
+    void setDockHoverReveal(bool enabled){
+        if(hoverReveal_==enabled)return;
+        hoverReveal_=enabled;
+        if(enabled&&menu()){
+            connect(menu(),&QMenu::aboutToShow,this,[this]{menuOpen_=true;update();});
+            connect(menu(),&QMenu::aboutToHide,this,[this]{menuOpen_=false;update();});
+        }
+        update();
+    }
+    void setHeaderHovered(bool hovered){
+        if(headerHovered_==hovered)return;
+        headerHovered_=hovered;update();
+    }
 protected:
+    bool event(QEvent *e) override {
+        if(e->type()==QEvent::FocusIn){
+            const auto reason=static_cast<QFocusEvent*>(e)->reason();
+            if(reason!=Qt::PopupFocusReason)keyboardFocus_=reason!=Qt::MouseFocusReason;
+        }else if(e->type()==QEvent::FocusOut){
+            if(static_cast<QFocusEvent*>(e)->reason()!=Qt::PopupFocusReason)keyboardFocus_=false;
+        }else if(e->type()==QEvent::MouseButtonPress)keyboardFocus_=false;
+        const bool result=MotionToolButton::event(e);
+        if(e->type()==QEvent::FocusIn||e->type()==QEvent::FocusOut||
+           e->type()==QEvent::Enter||e->type()==QEvent::Leave||
+           e->type()==QEvent::MouseButtonPress||e->type()==QEvent::MouseButtonRelease)update();
+        return result;
+    }
     void paintEvent(QPaintEvent *) override {
+        if(hoverReveal_&&!headerHovered_&&!underMouse()&&!menuOpen_&&
+           !(hasFocus()&&keyboardFocus_)&&!isDown())return;
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         const auto pal=palette();
@@ -100,5 +132,6 @@ protected:
     }
 private:
     DockHeaderGlyph glyph_;
+    bool hoverReveal_=false,headerHovered_=false,menuOpen_=false,keyboardFocus_=false;
 };
 }
