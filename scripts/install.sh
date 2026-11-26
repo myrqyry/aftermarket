@@ -31,6 +31,7 @@ if [[ -e "$legacy" || -L "$legacy" ]]; then
   mv -- "$legacy" "$backup/obs-ui-augment"
   echo "Previous plugin preserved at $backup/obs-ui-augment"
 fi
+install -Dm644 "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$plugins/aftermarket/data/THIRD_PARTY_NOTICES.txt"
 mv -f -- "$temp" "$dest/aftermarket.so"
 published=true
 echo "Installed $dest/aftermarket.so"

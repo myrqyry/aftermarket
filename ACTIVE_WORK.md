@@ -4141,3 +4141,19 @@ stable title geometry, body concealment, menu open/close and keyboard
 focus. Evidence /tmp/am-dock-hover.o4veOp; repeatable run-dock-hover.sh.
 Other platforms and native custom-title docks not separately tested.
 Existing unrelated src/plugin.cpp comment remains unstaged. No push.
+
+## Mixer output loudness dots — 2026-11-25
+Inspired by norihiro/obs-loudness-dock; independently implemented native
+output-track tap using pinned unmodified libebur128 1.2.6 (MIT, bundled
+queue BSD notice). Five footer indicators beside AudioBus on both faces,
+exact hover readings, selected track 1–6, -23/-16/-14 LUFS reference,
+reset/hide in mixer overflow and right-click menu. Defaults track 1 /
+-14 reference, enabled only with the AudioBus wrapper. Bounded SPSC audio
+blocks, worker measurement with histogram history, reset after dropped
+audio, stale readings cleared, disconnect/join on teardown. Native mix
+untouched. 45/45 CTests, isolated OBS 32.2.0 DarkHorizon seven native checks:
+1 kHz stereo sine at .1 amplitude measured I=-20.101177 LUFS, TP=-20 dBTP;
+track 2 silence, switching back, reset, disable, clean exit. Evidence
+/tmp/am-mixer-loudness.0bA5QZ. Package stage verified binary and third-party
+notices. Other platforms and surround layouts not runtime verified.
+Existing unrelated plugin.cpp comment retained outside commit. No push.

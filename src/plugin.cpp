@@ -29,6 +29,7 @@
 #include "dock-faces.h"
 #include "audio-patchbay.h"
 #include "obs-routing.h"
+#include "obs-mixer-loudness.h"
 #include "front-audio-controls.h"
 #include "dock-header-button.h"
 #include "dock-title-icons.h"
@@ -408,6 +409,9 @@ static bool setAudioMixerBackside(bool enabled) {
         []{if(frontendReady)obs_frontend_save();}
     );
     frontAudio->attach(dockFaces->front(dock));
+    auto *loudness=new augment::ObsMixerLoudness(QDir(QFileInfo(stripConfigPath).absolutePath()).filePath("mixer-loudness.ini"));
+    if(!dockFaces->addFooterAccessory(dock,loudness))delete loudness;
+
     // One order store owned by the native front; the routing view consumes
     // UUID order without owning or rewriting any channel configuration.
     patchbay->setSourceOrderProvider([]{
@@ -445,6 +449,10 @@ static bool setAudioMixerBackside(bool enabled) {
                 static_cast<augment::AudioPatchbay*>(routing)->populateRoutingMenu(menu);
                 menu->addSeparator();
             }
+        }
+        if(auto *widget=safeDock->findChild<QWidget*>("aftermarket-mixer-loudness")){
+            auto *sub=menu->addMenu("Output loudness");
+            static_cast<augment::ObsMixerLoudness*>(widget)->populateMenu(sub);
         }
         auto *knobs=menu->addAction("Pan and sync as knobs");
         knobs->setCheckable(true);

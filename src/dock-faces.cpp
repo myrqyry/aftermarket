@@ -223,6 +223,15 @@ bool DockFaces::attach(QDockWidget *dock,QWidget *back) {
     positionTitleButtons(dock);
     return true;
 }
+bool DockFaces::addFooterAccessory(QDockWidget *dock,QWidget *accessory){
+    auto it=state->entries.find(dock);
+    if(it==state->entries.end()||!it->host||!accessory)return false;
+    auto *footer=it->host->findChild<QWidget*>("aftermarket-audiobus-controls",Qt::FindDirectChildrenOnly);
+    auto *layout=footer?qobject_cast<QHBoxLayout*>(footer->layout()):nullptr;
+    if(!layout)return false;
+    layout->addWidget(accessory,1);
+    return true;
+}
 bool DockFaces::addFrontAccessory(QDockWidget *dock,QWidget *accessory){
     auto it=state->entries.find(dock);
     if(it==state->entries.end()||!accessory||it->accessory||!it->host)return false;

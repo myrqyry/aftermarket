@@ -31,6 +31,7 @@ to reveal a patchbay for OBS's native tracks 1–6 and monitoring; click
 - The headphones node controls the source's native monitoring mode.
 - Distinct theme-derived outlines show selection and measured audio activity,
   without modifying signal flow.
+- Five compact output loudness dots beside AudioBus: momentary, short-term, integrated, LRA and true peak, with track selection, target and reset in the mixer menu. Real EBU R128 measurements from bundled [libebur128](https://github.com/jiixyj/libebur128), not channel-peak estimates. Inspired by [Loudness Dock](https://github.com/norihiro/obs-loudness-dock/).
 - The dock's three-dot menu contains routing options, refresh, and the
   original mixer settings.
 

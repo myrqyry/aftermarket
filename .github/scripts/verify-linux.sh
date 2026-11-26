@@ -61,7 +61,12 @@ binary="$stage/$module/bin/64bit/$module.so"
 test -s "$binary"
 # Exact payload allowlist: no configuration, source, bundled runtimes,
 # or build outputs accidentally enter this preliminary module-only package.
-test "$(find "$stage" -mindepth 1 ! -type d -printf '%P\n')" = "$module/bin/64bit/$module.so"
+expected=$(printf '%s\n' "$module/bin/64bit/$module.so")
+if [[ "$module" == aftermarket ]]; then
+  expected=$(printf '%s\n' "$module/bin/64bit/$module.so" "$module/data/THIRD_PARTY_NOTICES.txt")
+  cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$stage/$module/data/THIRD_PARTY_NOTICES.txt"
+fi
+test "$(find "$stage" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
 if readelf -d "$binary" | grep -E '(RPATH|RUNPATH)' ; then
   echo "Unexpected embedded runtime search path" >&2
   exit 1
