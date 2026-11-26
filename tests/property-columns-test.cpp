@@ -14,6 +14,7 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QGroupBox>
+#include <QGridLayout>
 #include <iostream>
 class OBSPropertiesView:public QScrollArea{
  Q_OBJECT
@@ -123,6 +124,38 @@ int main(int argc,char **argv){
  cameraToggle->click();settle();sections.setEnabled(false);settle();
  for(auto *spin:cameraSpins)REQUIRE(spin->isVisible());
  REQUIRE(secret->isHidden());
+
+ // Separate compact runs with unequal labels and field minimums
+ // should share the same column boundaries and editor origins.
+ auto *aligned=new QWidget;aligned->setObjectName("PropertiesContainer");
+ auto *alignedForm=new QFormLayout(aligned);
+ QList<QSlider*> sliders;
+ QList<QLabel*> labels;
+ for(int i=0;i<8;++i){
+  if(i==4)alignedForm->addRow("Path",new QLineEdit("native wide row"));
+  auto *label=new QLabel(QStringList{"Gain","Exposure time","Hue","Gamma","Contrast","Pan","Offset","Sharpness"}[i]);
+  labels.append(label);
+  auto *slider=new QSlider(Qt::Horizontal);sliders.append(slider);
+  auto *spin=new QSpinBox;spin->setMinimumWidth(i==1?90:55);
+  auto *pair=new QHBoxLayout;pair->addWidget(slider,1);pair->addWidget(spin);
+  alignedForm->addRow(label,pair);
+ }
+ auto *longLabel=new QLabel("A deliberately unusually long property label that must not consume the compact columns");
+ auto *longField=new QSpinBox;alignedForm->addRow(longLabel,longField);
+ view->setWidget(aligned);dialog.resize(1000,560);settle();
+ REQUIRE(sliders[0]->y()==sliders[1]->y());
+ REQUIRE(sliders[4]->y()==sliders[5]->y());
+ REQUIRE(sliders[0]->x()==sliders[2]->x()&&sliders[0]->x()==sliders[4]->x()&&sliders[0]->x()==sliders[6]->x());
+ REQUIRE(sliders[1]->x()==sliders[3]->x()&&sliders[1]->x()==sliders[5]->x()&&sliders[1]->x()==sliders[7]->x());
+ auto grids=aligned->findChildren<QGridLayout*>("aftermarket-property-columns");
+ REQUIRE(grids.size()==2);
+ for(auto *grid:grids){
+  REQUIRE(grid->cellRect(0,0).width()==grid->cellRect(0,2).width());
+  REQUIRE(qAbs(grid->cellRect(0,1).width()-grid->cellRect(0,3).width())<=1);
+ }
+ REQUIRE(alignedForm->labelForField(longField)==longLabel);
+ columns.setMode(1);settle();REQUIRE(alignedForm->rowCount()==10);
+ for(int i=0;i<8;++i)REQUIRE(labels[i]->parentWidget()==aligned);
 
  std::cout<<"PROPERTY_COLUMNS_PASS\n";
 }

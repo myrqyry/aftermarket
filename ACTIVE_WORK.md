@@ -4045,3 +4045,13 @@ with Fluffy Dark at density -2/font 10: 6/6 checks for actual native group,
 wide columns, single ellipsis, menu opening, collapse and narrow expand.
 Evidence /tmp/am-section-layout.CyaWjk. Synthetic native property source,
 not user's physical camera. Actual user OBS left running.
+
+## Responsive label alignment — 2026-11-25
+Separate compact property runs had independent natural label and editor
+widths. Share measured label budget and editor minimums within each form,
+keeping original right alignment. Labels above 40% of compact cell width
+remain native full-width rows. Existing widgets/values preserved.
+RED unequal editor origins across runs; GREEN 44/44 CTests and 7/7
+native checks, Fluffy Dark density -2/font 10: 102px labels and 285px
+editors in each column of synthetic native camera properties.
+Evidence /tmp/am-section-layout.PuU0J1. No physical camera accessed.

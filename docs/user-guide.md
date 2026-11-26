@@ -143,7 +143,11 @@ three when about 680 or 1020 logical pixels of usable width are available.
 The 2/3 column preferences are maximums, not forced widths; 1 column
 restores the original form. Sliders, spinboxes, checkboxes, combo boxes and
 recognized native color picker rows are packed in original row-major order
-when their minimum sizes fit. Adjacent compact groups can share a row;
+when their minimum sizes fit. Compact blocks within each form share a
+label-width budget and equal editor-column minimums, so controls align
+across columns and separate blocks. Labels are right-aligned beside their
+controls; unusually long labels retain native full-width rows rather than
+squeezing every compact field. Adjacent compact groups can share a row;
 each native section independently reflows its internal compact rows using
 its own available width, rather than the outer dialog width. File
 paths, multiline text, complex controls, and other unrecognized or oversized

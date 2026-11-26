@@ -19,7 +19,7 @@ timeout 35s xvfb-run -a -s '-screen 0 1600x1000x24' env HOME="$root/home" XDG_CO
 rc=$?
 set -e
 echo "OBS_EXIT=$rc"
-grep SECTIONCHECK "$root/obs.log" || true
+grep -E "SECTIONCHECK|SECTIONDETAIL" "$root/obs.log" || true
 [[ "$rc" == 0 ]]
-[[ $(grep -c 'SECTIONCHECK .*=[1]$' "$root/obs.log") == 6 ]]
+[[ $(grep -c 'SECTIONCHECK .*=[1]$' "$root/obs.log") == 7 ]]
 ! grep -q 'SECTIONCHECK .*=[0]$' "$root/obs.log"

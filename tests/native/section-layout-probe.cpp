@@ -4,6 +4,8 @@
 #include <QMainWindow>
 #include <QDialog>
 #include <QFormLayout>
+#include <QGridLayout>
+#include <QSlider>
 #include <QGroupBox>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -27,7 +29,7 @@ static uint32_t width(void*){return 320;}
 static uint32_t height(void*){return 180;}
 static obs_properties_t *properties(void*){
  auto *p=obs_properties_create();auto *g=obs_properties_create();
- for(int i=0;i<6;++i){auto k=QByteArray("control")+QByteArray::number(i);auto label=QByteArray("Camera ")+QByteArray::number(i);obs_properties_add_int_slider(g,k.constData(),label.constData(),0,100,1);}
+ for(int i=0;i<6;++i){auto k=QByteArray("control")+QByteArray::number(i);auto label=QByteArray(QStringList{"Gain","Exposure time","Hue","Gamma","Contrast","Sharpness"}[i].toUtf8());obs_properties_add_int_slider(g,k.constData(),label.constData(),0,100,1);}
  auto *hidden=obs_properties_add_int(g,"hidden","Hidden",0,100,1);obs_property_set_visible(hidden,false);
  obs_properties_add_group(p,"camera","Camera Controls",OBS_GROUP_NORMAL,g);
  return p;
@@ -37,6 +39,17 @@ static void wide(){
  QTimer::singleShot(500,qApp,[]{
   bool arranged=fields.size()==6&&fields[0]->y()==fields[1]->y()&&fields[0]->x()<fields[1]->x();
   check("wide_section_columns",arranged);
+  auto *grid=group->findChild<QGridLayout*>("aftermarket-property-columns");
+  auto sliders=group->findChildren<QSlider*>();
+  bool aligned=grid&&sliders.size()==6;
+  if(aligned){
+    aligned=grid->cellRect(0,0).width()==grid->cellRect(0,2).width()&&
+      qAbs(grid->cellRect(0,1).width()-grid->cellRect(0,3).width())<=1&&
+      sliders[0]->x()==sliders[2]->x()&&sliders[0]->x()==sliders[4]->x()&&
+      sliders[1]->x()==sliders[3]->x()&&sliders[1]->x()==sliders[5]->x();
+    blog(LOG_INFO,"SECTIONDETAIL label widths=%d,%d editor widths=%d,%d",grid->cellRect(0,0).width(),grid->cellRect(0,2).width(),grid->cellRect(0,1).width(),grid->cellRect(0,3).width());
+  }
+  check("equal_label_editor_columns",aligned);
   auto *more=dlg->findChild<QToolButton*>("aftermarket-preset-more");
   auto *combo=dlg->findChild<QComboBox*>("aftermarket-preset-select");
   bool dots=false;

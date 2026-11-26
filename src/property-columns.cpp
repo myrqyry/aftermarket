@@ -62,7 +62,10 @@ bool compactField(QLayoutItem *item){
     }
     return true;
 }
-Kind kind(QFormLayout *form,int row,int cellWidth){
+int labelWidth(QLayoutItem *label){
+    return label?qMax(label->minimumSize().width(),label->sizeHint().width()):0;
+}
+Kind kind(QFormLayout *form,int row,int cellWidth,int sharedLabel=0,int spacing=8){
     if(!form->isRowVisible(row))return Kind::Wide;
     auto *span=form->itemAt(row,Role::SpanningRole);
     auto *field=form->itemAt(row,Role::FieldRole);
@@ -71,7 +74,10 @@ Kind kind(QFormLayout *form,int row,int cellWidth){
        span->minimumSize().width()<=cellWidth)return Kind::Group;
     if(!field&&span)field=span;
     if(!compactField(field))return Kind::Wide;
-    const int minWidth=field->minimumSize().width()+(label?label->minimumSize().width()+8:0);
+    // A long label belongs on a native wide row instead of stealing
+    // editor space from every compact column.
+    if(labelWidth(label)>cellWidth*2/5)return Kind::Wide;
+    const int minWidth=field->minimumSize().width()+(label?qMax(sharedLabel,labelWidth(label))+spacing:0);
     return minWidth<=cellWidth?Kind::Compact:Kind::Wide;
 }
 void addGridItem(QGridLayout *grid,QLayoutItem *item,int row,int col,int span,Qt::Alignment alignment={}){
@@ -123,18 +129,31 @@ void restore(Entry &entry){
 void adapt(Entry &entry,int columns,int cellWidth){
     auto *form=entry.form.data();
     if(!form||columns<2)return;
+    const int spacing=qMax(8,form->horizontalSpacing());
+    int sharedLabel=0,sharedField=0;
+    // Independent runs separated by native wide rows share a single
+    // label budget and field floor within this form.
+    for(int row=0;row<form->rowCount();++row)
+        if(kind(form,row,cellWidth,0,spacing)==Kind::Compact)
+            sharedLabel=qMax(sharedLabel,labelWidth(form->itemAt(row,Role::LabelRole)));
+    for(int row=0;row<form->rowCount();++row){
+        if(kind(form,row,cellWidth,sharedLabel,spacing)!=Kind::Compact)continue;
+        if(auto *label=form->itemAt(row,Role::LabelRole);label)
+            if(auto *field=form->itemAt(row,Role::FieldRole))
+                sharedField=qMax(sharedField,field->minimumSize().width());
+    }
     int i=0;
     while(i<form->rowCount()){
-        const auto type=kind(form,i,cellWidth);
+        const auto type=kind(form,i,cellWidth,sharedLabel,spacing);
         if(type==Kind::Wide){++i;continue;}
         int end=i+1;
-        while(end<form->rowCount()&&kind(form,end,cellWidth)==type)++end;
+        while(end<form->rowCount()&&kind(form,end,cellWidth,sharedLabel,spacing)==type)++end;
         const int count=end-i;
         if(count<2){++i;continue;}
         auto *grid=new QGridLayout;
         grid->setObjectName("aftermarket-property-columns");
         grid->setContentsMargins(0,0,0,0);
-        grid->setHorizontalSpacing(qMax(8,form->horizontalSpacing()));
+        grid->setHorizontalSpacing(spacing);
         grid->setVerticalSpacing(qMax(4,form->verticalSpacing()));
         Run run;run.grid=grid;
         for(int n=0;n<count;++n){
@@ -151,7 +170,13 @@ void adapt(Entry &entry,int columns,int cellWidth){
                 addGridItem(grid,right,r,c+1,1);
             }else addGridItem(grid,right,r,c,2);
         }
-        for(int c=0;c<columns;++c)grid->setColumnStretch(c*2+1,1);
+        for(int c=0;c<columns;++c){
+            if(type==Kind::Compact){
+                grid->setColumnMinimumWidth(c*2,sharedLabel);
+                grid->setColumnMinimumWidth(c*2+1,sharedField);
+            }
+            grid->setColumnStretch(c*2+1,1);
+        }
         form->insertRow(i,grid);
         entry.runs.append(run);
         ++i;
