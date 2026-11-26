@@ -280,7 +280,7 @@ OK/Cancel remain intact. See [property presets](docs/user-guide.md#named-source-
 
 Open **OBS → Settings → Aftermarket** for normal preferences.
 Use the native Apply, OK, and Cancel buttons. The five pages are
-Appearance, Menus, Mixer, Panels, and Action strip.
+Appearance, Menus, Mixer, Gradients, Panels, and Action strip. Compact native sections keep related controls together; Gradients includes an editable theme-aware palette preview and color picker.
 
 ![Aftermarket's native OBS Settings page](docs/screenshots/readme/aftermarket-obs-settings.webp)
 

@@ -82,20 +82,22 @@ theme-picker workflow and other platforms have not been separately tested.
 Open **OBS → Settings → Aftermarket** from OBS's normal Settings dialog.
 Aftermarket has its own **native Settings sidebar entry** after Advanced,
 not an extra dock menu, a Tools-menu shortcut, or another floating Settings
-window. It groups interface preferences into **Appearance, Menus, Mixer,
+window. It groups interface preferences into **Appearance, Menus, Mixer, Gradients,
 Panels, and Action strip**. The app-wide **Long text** option lives under
 **Appearance → At end / In middle**; it no longer appears in every dock's
 three-dot menu.
 
 The options are staged until you click OBS's existing **Apply** or **OK**
 button. **Cancel discards unapplied Aftermarket changes**, using the same
-native Settings controls as other OBS pages. Source names, mixer routing,
+native Settings controls as other OBS pages. Native grouped sections, aligned form fields, and separate Mixer and Gradients tabs reduce scrolling. The Gradients tab provides a static draft palette preview, **Add color…**, and **Use theme**; editing it does not change the live mixer until Apply or OK. The first picked custom color is paired with the active theme accent to make a valid two-color palette. Source names, mixer routing,
 and unrelated OBS settings are preserved. Advanced target-specific tools
 remain in the Workspace; the regular preferences now have their own home.
 
 ![Aftermarket entry in the real OBS Settings sidebar, with global Appearance preferences](screenshots/readme/aftermarket-obs-settings.webp)
 
-![Mixer and gradient preferences inside OBS Settings Aftermarket](screenshots/readme/aftermarket-settings-mixer.webp)
+![Grouped mixer controls inside OBS Settings Aftermarket](screenshots/readme/aftermarket-settings-mixer.webp)
+
+![Dedicated gradient settings with the live draft palette preview](screenshots/readme/aftermarket-settings-gradients.webp)
 
 ### Unified Workspace
 
@@ -657,7 +659,7 @@ dismiss it without creating or adding a source; clicks inside its controls
 and dropdowns remain active.
 
 The option is **enabled by default** on compatible OBS installations and
-can be turned off under **OBS → Settings → Aftermarket → Appearance →
+can be turned off under **OBS → Settings → Aftermarket → Panels →
 Embed Add Source picker in OBS**. It takes effect the next time Add Source
 opens; changes in native Settings follow **Apply / OK / Cancel**. Its only
 persisted option is sourcePicker/embedded in Aftermarket's
@@ -1061,7 +1063,7 @@ Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gra
 - Colors: leave blank for the native palette, or specify 2–6 opaque colors separated by commas. Loop duration is adjustable from 400–12000 ms.
 - Animation: **Flow** (existing behavior), **Reverse flow**, **Ping-pong**, **Breathing** (stationary gradient with changing brightness), **Shimmer** (a narrow sweeping highlight using the first two palette colors), or **Static** (no decorative animation). The pattern applies to slider fills, progress accents, rotary gain rings and title accents together; it does not change the native meter scale or actual values.
 
-Both Workspace → Gradients and OBS Settings → Aftermarket → Mixer expose the same options. Title accents default off; old configurations keep Flow. The master gradient and Motion switches still apply. Static stops decorative phase updates even with Motion on; integrated peak meters and separately enabled native meter color effects remain independent.
+Both Workspace → Gradients and OBS Settings → Aftermarket → Gradients expose the same surface and palette options. Title accents default off; old configurations keep Flow. The master gradient and Motion switches still apply. Static stops decorative phase updates even with Motion on; integrated peak meters and separately enabled native meter color effects remain independent.
 
 ```json
 {

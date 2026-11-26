@@ -3,6 +3,11 @@
 #include "augment.h"
 #include "dock-title-icons.h"
 #include "gradient.h"
+#include "rotary-paint.h"
+#include <QGroupBox>
+#include <QColorDialog>
+#include <QPainter>
+#include <QTabBar>
 #include <QApplication>
 #include <QDialog>
 #include <QListWidget>
@@ -35,6 +40,47 @@
 #include <algorithm>
 
 namespace augment {
+namespace {
+// Paint the same palette as the mixer, without a stylesheet, fixed-size
+// pixmap, animation clock, or mutation of the live OBS preview.
+class PalettePreview final : public QWidget {
+public:
+    explicit PalettePreview(QWidget *parent):QWidget(parent){
+        setObjectName("aftermarket-settings-palette-preview");
+        setAccessibleName("Gradient palette preview");
+        setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+        setMinimumHeight(22);setMaximumHeight(28);
+    }
+    void setColors(const QString &text){
+        QJsonArray array;
+        if(!text.trimmed().isEmpty())
+            for(const auto &part:text.split(','))array.append(part.trimmed());
+        GradientSpec spec;
+        valid_=GradientSpec::parse(QJsonObject{{"colors",array}},spec);
+        colors_=spec.colors;
+        setProperty("validPalette",valid_);update();
+    }
+protected:
+    void paintEvent(QPaintEvent*)override{
+        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);
+        const auto rect=QRectF(this->rect()).adjusted(.5,.5,-.5,-.5);
+        p.setPen(palette().color(QPalette::Mid));
+        if(!valid_){
+            p.setBrush(palette().color(QPalette::Base));p.drawRoundedRect(rect,5,5);
+            p.setPen(palette().color(QPalette::Text));
+            p.drawText(rect,Qt::AlignCenter,"Invalid palette");return;
+        }
+        auto colors=colors_.isEmpty()?rotaryThemeColors(palette()):colors_;
+        if(colors.first()!=colors.last())colors.append(colors.first());
+        QLinearGradient brush(rect.topLeft(),rect.topRight());
+        for(int i=0;i<colors.size();++i)brush.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+        p.setBrush(brush);p.drawRoundedRect(rect,5,5);
+    }
+private:
+    bool valid_=true;
+    QVector<QColor> colors_;
+};
+}
 struct ObsSettingsPage::Entry {
     QPointer<QDialog> dialog;
     QPointer<QListWidget> navigation;
@@ -106,16 +152,19 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->page->setObjectName("aftermarket-native-settings");
     auto *page=entry->page.data();
     auto *root=new QVBoxLayout(page);
-    root->setContentsMargins(8,6,8,6);
-    root->setSpacing(9);
+    root->setContentsMargins(4,4,4,4);
+    root->setSpacing(6);
     auto *heading=new QLabel("Aftermarket",page);
     QFont title=heading->font();
     title.setWeight(QFont::DemiBold);
     if(title.pointSizeF()>0)title.setPointSizeF(title.pointSizeF()+2);
     heading->setFont(title);
+    heading->setObjectName("aftermarket-settings-heading");
     root->addWidget(heading);
     auto *tabs=new QTabWidget(page);
     tabs->setObjectName("aftermarket-settings-tabs");
+    tabs->setUsesScrollButtons(true);
+    tabs->tabBar()->setExpanding(false);
     root->addWidget(tabs,1);
     auto makeTab=[tabs](const QString &name){
         auto *scroller=new QScrollArea(tabs);
@@ -123,11 +172,33 @@ void ObsSettingsPage::attach(QDialog *dialog){
         scroller->setWidgetResizable(true);
         auto *contents=new QWidget(scroller);
         auto *layout=new QVBoxLayout(contents);
-        layout->setContentsMargins(12,12,12,12);
-        layout->setSpacing(10);
+        layout->setContentsMargins(6,5,6,6);
+        layout->setSpacing(6);
         scroller->setWidget(contents);
         tabs->addTab(scroller,name);
         return qMakePair(contents,layout);
+    };
+    auto section=[](const auto &tab,const QString &title){
+        auto *group=new QGroupBox(title,tab.first);
+        group->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Maximum);
+        auto *layout=new QVBoxLayout(group);
+        layout->setContentsMargins(6,4,6,4);layout->setSpacing(3);
+        tab.second->addWidget(group);
+        return qMakePair(static_cast<QWidget*>(group),layout);
+    };
+    auto formLayout=[]{
+        auto *form=new QFormLayout;
+        form->setContentsMargins(0,0,0,0);
+        form->setHorizontalSpacing(8);form->setVerticalSpacing(4);
+        form->setLabelAlignment(Qt::AlignRight|Qt::AlignVCenter);
+        form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+        return form;
+    };
+    auto describe=[](const auto &group,const QString &text){
+        auto *label=new QLabel(text,group.first);label->setWordWrap(true);
+        group.second->addWidget(label);
+        return label;
     };
     auto checkbox=[entry](const QString &id,const QString &text,QVBoxLayout *layout,QWidget *parent,bool value){
         auto *check=new QCheckBox(text,parent);
@@ -139,11 +210,8 @@ void ObsSettingsPage::attach(QDialog *dialog){
         return check;
     };
     auto appearance=makeTab("Appearance");
-    auto *hint=new QLabel("Interface-wide text and visual presentation. "
-                          "OBS source names and saved scenes remain unchanged.",appearance.first);
-    hint->setWordWrap(true);
-    appearance.second->addWidget(hint);
-    auto *form=new QFormLayout;
+    auto textGroup=section(appearance,"Text and preview");
+    auto *form=formLayout();
     entry->ellipsis=new QComboBox(appearance.first);
     entry->ellipsis->setObjectName("augment-global-ellipsis");
     entry->ellipsis->setAccessibleName("Ellipsis placement throughout OBS");
@@ -152,25 +220,19 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->existingMode=titles_->ellipsisMode()==Qt::ElideMiddle?"middle":"end";
     entry->ellipsis->setCurrentIndex(entry->existingMode=="middle"?1:0);
     form->addRow("Long text",entry->ellipsis);
-    appearance.second->addLayout(form);
+    textGroup.second->addLayout(form);
     checkbox("transform","Theme-colored transform frame and handles",
-             appearance.second,appearance.first,controller_->modernTransformFrame());
-    if(services_.compactSourcePickerEnabled&&services_.setCompactSourcePicker){
-        auto *embedded=checkbox("source-picker","Embed Add Source picker in OBS",
-            appearance.second,appearance.first,services_.compactSourcePickerEnabled());
-        embedded->setToolTip("Keep OBS's native source picker and source creation, "
-                            "but display it as a compact panel inside the Sources area. "
-                            "Takes effect the next time Add Source opens.");
-    }
+             textGroup.second,textGroup.first,controller_->modernTransformFrame());
+    auto listGroup=section(appearance,"Scene and source lists");
     const auto stripes=controller_->listRowSettings();
     entry->listRowsBaseline=stripes;
-    checkbox("scene-stripes","Alternate Scenes row backgrounds",
-             appearance.second,appearance.first,stripes.value("scenes").toBool());
-    checkbox("source-stripes","Alternate Sources row backgrounds",
-             appearance.second,appearance.first,stripes.value("sources").toBool());
+    checkbox("scene-stripes","Alternate Scenes rows",
+             listGroup.second,listGroup.first,stripes.value("scenes").toBool());
+    checkbox("source-stripes","Alternate Sources rows",
+             listGroup.second,listGroup.first,stripes.value("sources").toBool());
     auto *stripeRow=new QHBoxLayout;
-    stripeRow->addWidget(new QLabel("Strength",appearance.first));
-    entry->stripeStrength=new QSlider(Qt::Horizontal,appearance.first);
+    stripeRow->addWidget(new QLabel("Strength",listGroup.first));
+    entry->stripeStrength=new QSlider(Qt::Horizontal,listGroup.first);
     entry->stripeStrength->setObjectName("aftermarket-setting-stripe-strength");
     entry->stripeStrength->setAccessibleName("Alternating row background strength");
     entry->stripeStrength->setToolTip("0% = no alternating contrast, 100% = original colors, 200% = twice the contrast.");
@@ -179,87 +241,144 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->stripeStrength->setPageStep(10);
     entry->stripeStrength->setValue(stripes.value("strength").toInt(100));
     stripeRow->addWidget(entry->stripeStrength,1);
-    auto *stripeValue=new QLabel(QString::number(entry->stripeStrength->value())+"%",appearance.first);
+    auto *stripeValue=new QLabel(QString::number(entry->stripeStrength->value())+"%",listGroup.first);
     stripeValue->setMinimumWidth(stripeValue->fontMetrics().horizontalAdvance("200%")+6);
     stripeRow->addWidget(stripeValue);
     QObject::connect(entry->stripeStrength,&QSlider::valueChanged,page,
                      [stripeValue](int amount){stripeValue->setText(QString::number(amount)+"%");});
-    appearance.second->addLayout(stripeRow);
+    listGroup.second->addLayout(stripeRow);
     appearance.second->addStretch(1);
 
     auto menus=makeTab("Menus");
-    checkbox("compact-menus","Compact menus",menus.second,menus.first,
+    auto menuGroup=section(menus,"Menu presentation");
+    checkbox("compact-menus","Compact menus",menuGroup.second,menuGroup.first,
              controller_->compactMenusEnabled());
-    checkbox("hamburger","Compact top menu bar",menus.second,menus.first,
+    checkbox("hamburger","Compact top menu bar",menuGroup.second,menuGroup.first,
              controller_->hamburgerMenuBarEnabled());
-    checkbox("motion","Interface animations (menus, docks, AudioBus)",menus.second,menus.first,
-             controller_->motionEnabled());
-    checkbox("selections","Show selected submenu choices",menus.second,menus.first,
+    checkbox("selections","Show selected submenu choices",menuGroup.second,menuGroup.first,
              controller_->showSubmenuSelections());
-    auto *tooltipRow=new QHBoxLayout;
-    tooltipRow->addWidget(new QLabel("Maximum tooltip width",menus.first));
+    auto interaction=section(menus,"Motion and tooltips");
+    checkbox("motion","Interface animations",interaction.second,interaction.first,
+             controller_->motionEnabled())->setToolTip("Menus, docks, AudioBus and gradient animation.");
+    auto *tooltipRow=formLayout();
     entry->tooltipWidth=new QComboBox(menus.first);
     entry->tooltipWidth->setObjectName("aftermarket-setting-tooltip-width");
     entry->tooltipWidth->setAccessibleName("Maximum tooltip width");
     entry->tooltipBaseline=controller_->tooltipWidth();
     populateTooltipWidths(entry->tooltipWidth,entry->tooltipBaseline);
-    tooltipRow->addWidget(entry->tooltipWidth);tooltipRow->addStretch();
-    menus.second->addLayout(tooltipRow);
+    tooltipRow->addRow("Maximum tooltip width",entry->tooltipWidth);
+    interaction.second->addLayout(tooltipRow);
     menus.second->addStretch(1);
 
     auto mixer=makeTab("Mixer");
-    checkbox("mixer-back","AudioBus alternate routing view",mixer.second,mixer.first,
+    auto routingGroup=section(mixer,"Routing");
+    checkbox("mixer-back","AudioBus alternate routing view",routingGroup.second,routingGroup.first,
              controller_->mixerBacksideEnabled());
-    auto *mixerHint=new QLabel("Native OBS routing and gain controls are retained. "
-                               "The AudioBus switch remains at the mixer dock bottom.",mixer.first);
-    mixerHint->setWordWrap(true);
-    mixer.second->addWidget(mixerHint);
+    describe(routingGroup,"Switch between the native mixer and AudioBus using the dock footer. Native routing and gain stay intact.");
     const auto gradient=controller_->gradientSettings();
     entry->gradientBaseline=gradient;
     GradientSpec spec;
     GradientSpec::parse(gradient,spec);
-    checkbox("knobs","Use gain knobs",mixer.second,mixer.first,spec.knobs);
-    checkbox("knob-meters","Peak meters integrated into knobs",mixer.second,mixer.first,spec.knobMeters);
-    checkbox("gradients","Enable gradient tracks",mixer.second,mixer.first,spec.enabled);
-    checkbox("slider-gradients","Sliders and rotary rings",mixer.second,mixer.first,spec.sliders);
-    checkbox("progress-gradients","Progress bars",mixer.second,mixer.first,spec.progress);
-    checkbox("title-gradients","Dock titlebar accents",mixer.second,mixer.first,spec.titlebars);
-    checkbox("titlebar-fill","Gradient dock headers",mixer.second,mixer.first,spec.titlebarFill);
-    checkbox("reactive","Audio-reactive mixer gradients",mixer.second,mixer.first,spec.audioReactive);
-    checkbox("meter-pulse","Pulse native meter colors",mixer.second,mixer.first,spec.meters);
-    auto *mixerForm=new QFormLayout;
-    entry->gradientPattern=new QComboBox(mixer.first);
+    auto gainGroup=section(mixer,"Gain controls");
+    auto *knobs=checkbox("knobs","Use gain knobs",gainGroup.second,gainGroup.first,spec.knobs);
+    auto *knobMeters=checkbox("knob-meters","Peak meters integrated into knobs",gainGroup.second,gainGroup.first,spec.knobMeters);
+    auto *gainForm=formLayout();
+    entry->knobSources=new QLineEdit(gainGroup.first);
+    entry->knobSources->setObjectName("aftermarket-setting-knob-sources");
+    entry->knobSources->setText(spec.knobSources.join(", "));
+    entry->knobSources->setPlaceholderText("All sources");
+    entry->knobSources->setToolTip("Comma-separated exact source names; leave empty for all sources.");
+    gainForm->addRow("Knob sources",entry->knobSources);
+    gainGroup.second->addLayout(gainForm);
+    auto updateGain=[entry,knobs,knobMeters]{
+        knobMeters->setEnabled(knobs->isChecked());
+        if(entry->knobSources)entry->knobSources->setEnabled(knobs->isChecked());
+    };
+    QObject::connect(knobs,&QCheckBox::toggled,page,updateGain);updateGain();
+    auto meterGroup=section(mixer,"Audio effects");
+    checkbox("reactive","Audio-reactive mixer gradients",meterGroup.second,meterGroup.first,spec.audioReactive);
+    checkbox("meter-pulse","Pulse native meter colors",meterGroup.second,meterGroup.first,spec.meters);
+    describe(meterGroup,"Reactive effects use the gradient and Motion preferences.");
+    mixer.second->addStretch(1);
+
+    auto gradients=makeTab("Gradients");
+    auto surfaceGroup=section(gradients,"Surfaces");
+    checkbox("gradients","Enable gradient tracks",surfaceGroup.second,surfaceGroup.first,spec.enabled);
+    checkbox("slider-gradients","Sliders and rotary rings",surfaceGroup.second,surfaceGroup.first,spec.sliders);
+    checkbox("progress-gradients","Progress bars",surfaceGroup.second,surfaceGroup.first,spec.progress);
+    checkbox("title-gradients","Dock titlebar accents",surfaceGroup.second,surfaceGroup.first,spec.titlebars);
+    checkbox("titlebar-fill","Gradient dock headers",surfaceGroup.second,surfaceGroup.first,spec.titlebarFill)
+        ->setToolTip("Tint the entire dock header; takes precedence over the underline.");
+    auto paletteGroup=section(gradients,"Palette and motion");
+    auto *mixerForm=formLayout();
+    entry->gradientPattern=new QComboBox(paletteGroup.first);
     entry->gradientPattern->setObjectName("aftermarket-setting-gradient-pattern");
     for(const auto &id:GradientSpec::patterns())entry->gradientPattern->addItem(GradientSpec::patternLabel(id),id);
     entry->gradientPattern->setCurrentIndex(entry->gradientPattern->findData(spec.pattern));
-    mixerForm->addRow("Gradient animation",entry->gradientPattern);
-    entry->gradientPeriod=new QSpinBox(mixer.first);
+    mixerForm->addRow("Animation",entry->gradientPattern);
+    entry->gradientPeriod=new QSpinBox(paletteGroup.first);
     entry->gradientPeriod->setObjectName("aftermarket-setting-gradient-period");
     entry->gradientPeriod->setRange(400,12000);
     entry->gradientPeriod->setSuffix(" ms");
     entry->gradientPeriod->setSingleStep(100);
     entry->gradientPeriod->setValue(spec.period);
-    mixerForm->addRow("Gradient loop",entry->gradientPeriod);
-    entry->gradientColors=new QLineEdit(mixer.first);
+    mixerForm->addRow("Loop duration",entry->gradientPeriod);
+    entry->gradientColors=new QLineEdit(paletteGroup.first);
     entry->gradientColors->setObjectName("aftermarket-setting-gradient-colors");
-    entry->gradientColors->setPlaceholderText("Theme colors, or comma-separated hex colors");
+    entry->gradientColors->setPlaceholderText("Theme palette");
+    entry->gradientColors->setToolTip("2–6 opaque colors, comma-separated; empty uses the theme.");
     QStringList colors;
     for(const auto &color:spec.colors)colors.append(color.name());
     entry->gradientColors->setText(colors.join(", "));
     mixerForm->addRow("Colors",entry->gradientColors);
-    entry->knobSources=new QLineEdit(mixer.first);
-    entry->knobSources->setObjectName("aftermarket-setting-knob-sources");
-    entry->knobSources->setText(spec.knobSources.join(", "));
-    entry->knobSources->setPlaceholderText("Empty = all sources");
-    entry->knobSources->setToolTip("Comma-separated exact source names; leave empty for all sources.");
-    mixerForm->addRow("Knob sources",entry->knobSources);
-    mixer.second->addLayout(mixerForm);
-    mixer.second->addStretch(1);
+    paletteGroup.second->addLayout(mixerForm);
+    auto *preview=new PalettePreview(paletteGroup.first);
+    paletteGroup.second->addWidget(preview);
+    auto *actions=new QHBoxLayout;actions->setContentsMargins(0,0,0,0);actions->setSpacing(4);
+    auto *pick=new QPushButton("Add color…",paletteGroup.first);
+    pick->setObjectName("aftermarket-settings-add-color");
+    auto *theme=new QPushButton("Use theme",paletteGroup.first);
+    theme->setObjectName("aftermarket-settings-use-theme");
+    actions->addStretch();actions->addWidget(pick);actions->addWidget(theme);
+    paletteGroup.second->addLayout(actions);
+    auto *paletteHint=describe(paletteGroup,"");
+    auto updatePalette=[entry,preview,pick,theme,paletteHint]{
+        const auto text=entry->gradientColors->text().trimmed();
+        preview->setColors(text);
+        const auto valid=preview->property("validPalette").toBool();
+        const auto count=text.isEmpty()?0:text.split(',').size();
+        pick->setEnabled(count<6);
+        theme->setEnabled(!text.isEmpty());
+        paletteHint->setText(text.isEmpty()?"Using active theme colors.":valid?
+            "Custom palette. Motion controls animation.":"Enter 2–6 valid opaque colors, or use the theme.");
+    };
+    QObject::connect(entry->gradientColors,&QLineEdit::textChanged,page,updatePalette);
+    QObject::connect(theme,&QPushButton::clicked,entry->gradientColors,&QLineEdit::clear);
+    QObject::connect(pick,&QPushButton::clicked,page,[entry,page]{
+        const auto chosen=QColorDialog::getColor(page->palette().color(QPalette::Highlight),page,"Add gradient color");
+        if(!chosen.isValid()||!entry->gradientColors)return;
+        const auto current=entry->gradientColors->text().trimmed();
+        // A single color is not a valid custom palette. Start with the
+        // chosen color and the theme accent (also editable afterwards).
+        entry->gradientColors->setText(current.isEmpty()?
+            chosen.name()+", "+page->palette().color(QPalette::Highlight).name():
+            current+", "+chosen.name());
+    });
+    updatePalette();
+    gradients.second->addStretch(1);
 
     auto panels=makeTab("Panels");
-    checkbox("sections","Collapsible property and filter groups",panels.second,panels.first,
+    auto propertyGroup=section(panels,"Source and filter properties");
+    if(services_.compactSourcePickerEnabled&&services_.setCompactSourcePicker){
+        auto *embedded=checkbox("source-picker","Embed Add Source picker in OBS",
+            propertyGroup.second,propertyGroup.first,services_.compactSourcePickerEnabled());
+        embedded->setToolTip("Keep OBS's native source picker and source creation, "
+                            "but display it as a compact panel inside the Sources area. "
+                            "Takes effect the next time Add Source opens.");
+    }
+    checkbox("sections","Collapsible property and filter groups",propertyGroup.second,propertyGroup.first,
              controller_->collapsiblePropertyGroups());
-    auto *propertyForm=new QFormLayout;
+    auto *propertyForm=formLayout();
     entry->propertyColumns=new QComboBox(panels.first);
     entry->propertyColumns->setObjectName("aftermarket-setting-property-columns");
     entry->propertyColumns->addItem("Auto",0);
@@ -269,21 +388,23 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->columnsBaseline=controller_->propertyColumns();
     entry->propertyColumns->setCurrentIndex(entry->propertyColumns->findData(entry->columnsBaseline));
     propertyForm->addRow("Source / filter settings",entry->propertyColumns);
-    panels.second->addLayout(propertyForm);
+    propertyGroup.second->addLayout(propertyForm);
 
+    auto dockGroup=section(panels,"Dock controls");
     auto *panelsHint=new QLabel("Each dock's three-dot menu provides Collapse / Expand. "
                                  "These actions are local to the dock.",panels.first);
     panelsHint->setWordWrap(true);
-    panels.second->addWidget(panelsHint);
+    dockGroup.second->addWidget(panelsHint);
     panels.second->addStretch(1);
 
     auto actionStrip=makeTab("Action strip");
-    checkbox("action-strip","Show OBS action strip",actionStrip.second,actionStrip.first,
+    auto stripGroup=section(actionStrip,"Menu bar shortcuts");
+    checkbox("action-strip","Show OBS action strip",stripGroup.second,stripGroup.first,
              services_.actionStripEnabled?services_.actionStripEnabled():false);
     if(services_.editActionStrip){
         auto *edit=new QPushButton("Configure action-strip buttons…",actionStrip.first);
         edit->setObjectName("aftermarket-action-strip-edit");
-        actionStrip.second->addWidget(edit);
+        stripGroup.second->addWidget(edit);
         QPointer<ObsSettingsPage> safe=this;
         QObject::connect(edit,&QPushButton::clicked,page,[safe,entry]{
             if(safe&&safe->services_.editActionStrip&&entry->dialog)
@@ -294,6 +415,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->message=new QLabel("Changes take effect when you choose Apply or OK.",page);
     entry->message->setObjectName("aftermarket-settings-status");
     entry->message->setWordWrap(true);
+    entry->message->setAccessibleName("Aftermarket settings status");
     root->addWidget(entry->message);
     entry->applyButton=buttons->button(QDialogButtonBox::Apply);
     auto updateDirty=[entry]{
@@ -506,10 +628,11 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     for(const auto &color:originalSpec.colors)existingColors.append(color.name());
     if(entry->gradientColors->text().trimmed()!=existingColors.join(", ")){
         QJsonArray arr;
-        for(const auto &token:entry->gradientColors->text().split(',',Qt::SkipEmptyParts)){
+        for(const auto &token:entry->gradientColors->text().trimmed().isEmpty()?QStringList{}:entry->gradientColors->text().split(',')){
             QColor color(token.trimmed());
-            if(!color.isValid()){
+            if(!color.isValid()||color.alpha()!=255){
                 entry->message->setText("Invalid gradient color: "+token.trimmed());
+                if(entry->applyButton)entry->applyButton->setEnabled(true);
                 return false;
             }
             arr.append(color.name());
@@ -520,6 +643,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
         GradientSpec validated;
         if(!GradientSpec::parse(updatedGradient,validated)){
             entry->message->setText("Invalid mixer gradient settings. Nothing saved.");
+            if(entry->applyButton)entry->applyButton->setEnabled(true);
             return false;
         }
         changes.append({[c,updatedGradient,originalGradient](QString &e){

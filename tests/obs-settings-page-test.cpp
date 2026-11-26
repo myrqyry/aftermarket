@@ -21,6 +21,9 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QTabWidget>
+#include <QGroupBox>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAILED line "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 static QDialog *openSettings(){
@@ -102,7 +105,40 @@ int main(int argc,char **argv){
         nav->setCurrentRow(9);
         REQUIRE(pages->currentWidget()->objectName()=="aftermarket-native-settings");
         auto *tabs=pages->currentWidget()->findChild<QTabWidget*>("aftermarket-settings-tabs");
-        REQUIRE(tabs&&tabs->count()==5);
+        REQUIRE(tabs&&tabs->count()==6);
+        REQUIRE(tabs->tabText(2)=="Mixer"&&tabs->tabText(3)=="Gradients");
+        auto *gradientPage=tabs->widget(3);
+        auto *mixerPage=tabs->widget(2);
+        REQUIRE(gradientPage->findChild<QCheckBox*>("aftermarket-setting-titlebar-fill"));
+        REQUIRE(!mixerPage->findChild<QCheckBox*>("aftermarket-setting-titlebar-fill"));
+        REQUIRE(mixerPage->findChild<QLineEdit*>("aftermarket-setting-knob-sources"));
+        auto *preview=gradientPage->findChild<QWidget*>("aftermarket-settings-palette-preview");
+        auto *colors=gradientPage->findChild<QLineEdit*>("aftermarket-setting-gradient-colors");
+        auto *theme=gradientPage->findChild<QPushButton*>("aftermarket-settings-use-theme");
+        REQUIRE(preview&&colors&&theme&&gradientPage->findChild<QPushButton*>("aftermarket-settings-add-color"));
+        REQUIRE(gradientPage->findChildren<QGroupBox*>().size()>=2);
+        tabs->setCurrentIndex(3);app.processEvents();
+        const auto original=preview->grab().toImage();
+        colors->setText("#ff0000, #0000ff");app.processEvents();
+        REQUIRE(preview->grab().toImage()!=original);
+        REQUIRE(preview->property("validPalette").toBool());
+        colors->setText("invalid");app.processEvents();
+        REQUIRE(!preview->property("validPalette").toBool());
+        theme->click();app.processEvents();
+        REQUIRE(colors->text().isEmpty()&&preview->property("validPalette").toBool());
+        REQUIRE(controller.gradientSettings().isEmpty());
+        // Keep the native Apply state check below independent of preview edits.
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->setEnabled(false);
+        tabs->setCurrentIndex(0);
+        for(int width:{930,780}){
+            dialog->resize(width,670);
+            for(int i=0;i<tabs->count();++i){
+                tabs->setCurrentIndex(i);app.processEvents();
+                auto *area=qobject_cast<QScrollArea*>(tabs->currentWidget());
+                REQUIRE(area&&area->horizontalScrollBar()->maximum()==0);
+            }
+        }
+        tabs->setCurrentIndex(0);app.processEvents();
         REQUIRE(tabs->tabText(0)=="Appearance");
         auto *ellipsis=pages->currentWidget()->findChild<QComboBox*>("augment-global-ellipsis");
         REQUIRE(ellipsis&&ellipsis->currentData().toString()=="end");
@@ -242,6 +278,12 @@ int main(int argc,char **argv){
         REQUIRE(controller.gradientSettings()==previousGradient);
         REQUIRE(dialog->findChild<QLabel*>("aftermarket-settings-status")->text()
                     .contains("Invalid gradient color"));
+        colors->setText("#80ff0000, #00ff00");
+        dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->click();
+        REQUIRE(controller.gradientSettings()==previousGradient);
+        REQUIRE(!dialog->findChild<QWidget*>("aftermarket-settings-palette-preview")->property("validPalette").toBool());
+        REQUIRE(dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
+
         dialog->close();QApplication::processEvents();
     }
     {

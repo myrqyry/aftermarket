@@ -4157,3 +4157,20 @@ track 2 silence, switching back, reset, disable, clean exit. Evidence
 /tmp/am-mixer-loudness.0bA5QZ. Package stage verified binary and third-party
 notices. Other platforms and surround layouts not runtime verified.
 Existing unrelated plugin.cpp comment retained outside commit. No push.
+
+## Native Settings polish — 2026-11-25
+Restructured native Aftermarket page into six tabs (Appearance, Menus,
+Mixer, Gradients, Panels, Action strip), compact native group boxes,
+aligned forms with long-row wrapping, source picker under Panels, gain
+options disabled when knobs off without losing values. Added static
+palette preview using the actual mixer palette, Add color and Use theme
+actions, and matching opaque-palette validation. No config migration;
+native staged Apply/OK/Cancel retained. Existing Workspace unchanged.
+RED six-tab separation; GREEN 45/45 CTests. Native OBS 32.2.0 isolated
+Fluffy Dark and Catppuccin Latte Blue at font 10/density -2, 7/7 checks
+each; all tabs fit at 1040x720 and 780x620 with no scrollbars, native
+Apply persists custom palette. Inspected dark mixer/gradient and light
+gradient screenshots. Evidence /tmp/am-settings-polish.TmZ5x0 and
+/tmp/am-settings-polish.fpfhUp. Refreshed relevant docs screenshots.
+Color picker uses native QColorDialog; selection interaction itself
+not separately automated. Existing unrelated plugin.cpp comment untouched.
