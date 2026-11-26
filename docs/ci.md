@@ -47,7 +47,36 @@ The pinned OBS 32.2.0 SDK was downloaded, checksum-verified and built
 from source. A clean Release build of the committed source plus this
 CI change passed all 32 CTest cases, the module-only package allowlist,
 shared-library checks, SHA-256 verification and extraction comparison.
-GitHub-hosted success is not yet established. The current local regression suite has since grown to 39 tests; the original 32-test SDK/package qualification above is historical, not a claim that the latest package was requalified against that SDK.
+The original 32-test SDK/package qualification above is historical, not a
+claim that the latest package was requalified against that SDK.
+
+## Current qualification — 2026-11-25
+
+The local build at `f111fbe` passed all **44/44 CTests** using the installed
+OBS 32.2.0 SDK and Qt 6.4.2. The CI minimum is still 32; the gate runs
+every registered test and rejects skipped or failing tests.
+
+The latest completed hosted run before this documentation refresh,
+[45740037866](https://github.com/myrqyry/aftermarket/actions/runs/45740037866)
+at `58df432`, successfully prepared the pinned SDK and built the module,
+but failed two of 44 tests:
+
+- `command-center`: line 31, launcher visibility assertion.
+- `menu-augmentation`: line 363, popup anchor-distance assertion.
+
+The package/checksum stages did not complete. The difference between local
+and hosted UI behavior remains to be investigated; neither test is waived.
+A new push triggers the existing workflow, not a release.
+
+Run local relative-link checks for the maintained documentation with:
+
+    python3 .github/scripts/test-readme-links.py
+    for doc in README.md docs/*.md .meristem/PROJECT.md ACTIVE_WORK.md; do
+      python3 .github/scripts/check_readme_links.py "$doc"
+    done
+
+These checks cover relative file targets, not remote sites or every
+heading anchor.
 
 The temporary archives are intentionally not release packages. Public
 redistribution requires the owner to establish licensing, provenance and

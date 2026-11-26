@@ -1,5 +1,17 @@
 # Active work
 
+## Current handoff — 2026-11-25
+
+Implementation checkpoint: `f111fbe` (native scene/source notes), installed
+with rollback. Local 44/44 CTests; native notes 35/35, latest narrow
+mixer 19/19 and property section 7/7. Current user-facing behavior is in
+README.md and docs/user-guide.md. Current CI boundary is in docs/ci.md:
+last completed hosted run 45740037866 at 58df432 failed command-center
+and menu-augmentation; do not confuse local success with hosted qualification.
+Workspace checkpoints exclude contextual notes and property preset files.
+The entries below are chronological historical evidence, not a current
+feature checklist.
+
 Outcome: first real slice of Tampermonkey for OBS — independent artwork applied to real context-menu actions.
 Verified: CMake module build against local libobs and Qt 6.4.2; Qt regression suite; OBS 32.2.0 isolated Xvfb profile with actual Colorway Rosé Pine — Pine theme and assets; 22 decorated actions, on/off/on rules hot reload, real pointer-click Rename opened native inline editor, isolated process graceful shutdown. Before/after and rename screenshots in docs/screenshots.
 Locked: OBS receives only the transparent layout reservation; actual SVG rendered by our plugin; no OBS data/stream changes; no fork. Preserve original action state and existing icons unless rule opts in.

@@ -57,7 +57,7 @@ Keep the familiar native mixer or customize selected channels:
 
 ![Side-by-side rotary channels wrap into rows when dock height allows](docs/screenshots/readme/mixer-rotary-columns.png)
 
-The rotary screenshots show an earlier compact layout in an isolated OBS 32.2.0 test profile with five synthetic audio sources and the Fluffy Dark Colorway theme. To adjust sync, drag up/right or down/left, or scroll (10 ms per pixel of combined drag or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
+The rotary screenshots show the revised single-scale side controls, reclaimed channel header, and compact grid in isolated OBS 32.2.0 sessions using the native dark theme and Colorway Fluffy Dark. To adjust sync, drag up/right or down/left, or scroll (10 ms per pixel of combined drag or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
 
 **Optional independent device sends:** install [Exeldro's Audio Monitor](https://obsproject.com/forum/resources/audio-monitor.1186/) to expose playback devices below the native track nodes. Drag a source to a device; right-click its wire for independent mute, gain, pan and delay. Choose visible destinations from the mixer title menu. Existing Audio Monitor filters are not taken over by Aftermarket. Without the plugin, the native graph works normally.
 
@@ -193,6 +193,17 @@ information symbol appears only when a note exists: hover to read the native
 tooltip, click to edit. Search scene, source and filter notes through @.
 No notes dock or broadcast source is required.
 
+| Native Sources note marker | Native Scenes note marker |
+| :---: | :---: |
+| ![Source note marker beside visibility and lock](docs/screenshots/readme/source-notes.png) | ![Scene note marker at the trailing edge](docs/screenshots/readme/scene-notes.png) |
+
+![Native note tooltip](docs/screenshots/readme/note-tooltip.png)
+
+Notes live in a local, owner-only `context-notes.json` file, separate from
+scene exports and workspace checkpoints. Back it up independently.
+Scene grid mode and scene rows without enough spare width retain the
+context-menu action without a marker. [Notes guide](docs/user-guide.md#contextual-notes).
+
 ### Quick Find
 
 Click outside either the compact Add Source picker or the Quick Find popup to dismiss it.
@@ -250,6 +261,11 @@ palette. Optional refinements include:
 
 ![Native Color Correction filter settings reflowed into three columns](docs/screenshots/readme/responsive-filter-properties.webp)
 
+![Aligned label and editor columns inside a native property section](docs/screenshots/readme/responsive-section-controls.png)
+
+The section detail is cropped from a real isolated native properties
+dialog using a synthetic Camera Controls group, not a physical camera.
+
 **Property presets:** choose a saved preset, Load, Save a new preset, or use
 the overflow menu to update, rename, delete, or undo the last load. Presets
 are scoped to the exact source/filter type. In Filters, toggle **Whole filter chain** in the overflow menu to save or replace an ordered chain, including settings and enabled state. Import/export supports both preset scopes. Native Defaults and source
@@ -296,7 +312,7 @@ DPI configurations, and OBS versions need additional verification.
 The [Linux CI workflow](.github/workflows/ci.yml) targets Ubuntu 24.04 and
 a SHA-256-pinned OBS 32.2.0 SDK. It checks local README links, builds the
 module, runs the native Qt/libobs CTest suite under an isolated X display
-(CI baseline: at least 32 tests, no skips; current local suite: 39), stages the plugin, checks linked libraries
+(CI baseline: at least 32 tests, no skips; current local suite: 44), stages the plugin, checks linked libraries
 and the exact package contents, and verifies the archive checksum.
 It does not install into a user's profile, publish release assets, or
 claim Windows, macOS, or OBS 33 support.
@@ -304,8 +320,10 @@ claim Windows, macOS, or OBS 33 support.
 | Target | Verification boundary |
 | --- | --- |
 | Linux x86_64 / OBS 32.2 / Qt 6.4.2 | Local native tests and isolated OBS GUI exercises |
-| Ubuntu 24.04 / pinned OBS 32.2 SDK | Local CI driver passed; hosted result pending |
+| Ubuntu 24.04 / pinned OBS 32.2 SDK | Historical local SDK/package qualification passed; latest hosted run failed two UI tests |
 | Windows, macOS, OBS 31/33 | Not qualified |
+
+The latest completed hosted run ([45740037866](https://github.com/myrqyry/aftermarket/actions/runs/45740037866), commit `58df432`) failed the command-center visibility and menu-anchor assertions (42/44 passed). The newer local build at `f111fbe` passed 44/44. These are different environments; hosted qualification remains open.
 
 For a local build using matching development headers, use the commands
 above. The same CI validation driver can also run against an explicit
@@ -324,5 +342,5 @@ when ready.
 - [Verification and development history](ACTIVE_WORK.md) — implementation checkpoints and real runtime evidence.
 
 Screenshots are captured from real, isolated OBS sessions with native themes
-and Colorway. Workspace, Quick Find and responsive properties images reflect the current interface; other feature screenshots may depict earlier verified builds. The project is independent of OBS Studio and does not replace its
+and Colorway. The rotary mixer, contextual notes and responsive section detail were refreshed on November 25, 2026. Other captures illustrate their verified feature state and may predate subsequent UI refinements. The project is independent of OBS Studio and does not replace its
 theme system or streaming compositor.

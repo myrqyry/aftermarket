@@ -14,7 +14,9 @@ Save and restore native OBS dock arrangements using Qt dock state. Aftermarket d
 
 Open **Workspace checkpoints…** in Dock layouts for named recovery bundles.
 These contain the scene collection, dock state and selected Aftermarket
-settings. Dock-only restore and explicit recovery exports are supported;
+settings. The current checkpoint allowlist does not include private notes
+(`context-notes.json`) or named property presets (`property-presets.json`);
+back up these files separately. Dock-only restore and explicit recovery exports are supported;
 full one-click workspace restoration is not. If Scene Collection Manager
 is loaded, its optional companion backup uses the native backup action and
 verifies the resulting file. See the [checkpoint guide](user-guide.md#workspace-checkpoints).

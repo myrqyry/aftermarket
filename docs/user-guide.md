@@ -159,6 +159,12 @@ as `propertyColumns` (0 = Auto, 1–3 = maximum columns) in rules.json.
 
 ![Actual native Color Correction controls in three responsive columns](screenshots/readme/responsive-filter-properties.webp)
 
+![Aligned native controls within a responsive property group](screenshots/readme/responsive-section-controls.png)
+
+The second image is a detail crop of a synthetic Camera Controls group in
+the native properties dialog, using Colorway Fluffy Dark. No physical
+camera was accessed.
+
 Property-group folding is off by default and saved as `collapsiblePropertyGroups` in
 `rules.json`. It affects native `OBSPropertiesView` **ordinary QGroupBox sections**
 only, not ungrouped filter controls or checkable enable/disable groups. Expanded
@@ -465,7 +471,9 @@ Create a named checkpoint to request a native OBS save, verify that the current 
 was written, and capture its scene JSON, current native dock state, plus existing
 Aftermarket rules, Action Strip, Cue Deck, layout library, mixer ordering, device
 visibility, dock title and source picker settings. Missing configuration files
-are recorded rather than invented. The manager keeps up to 32 local, checksum-verified
+are recorded rather than invented. The checkpoint allowlist does not include
+`context-notes.json` or `property-presets.json`; back up those files separately
+with OBS closed. They may contain private information. The manager keeps up to 32 local, checksum-verified
 bundles in `plugin_config/aftermarket/workspace-checkpoints`; it never overwrites an
 existing checkpoint. Invalid bundles remain untouched.
 
@@ -753,10 +761,16 @@ retain their native appearance; the context-menu note action is still
 available. Native filter dialogs are unchanged. Notes on filters remain
 accessible in the inspector and search.
 
+| Source marker | Scene marker |
+| --- | --- |
+| ![Native source note glyph](screenshots/readme/source-notes.png) | ![Native scene note glyph](screenshots/readme/scene-notes.png) |
+
+![Native hover note tooltip](screenshots/readme/note-tooltip.png)
+
 Notes are stored locally in Aftermarket's `context-notes.json` using stable
 OBS UUIDs, with the parent UUID for filters and owner scene UUID plus scene-item
 ID for item notes. One note per attachment. The file is separate from scene
-collection export, is not encrypted, and is never sent to a broadcast output.
+collection export and workspace checkpoints, is not encrypted, and is never sent to a broadcast output. Back it up separately.
 Shared source notes are distinct from notes on individual placements. Renames
 do not change identity. Deleting an OBS object does not automatically delete
 its stored note; only currently discoverable objects appear in search.
@@ -948,8 +962,7 @@ a knob, Silent test remained a fader; the reactive ring animated (242 changed
 pixels, silent fader zero); native volume moved from -12.0 dB to -3.5 dB after
 a drag; disabling knobs restored the slider at -3.5 dB. Qt regressions cover
 target selection, slider signals, programmatic updates, native key handling,
-invalid config and restoration. Horizontal mixer layouts, live source rename
-and theme changes under knob sizing need further real runtime testing.
+invalid config and restoration. Subsequent isolated native tests cover both mixer orientations, compact layout, relative drag, reset actions and narrow channel geometry. Broader live rename/rebuild and theme-switch combinations remain unqualified.
 
 ### Integrated knob meters
 
@@ -1459,17 +1472,21 @@ Inspector slice verification (same isolated OBS configuration):
 Real OBS testing is limited to Linux/X11 with OBS 32.2.0 and Qt 6.4.2, using native themes and Colorway.
 Additional themes, DPI scaling, RTL, other platforms and unsupported native widgets need validation. See the [verification history](../ACTIVE_WORK.md) for individual runtime receipts and known limitations.
 
-Current local verification: **43/43 CTests passed**. Isolated OBS runs
+Current local verification at `f111fbe` (November 25, 2026): **44/44 CTests passed**. Isolated OBS runs
 covered responsive source/filter settings, dynamic property reloads, native
 mixer reorder and optional device sends, checkpoint capture, Source Dock
 pinning and lightweight previews, and the unified Workspace with emergency
 recovery during an open checkpoint dialog. Additional native probes cover
 property presets and portable filter chains, picker dismissal, bounded dock
-motion, mixer reflow and relative sync encoder input. The two-sided mixer flip is tested with bounded face captures and painted-frame geometry checks. The installed modules were also
+motion, mixer reflow and relative sync encoder input. Recent native probes
+passed 19/19 narrow mixer checks, 7/7 responsive section checks and 35/35
+contextual-note checks (native rows plus inspector/search). The two-sided mixer flip is tested with bounded face captures and painted-frame geometry checks. The installed modules were also
 loaded together in a disposable profile; OBS exited normally. No claim is
 made that every combination of plugins, source types, hardware or graphics
 drivers has been exercised. Optional preview caching is SDR-only and total
-GPU savings have not been benchmarked.
+GPU savings have not been benchmarked. Hosted Linux CI has not yet passed
+the latest completed run: two UI assertions failed at `58df432`. See
+[CI and package verification](ci.md) for the exact verification boundary.
 
 ### Disable/remove
 
