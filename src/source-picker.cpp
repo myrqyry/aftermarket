@@ -291,11 +291,12 @@ void SourcePicker::embed(QDialog *dialog){
             item->flags().testFlag(Qt::ItemIsSelectable);
         item->setHidden(!selectable||id=="_recent"||id=="scene");
         if(!selectable)continue;
-        const auto pluginIcon=pluginIcons.source(id).itemIcon(list->palette());
-        if(!pluginIcon.isNull())item->setIcon(pluginIcon);
+        const auto glyph=pluginIcons.source(id);
+        PalettePluginIcons::bind(list,list->model()->index(i,0),glyph);
         if(item->data(DeprecatedRole).toBool())item->setToolTip(item->text()+" (Deprecated)");
         if(id=="_recent")recentIndex=types->count();
         types->addItem(item->icon(),id=="_recent"?QStringLiteral("Recent sources"):item->text(),id);
+        PalettePluginIcons::bind(types,types->model()->index(types->count()-1,types->modelColumn()),glyph,QPalette::ButtonText);
         typeItems.append(item);
     }
     types->setCurrentIndex(recentIndex);

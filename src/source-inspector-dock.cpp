@@ -250,8 +250,8 @@ void SourceInspectorDock::openFilterPicker(){
  if(auto *combo=picker->findChild<QComboBox*>()){
   const PluginThemeIcons pluginIcons;
   for(int i=0;i<combo->count();++i){
-   const auto icon=pluginIcons.filter(choices.value(combo->itemText(i))).itemIcon(combo->palette());
-   if(!icon.isNull())combo->setItemIcon(i,icon);
+   PalettePluginIcons::bind(combo,combo->model()->index(i,combo->modelColumn()),
+       pluginIcons.filter(choices.value(combo->itemText(i))),QPalette::ButtonText);
   }
  }
  picker->setAttribute(Qt::WA_DeleteOnClose);
@@ -284,8 +284,7 @@ void SourceInspectorDock::updateFilterList(){
  const PluginThemeIcons pluginIcons;
  for(const auto &row:filterRows_)if(row.name.contains(search_->text(),Qt::CaseInsensitive)){
   auto *item=new QListWidgetItem(row.name,filterList_);
-  const auto icon=pluginIcons.filter(row.type).itemIcon(filterList_->palette());
-  if(!icon.isNull())item->setIcon(icon);
+  PalettePluginIcons::bind(filterList_,filterList_->model()->index(filterList_->count()-1,0),pluginIcons.filter(row.type));
   item->setData(Qt::UserRole,row.id);item->setFlags(item->flags()|Qt::ItemIsUserCheckable);
   item->setCheckState(row.enabled?Qt::Checked:Qt::Unchecked);
   item->setData(NoteTextRole,notes_?notes_->get(noteKey("filter",row.id,target_.source)):QString{});

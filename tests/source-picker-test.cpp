@@ -96,15 +96,26 @@ int main(int argc,char **argv){
   auto *unknown=new QListWidgetItem("Source Clone",n.types);
   unknown->setData(Qt::UserRole+1,"not-a-clone");
   auto colors=n.types->palette();
-  colors.setColor(QPalette::Text,Qt::black);
-  colors.setColor(QPalette::HighlightedText,Qt::white);
+  colors.setColor(QPalette::Text,QColor("#575279"));
+  colors.setColor(QPalette::HighlightedText,QColor("#ebdbb2"));
+  colors.setColor(QPalette::Disabled,QPalette::Text,QColor("#827569"));
   n.types->setPalette(colors);
   QTimer::singleShot(40,&n.dialog,[&]{
    EXPECT(!clone->icon().isNull());
    if(!clone->icon().isNull()){
-    EXPECT(clone->icon().pixmap(16,16,QIcon::Normal).toImage().pixelColor(8,8)==QColor("#191724"));
-    EXPECT(clone->icon().pixmap(16,16,QIcon::Selected).toImage().pixelColor(8,8)==QColor("#e0def4"));
+    EXPECT(clone->icon().pixmap(16,16,QIcon::Normal).toImage().pixelColor(8,8)==QColor("#575279"));
+    EXPECT(clone->icon().pixmap(16,16,QIcon::Selected).toImage().pixelColor(8,8)==QColor("#ebdbb2"));
    }
+   int itemEdits=0;
+   const auto decorationConnection=QObject::connect(n.types,&QListWidget::itemChanged,&n.dialog,[&]{++itemEdits;});
+   auto changed=n.types->palette();
+   changed.setColor(QPalette::Active,QPalette::Text,QColor("#31506e"));
+   changed.setColor(QPalette::Inactive,QPalette::Text,QColor("#31506e"));
+   n.types->setPalette(changed);app.processEvents();
+   EXPECT(clone->icon().pixmap(16,16,QIcon::Normal).toImage().pixelColor(8,8)==QColor("#31506e"));
+   EXPECT(clone->icon().pixmap(16,16,QIcon::Disabled).toImage().pixelColor(8,8)==QColor("#827569"));
+   QObject::disconnect(decorationConnection);
+   EXPECT(itemEdits==0);
    EXPECT(unknown->icon().isNull());
    auto *chooser=n.dialog.findChild<QComboBox*>("aftermarket-existing-type");
    EXPECT(chooser&&!chooser->itemIcon(chooser->findData("source-clone")).isNull());

@@ -3990,3 +3990,28 @@ native row decoration, item-note search, concurrent OBS instance UI refresh,
 full collection roundtrip and visual annotations not independently qualified.
 Docs updated. Built, not installed or pushed. Production OBS unchanged.
 Preserve preexisting unrelated src/plugin.cpp comment.
+
+## Palette-aware registered plugin glyphs — 2026-11-25
+Colorway retains the exact original artwork, both fixed light/dark SVG
+polarities, and v1 identity registry (no asset/format migration).
+Aftermarket now shares alpha-mask tinting with bounded Qt pixmap caching
+by asset identity/mtime, actual RGBA, physical size and device scale.
+Native source/filter rows and dock titles use the actual foreground;
+picker, inspector and Quick Find model decorations use normal/selected/
+disabled palette roles and refresh only registered persistent indices on
+palette/style/activation/enable/display-scale changes. Block widget
+itemChanged signals during decoration-only updates (no filter edits).
+No custom QIconEngine, native thumbnails preserved; stock QSS/MingCute
+icons and unregistered plugin UI remain unchanged.
+RED: three focused tests failed with old polarity-only renderer.
+GREEN: 44/44 full CTests, fractional DPR/alpha/cache checks, open picker
+retint with same-polarity foreground, disabled states, no item-edit signal.
+Actual isolated OBS 32.2.0 in Gruvbox and Rose Pine Dawn: native Source Clone
+and EmuLens rows matched palette-derived premultiplied RGB/alpha pixel
+for pixel (delta 0), including live custom palette/selection updates.
+Both sessions exit 0; existing unrelated system-plugin shutdown warnings.
+Evidence: /tmp/am-palette-native.wSGYMD, repeatable
+tests/native/run-plugin-icon-palette.sh. Actual theme chooser workflow and
+other platforms not independently tested. No changes to user themes or
+scene collection. Colorway docs e2e1205; existing plugin.cpp comment left
+unstaged. No push.

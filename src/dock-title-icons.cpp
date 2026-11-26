@@ -45,22 +45,18 @@ public:
     void setPluginGlyph(const PluginThemeIcons::Glyph &glyph){
         if(pluginGlyph_==glyph)return;
         pluginGlyph_=glyph;
-        light_=QIcon();dark_=QIcon();
-        if(glyph.valid()){
-            light_=QIcon(glyph.light);
-            dark_=QIcon(glyph.dark);
-        }
+        pluginValid_=glyph.valid();
         update();
     }
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        const QColor stroke=palette().color(QPalette::Active,QPalette::WindowText);
-        const auto &pluginIcon=qGray(stroke.rgb())>=128?light_:dark_;
-        if(!pluginIcon.isNull()){
-            pluginIcon.paint(&p,rect());
-            return;
+        const auto group=isEnabled()?QPalette::Active:QPalette::Disabled;
+        const QColor stroke=palette().color(group,QPalette::WindowText);
+        if(pluginValid_){
+            const auto pix=pluginGlyph_.tinted(stroke,size(),devicePixelRatioF());
+            if(!pix.isNull()){p.drawPixmap(QPoint(0,0),pix);return;}
         }
         p.scale(width()/20.0,height()/20.0);
         p.setBrush(Qt::NoBrush);
@@ -123,7 +119,7 @@ protected:
 private:
     DockTitleIcons::Kind kind_;
     PluginThemeIcons::Glyph pluginGlyph_;
-    QIcon light_,dark_;
+    bool pluginValid_=false;
 };
 }
 DockTitleIcons::Kind DockTitleIcons::classify(const QString &objectName,const QString &title,const QString &contentClass){

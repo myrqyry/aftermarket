@@ -78,6 +78,22 @@ int main(int argc,char **argv){
  REQUIRE(writePluginThemeFixture(tmp.path()));
  {
    const augment::PluginThemeIcons registry;
+   // Test actual SVG alpha, fractional display scaling, distinct colors
+   // with the same brightness polarity, and bounded invalid sizes.
+   const auto maskPath=tmp.filePath("alpha.svg");
+   QFile mask(maskPath);REQUIRE(mask.open(QIODevice::WriteOnly));
+   mask.write(R"(<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2" width="6" height="12" fill="#e0def4"/><rect x="8" y="2" width="6" height="12" fill="#e0def4" fill-opacity="0.5"/></svg>)");mask.close();
+   const augment::PluginThemeIcons::Glyph alpha{maskPath,maskPath};
+   auto first=alpha.tinted(QColor("#ebdbb2"),QSize(16,16),1.5);
+   auto second=alpha.tinted(QColor("#d8dee9"),QSize(16,16),1.5);
+   REQUIRE(first.size()==QSize(24,24)&&first.devicePixelRatio()==1.5);
+   REQUIRE(first.toImage().pixelColor(6,12)==QColor("#ebdbb2"));
+   REQUIRE(second.toImage().pixelColor(6,12)==QColor("#d8dee9"));
+   REQUIRE(first.toImage().pixelColor(0,0).alpha()==0);
+   REQUIRE(qAbs(first.toImage().pixelColor(18,12).alpha()-128)<=1);
+   REQUIRE(first.toImage().pixelColor(18,12).alpha()==second.toImage().pixelColor(18,12).alpha());
+   REQUIRE(alpha.tinted(QColor("#ebdbb2"),QSize(16,16),1.5).cacheKey()==first.cacheKey());
+   REQUIRE(alpha.tinted(Qt::white,QSize(1000,1000)).isNull());
    REQUIRE(registry.dock("Camera A","SourceDock").valid());
    REQUIRE(registry.dock("Camera B","SourceDock").valid());
    REQUIRE(!registry.dock("Camera A","QSplitter").valid());
@@ -212,14 +228,14 @@ int main(int argc,char **argv){
    auto *pluginGlyph=icons.glyph(custom);
    REQUIRE(pluginGlyph);
    auto pluginPalette=pluginGlyph->palette();
-   pluginPalette.setColor(QPalette::WindowText,Qt::black);
+   pluginPalette.setColor(QPalette::WindowText,QColor("#575279"));
    pluginGlyph->setPalette(pluginPalette);app.processEvents();
    auto renderedPlugin=pluginGlyph->grab().toImage();
-   REQUIRE(renderedPlugin.pixelColor(renderedPlugin.width()/2,renderedPlugin.height()/2)==QColor("#191724"));
-   pluginPalette.setColor(QPalette::WindowText,Qt::white);
+   REQUIRE(renderedPlugin.pixelColor(renderedPlugin.width()/2,renderedPlugin.height()/2)==QColor("#575279"));
+   pluginPalette.setColor(QPalette::WindowText,QColor("#ebdbb2"));
    pluginGlyph->setPalette(pluginPalette);app.processEvents();
    renderedPlugin=pluginGlyph->grab().toImage();
-   REQUIRE(renderedPlugin.pixelColor(renderedPlugin.width()/2,renderedPlugin.height()/2)==QColor("#e0def4"));
+   REQUIRE(renderedPlugin.pixelColor(renderedPlugin.width()/2,renderedPlugin.height()/2)==QColor("#ebdbb2"));
    custom->setObjectName("newPluginDock");
    icons.refresh();app.processEvents();
    custom->setWindowTitle("Twitch Chat");
@@ -384,7 +400,7 @@ int main(int argc,char **argv){
    auto *glyph=icons.glyph(dock);
    REQUIRE(glyph&&glyph->isVisible());
    const auto img=glyph->grab().toImage();
-   const auto expected=qGray(glyph->palette().color(QPalette::WindowText).rgb())>=128?QColor("#e0def4"):QColor("#191724");
+   const auto expected=glyph->palette().color(QPalette::Active,QPalette::WindowText);
    REQUIRE(img.pixelColor(img.width()/2,img.height()/2)==expected);
    dock->setWindowTitle("Renamed controls");icons.refresh();app.processEvents();
    REQUIRE(glyph->grab().toImage()==img);

@@ -78,7 +78,7 @@ destroying its contents. Restore the original preview or make it a movable
 native dock, including responsive Studio Mode.
 
 When the Colorway theme package provides its plugin-icon registry, Aftermarket
-uses the registered source/filter types and exact dock IDs (or the verified SourceDock widget class for dynamically named docks) to display the custom
+uses the registered source/filter types and exact dock IDs (or the verified SourceDock and QuickAccessDock widget classes for dynamically named docks) to display the custom
 glyphs in its source picker, Source Inspector, Quick Find, dock title bars,
 and the native Sources list and Filters dialog. Native Sources rows reuse
 the existing icon slot; filter rows receive a mouse-transparent glyph beside
@@ -86,8 +86,12 @@ their native name. The exact native source model name resolves to a libobs
 source, and native filter item data resolves directly to a libobs filter.
 Selection changes follow the view palette; emergency recovery restores
 original pixmaps and removes only Aftermarket-owned filter glyphs.
-Both ink polarities follow the current palette; unknown IDs and missing
-assets retain the original or generic icon. No external plugin is required
+The registered monochrome artwork is tinted at runtime to the actual Qt
+foreground, selected text or disabled text color, preserving its alpha and
+scaling. Palette changes retint existing decorations without altering list
+selection or filter settings. Colorway still ships both fixed-ink polarities
+for standalone use. Unknown IDs and missing assets retain the original or
+generic icon. No external plugin is required
 or patched, and the stock OBS source tree is not rewritten.
 
 Save complete dock arrangements with **Tools → Aftermarket → Workspace → Dock layouts**.

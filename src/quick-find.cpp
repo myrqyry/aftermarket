@@ -161,7 +161,7 @@ void QuickFind::open() {
 void QuickFind::updateResults(){
     const auto filtered=search(cached_,input_->text());
     const PluginThemeIcons pluginIcons;
-    QHash<QString,QIcon> iconCache;
+    QHash<QString,PluginThemeIcons::Glyph> iconCache;
     results_->clear();
     for(int i=0;i<filtered.size();++i){
         const auto &entry=filtered[i];
@@ -174,9 +174,9 @@ void QuickFind::updateResults(){
             const auto key=(filter?QStringLiteral("filter:"):QStringLiteral("source:"))+entry.type;
             if(!iconCache.contains(key)){
                 const auto glyph=filter?pluginIcons.filter(entry.type):pluginIcons.source(entry.type);
-                iconCache.insert(key,glyph.itemIcon(results_->palette()));
+                iconCache.insert(key,glyph);
             }
-            if(!iconCache.value(key).isNull())item->setIcon(iconCache.value(key));
+            PalettePluginIcons::bind(results_,results_->model()->index(results_->count()-1,0),iconCache.value(key));
         }
         item->setToolTip(secondary);
         item->setData(NoteTextRole,entry.note);

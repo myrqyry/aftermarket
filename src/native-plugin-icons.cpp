@@ -59,7 +59,7 @@ void NativePluginIcons::schedule(){
 bool NativePluginIcons::eventFilter(QObject *o,QEvent *e){
     if(state->refreshing)return false;
     const auto t=e->type();
-    if(t!=QEvent::Show&&t!=QEvent::Hide&&t!=QEvent::ChildAdded&&t!=QEvent::ChildRemoved&&t!=QEvent::LayoutRequest&&t!=QEvent::PaletteChange&&t!=QEvent::StyleChange&&t!=QEvent::WindowActivate&&t!=QEvent::WindowDeactivate)return false;
+    if(t!=QEvent::Show&&t!=QEvent::Hide&&t!=QEvent::ChildAdded&&t!=QEvent::ChildRemoved&&t!=QEvent::LayoutRequest&&t!=QEvent::PaletteChange&&t!=QEvent::StyleChange&&t!=QEvent::WindowActivate&&t!=QEvent::WindowDeactivate&&t!=QEvent::EnabledChange&&t!=QEvent::ScreenChangeInternal)return false;
     auto *w=qobject_cast<QWidget*>(o);
     for(auto *p=w;p;p=p->parentWidget()){
         if(sourceView(p)||filterView(p)||p->inherits("OBSBasicFilters")){schedule();break;}
@@ -109,10 +109,9 @@ void NativePluginIcons::refresh(){
         auto &entry=it.value();
         if(!owned&&label->pixmap().cacheKey()!=entry.applied)entry.original=label->pixmap();
         const auto dpr=label->devicePixelRatioF();
-        const auto path=g.forForeground(fg);
-        const QString key=path+QString::number(dpr);
+        const QString key=g.light+fg.name(QColor::HexArgb)+QString::number(dpr);
         if(entry.key!=key||label->pixmap().cacheKey()!=entry.applied){
-            const auto pix=QIcon(path).pixmap(QSize(16,16),dpr);
+            const auto pix=g.tinted(fg,QSize(16,16),dpr);
             if(pix.isNull())return;
             label->setPixmap(pix);entry.applied=label->pixmap().cacheKey();entry.key=key;
         }
