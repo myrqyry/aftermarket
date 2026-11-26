@@ -41,8 +41,8 @@
 namespace augment {
 namespace {
 constexpr int maxOffsetMs=999999;
-// Paint the two small controls using the same ring, face and pointer as
-// gain. No meter sampling, animated clock or extra overlay widgets.
+// Reuse the gain dial's palette, two-ring hierarchy and drag direction.
+constexpr int compactDialSize=32;
 class CompactRotary : public QDial {
 public:
     explicit CompactRotary(QWidget *parent,bool endless=false):QDial(parent),endless_(endless){
@@ -56,60 +56,82 @@ protected:
         const auto group=isEnabled()?QPalette::Active:QPalette::Disabled;
         const double side=qMin(width(),height())-4.;
         if(side<8)return;
-        const QRectF ring((width()-side)/2.,(height()-side)/2.,side,side);
-        const auto face=ring.adjusted(side*.21,side*.21,-side*.21,-side*.21);
-        const QBrush accent(pal.color(group,QPalette::Highlight));
+        const QRectF outer((width()-side)/2.,(height()-side)/2.,side,side);
+        const auto ring=outer.adjusted(4.2,4.2,-4.2,-4.2);
+        const auto face=outer.adjusted(7,7,-7,-7);
+        const auto accent=pal.color(group,QPalette::Highlight);
+        const double start=endless_?90.:225.,sweep=endless_?-360.:-270.;
         p.setOpacity(isEnabled()?1.:.48);
+        // The outer track is a quiet accent-tinted scale, not a peak meter.
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(rotaryMutedAccent(pal.color(group,QPalette::Window),accent),
+                      2.8,Qt::SolidLine,Qt::FlatCap));
+        p.drawArc(outer,qRound(start*16),qRound(sweep*16));
+        const QBrush brush(rotaryThemeGradient(outer.center(),pal,group));
         if(endless_){
-            // A rotating highlight segment is not a progress bar; offset
-            // values have no meaningful angular minimum or maximum.
-            constexpr int cycle=360;
-            const double angle=90.-((value()%cycle+cycle)%cycle);
-            paintRotaryFace(p,ring,face,pal,group,accent,90,-360,angle+54,-54,angle,.64);
+            const double angle=90.-((value()%360+360)%360);
+            paintRotaryFace(p,ring,face,pal,group,brush,90,-360,angle+68,-68,angle,.8,true);
         }else{
             const double span=double(maximum())-minimum();
             const double fraction=span>0?qBound(0.,(sliderPosition()-double(minimum()))/span,1.):.5;
-            const double f=invertedAppearance()?1.-fraction:fraction;
-            const double angle=225.-270.*f;
-            // Balance is bipolar, so the accent grows out from center.
-            paintRotaryFace(p,ring,face,pal,group,accent,225,-270,90,angle-90,angle,.64);
-            p.setPen(QPen(pal.color(group,QPalette::ButtonText),.8,Qt::SolidLine,Qt::RoundCap));
-            p.drawLine(QPointF(ring.center().x(),ring.top()-.5),QPointF(ring.center().x(),ring.top()+1.5));
+            const double angle=225.-270.*(invertedAppearance()?1.-fraction:fraction);
+            paintRotaryFace(p,ring,face,pal,group,brush,225,-270,90,angle-90,angle,.8,true);
+            p.setPen(QPen(pal.color(group,QPalette::ButtonText),1.,Qt::SolidLine,Qt::RoundCap));
+            p.drawLine(QPointF(outer.center().x(),outer.top()-.4),QPointF(outer.center().x(),outer.top()+1.8));
         }
         if(hasFocus()){
-            p.setBrush(Qt::NoBrush);p.setPen(QPen(pal.color(group,QPalette::Highlight),.8,Qt::DotLine));
-            p.drawEllipse(ring.adjusted(-1.5,-1.5,1.5,1.5));
+            p.setBrush(Qt::NoBrush);p.setPen(QPen(accent,.8,Qt::DotLine));
+            p.drawEllipse(outer.adjusted(-1.5,-1.5,1.5,1.5));
         }
     }
-private:
-    bool endless_;
-};
-// Absolute value is the actual sync offset, not the dial's angle. The
-// painted indicator wraps, while input is relative and the value saturates.
-class SyncEncoder final : public CompactRotary {
-public:
-    explicit SyncEncoder(QWidget *parent):CompactRotary(parent,true){
-        setRange(-maxOffsetMs,maxOffsetMs);
-        setSingleStep(10);setPageStep(100);setNotchesVisible(false);
-    }
-protected:
     void mousePressEvent(QMouseEvent *e) override {
-        if(e->button()!=Qt::LeftButton){e->ignore();return;}
-        lastY=e->globalPosition().y();dragging=true;
+        if(!isEnabled()||(e->button()!=Qt::LeftButton&&e->button()!=Qt::MiddleButton)){e->ignore();return;}
+        if(dragging){e->accept();return;}
+        if(focusPolicy()!=Qt::NoFocus)setFocus(Qt::MouseFocusReason);
+        last=e->globalPosition();remainder=0;dragging=true;
         setSliderDown(true);e->accept();
     }
     void mouseMoveEvent(QMouseEvent *e) override {
         if(!dragging){e->ignore();return;}
-        if(!(e->buttons()&Qt::LeftButton)){finish();e->accept();return;}
-        const auto y=e->globalPosition().y();
-        const auto delta=qRound(lastY-y);
-        lastY=y;
-        adjust(qint64(delta)*step(e->modifiers()));e->accept();
+        if(!(e->buttons()&(Qt::LeftButton|Qt::MiddleButton))){finish();e->accept();return;}
+        const auto now=e->globalPosition();
+        const double rate=endless_?10.:(double(maximum())-minimum())/150.;
+        const double delta=rotaryDragDistance(now-last)*rate*(e->modifiers().testFlag(Qt::ShiftModifier)?.1:1.)*(invertedControls()?-1.:1.);
+        last=now;
+        remainder+=delta;
+        const auto steps=qint64(remainder);
+        remainder-=steps;
+        if(steps){
+            const auto next=qBound(qint64(minimum()),qint64(value())+steps,qint64(maximum()));
+            setValue(int(next));
+            if(next==minimum()||next==maximum())remainder=0;
+        }
+        e->accept();
     }
     void mouseReleaseEvent(QMouseEvent *e) override {
-        if(e->button()==Qt::LeftButton&&dragging){finish();e->accept();}
+        if((e->button()==Qt::LeftButton||e->button()==Qt::MiddleButton)&&dragging){finish();e->accept();}
         else e->ignore();
     }
+    bool event(QEvent *e) override {
+        if(e->type()==QEvent::UngrabMouse||e->type()==QEvent::Hide||
+           e->type()==QEvent::WindowDeactivate||
+           (e->type()==QEvent::EnabledChange&&!isEnabled()))finish();
+        return QDial::event(e);
+    }
+private:
+    bool endless_,dragging=false;
+    QPointF last;
+    double remainder=0;
+    void finish(){if(dragging){dragging=false;remainder=0;setSliderDown(false);}}
+};
+// Absolute offset stays independent of the painted angular position.
+class SyncEncoder final : public CompactRotary {
+public:
+    explicit SyncEncoder(QWidget *parent):CompactRotary(parent,true){
+        setRange(-maxOffsetMs,maxOffsetMs);
+        setSingleStep(10);setPageStep(100);
+    }
+protected:
     void wheelEvent(QWheelEvent *e) override {
         const int delta=e->angleDelta().y();
         if(!delta){e->ignore();return;}
@@ -130,21 +152,12 @@ protected:
         }
         e->accept();
     }
-    bool event(QEvent *e) override {
-        if(e->type()==QEvent::UngrabMouse||e->type()==QEvent::Hide||
-           e->type()==QEvent::WindowDeactivate||
-           (e->type()==QEvent::EnabledChange&&!isEnabled()))finish();
-        return QDial::event(e);
-    }
 private:
-    bool dragging=false;
-    qreal lastY=0;
     int wheelRemainder=0,wheelScale=10;
     static int step(Qt::KeyboardModifiers mods){return mods.testFlag(Qt::ShiftModifier)?1:10;}
     void adjust(qint64 delta){
         if(delta)setValue(int(qBound(qint64(minimum()),qint64(value())+delta,qint64(maximum()))));
     }
-    void finish(){if(dragging){dragging=false;setSliderDown(false);}}
 };
 QString sourceName(QWidget *volume){
     for(auto *button:volume->findChildren<QAbstractButton*>())
@@ -222,7 +235,8 @@ struct FrontAudioControls::State {
         QCursor originalCursor;
         bool hadCursor=false;
         // Preserve all native layout slots and widget identities.
-        QPointer<QBoxLayout> root,body,header,center,nameRow;
+        QPointer<QBoxLayout> root,body,header,center,nameRow,columnButtons;
+        int originalButtonSpacing=-1,appliedButtonSpacing=-1;
         int nameIndex=-1,nameStretch=0;
         QPointer<QWidget> frame;
         QPointer<QLabel> db,status;
@@ -639,6 +653,9 @@ struct FrontAudioControls::State {
     void restoreColumn(Row &r){
         if(!r.columnMode)return;
         restoreColumnGain(r);
+        if(r.columnButtons&&r.columnButtons->spacing()==r.appliedButtonSpacing)
+            r.columnButtons->setSpacing(r.originalButtonSpacing);
+        r.columnButtons.clear();
         restoreStatus(r);
         if(r.controls){
             if(r.root&&r.root->indexOf(r.controls)>=0)
@@ -682,9 +699,19 @@ struct FrontAudioControls::State {
             r.dbIndex=dbRow->indexOf(db);r.dbStretch=dbRow->stretch(r.dbIndex);r.dbAlignment=dbRow->itemAt(r.dbIndex)->alignment();
             r.controlsMin=r.controls->minimumSize();r.controlsMax=r.controls->maximumSize();
             r.controlsPolicy=r.controls->sizePolicy();r.controlsAlignment=root->itemAt(5)->alignment();
-            // Match the two native 24px button targets, not the entire
-            // channel width. Both encoders remain usable at 110px.
-            r.controls->setFixedWidth(52);root->setAlignment(r.controls,Qt::AlignHCenter);
+            // Keep the native buttons centered over their respective
+            // encoder. In compact themes their own width may be only 18px.
+            r.columnButtons=buttons;
+            r.originalButtonSpacing=buttons->spacing();
+            r.appliedButtonSpacing=r.originalButtonSpacing;
+            r.controls->setFixedWidth(2*compactDialSize+4);root->setAlignment(r.controls,Qt::AlignHCenter);
+        }
+        if(r.columnButtons&&r.columnButtons->count()==2){
+            auto *left=r.columnButtons->itemAt(0)->widget(),*right=r.columnButtons->itemAt(1)->widget();
+            if(left&&right&&r.columnButtons->spacing()==r.appliedButtonSpacing){
+                const int spacing=qMax(r.originalButtonSpacing,compactDialSize+2-(left->width()+right->width())/2);
+                if(spacing!=r.appliedButtonSpacing){r.columnButtons->setSpacing(spacing);r.appliedButtonSpacing=spacing;}
+            }
         }
         syncStatus(r);
         const bool integrated=gain->property("_obsUiAugmentKnob").toBool()&&gain->property("_obsUiAugmentIntegratedMeter").toBool();
@@ -778,7 +805,7 @@ struct FrontAudioControls::State {
         center->addWidget(frame,1);center->addWidget(db,0,Qt::AlignHCenter);
         body->insertLayout(r.frameIndex,center,1);r.center=center;
         adjust->setDirection(QBoxLayout::TopToBottom);
-        r.controls->setMinimumSize(30,0);r.controls->setMaximumSize(30,QWIDGETSIZE_MAX);
+        r.controls->setMinimumSize(compactDialSize+4,0);r.controls->setMaximumSize(compactDialSize+4,QWIDGETSIZE_MAX);
         r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Expanding);
         adjust->setAlignment(r.panDial,Qt::AlignHCenter);
         adjust->setAlignment(r.offsetDial,Qt::AlignHCenter);
@@ -1196,8 +1223,8 @@ void FrontAudioControls::refresh(){
             // One horizontal strip avoids stacking two additional control
             // rows under each OBS rotary/fader, including narrow vertical docks.
             controls->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);
-            controls->setMinimumHeight(30);
-            controls->setMaximumHeight(34);
+            controls->setMinimumHeight(34);
+            controls->setMaximumHeight(36);
             auto *outer=new QHBoxLayout(controls);
             outer->setContentsMargins(1,1,1,1);
             outer->setSpacing(2);
@@ -1221,7 +1248,7 @@ void FrontAudioControls::refresh(){
             panDial->setObjectName("aftermarket-pan-dial");
             panDial->setRange(0,100);
             panDial->setNotchesVisible(false);
-            panDial->setFixedSize(24,24);
+            panDial->setFixedSize(compactDialSize,compactDialSize);
             panDial->setToolTip(pan->toolTip());
             outer->addWidget(panDial);
             auto *offsetLabel=new QLabel("Δ",controls);
@@ -1230,7 +1257,7 @@ void FrontAudioControls::refresh(){
             outer->addWidget(offsetLabel);
             auto *offsetDial=new SyncEncoder(controls);
             offsetDial->setObjectName("aftermarket-offset-dial");
-            offsetDial->setFixedSize(24,24);
+            offsetDial->setFixedSize(compactDialSize,compactDialSize);
             offsetDial->setToolTip("Relative sync encoder · drag or scroll · Shift: fine");
             outer->addWidget(offsetDial);
             auto *offset=new QSpinBox(controls);

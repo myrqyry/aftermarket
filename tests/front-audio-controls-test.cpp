@@ -198,6 +198,7 @@ int main(int argc,char **argv){
  // not the platform QDial face. Use an unmistakable palette accent.
  QPalette rotaryPalette=panDial->palette();
  rotaryPalette.setColor(QPalette::Highlight,QColor("#ff00ff"));
+ rotaryPalette.setColor(QPalette::Link,QColor("#ff00ff"));
  rotaryPalette.setColor(QPalette::Mid,QColor("#303030"));
  rotaryPalette.setColor(QPalette::Button,QColor("#202020"));
  rotaryPalette.setColor(QPalette::ButtonText,QColor("#ffffff"));
@@ -207,13 +208,39 @@ int main(int argc,char **argv){
      int count=0;
      for(int y=0;y<img.height();++y)for(int x=0;x<img.width();++x){
          const auto c=img.pixelColor(x,y);
-         if(c.red()>180&&c.blue()>180&&c.green()<65)++count;
+         if(c.red()>85&&c.blue()>85&&c.red()-c.green()>35&&c.blue()-c.green()>35)++count;
      }
      return count;
  };
  REQUIRE(accentPixels(panDial)>=5&&accentPixels(offsetDial)>=5);
+ // The actual Fluffy Dark mixer has almost identical Mid/Button/Window
+ // values. A readable rotary needs a tinted idle track, a bright pointer,
+ // and enough diameter to resolve the two rings, not just accent pixels.
+ QPalette dark=rotaryPalette;
+ dark.setColor(QPalette::Window,QColor("#242424"));
+ dark.setColor(QPalette::Mid,QColor("#242424"));
+ dark.setColor(QPalette::Button,QColor("#222222"));
+ dark.setColor(QPalette::Highlight,QColor("#f38fb1"));
+ dark.setColor(QPalette::Link,QColor("#f8e6eb"));
+ dark.setColor(QPalette::ButtonText,QColor("#eeeeee"));
+ for(auto *dial:{panDial,offsetDial}){
+     dial->setPalette(dark);
+     const auto image=dial->grab().toImage().convertToFormat(QImage::Format_RGB32);
+     REQUIRE(dial->width()>=30&&dial->height()>=30);
+     int tinted=0,bright=0;
+     const auto center=QPointF(image.width()/2.,image.height()/2.);
+     for(int y=0;y<image.height();++y)for(int x=0;x<image.width();++x){
+         const auto color=image.pixelColor(x,y);
+         const double radius=std::hypot(x+.5-center.x(),y+.5-center.y());
+         if(radius>=image.width()*.36&&color.red()>75&&color.red()<155&&color.red()-color.green()>20)++tinted;
+         if(radius<image.width()*.24&&color.red()>170&&color.green()>170&&color.blue()>170)++bright;
+     }
+     REQUIRE(tinted>=18&&bright>=3);
+ }
+ panDial->setPalette(rotaryPalette);offsetDial->setPalette(rotaryPalette);
  const auto oldFace=offsetDial->grab().toImage();
  rotaryPalette.setColor(QPalette::Highlight,QColor("#00ff00"));
+ rotaryPalette.setColor(QPalette::Link,QColor("#00ff00"));
  offsetDial->setPalette(rotaryPalette);app.processEvents();
  REQUIRE(oldFace!=offsetDial->grab().toImage()&&accentPixels(offsetDial)==0);
  panDial->setPalette(QPalette());offsetDial->setPalette(QPalette());
@@ -221,6 +248,25 @@ int main(int argc,char **argv){
  REQUIRE(pans==2&&offsets==2);
  REQUIRE(qAbs(current[0].balance-.65)<.001&&current[0].offsetMs==1000);
  REQUIRE(offset->value()==1000&&pan->value()==65); // immediate sibling control sync
+ // Match the main gain knob's no-jump, relative x-y drag. Pan's
+ // range is bounded while sync's movement is unbounded until saturation.
+ const auto dialDrag=[&](QDial *dial,QPoint delta,Qt::KeyboardModifiers mods=Qt::NoModifier){
+     const QPoint p(5,8),global=dial->mapToGlobal(p);
+     const int before=dial->value();
+     QMouseEvent press(QEvent::MouseButtonPress,p,global,Qt::LeftButton,Qt::LeftButton,mods);
+     QApplication::sendEvent(dial,&press);
+     if(dial->value()!=before)return false;
+     QMouseEvent move(QEvent::MouseMove,p+delta,global+delta,Qt::NoButton,Qt::LeftButton,mods);
+     QApplication::sendEvent(dial,&move);
+     QMouseEvent release(QEvent::MouseButtonRelease,p+delta,global+delta,Qt::LeftButton,Qt::NoButton,mods);
+     QApplication::sendEvent(dial,&release);
+     return !dial->isSliderDown();
+ };
+ REQUIRE(dialDrag(panDial,QPoint(15,-15))&&panDial->value()==85);
+ REQUIRE(dialDrag(panDial,QPoint(-15,15))&&panDial->value()==65);
+ REQUIRE(dialDrag(offsetDial,QPoint(12,-8))&&offsetDial->value()==1200);
+ REQUIRE(dialDrag(offsetDial,QPoint(-12,8))&&offsetDial->value()==1000);
+ REQUIRE(dialDrag(offsetDial,QPoint(12,-8),Qt::ShiftModifier)&&offsetDial->value()==1020);
  // A relative encoder must continue from an offset beyond the old ±2s range.
  current[0].offsetMs=12345;ui.refresh();
  REQUIRE(offsetDial->value()==12345);
@@ -439,7 +485,7 @@ int main(int argc,char **argv){
  auto *stripFrame=new QFrame(strip);stripFrame->setObjectName("volMeterFrame");auto *fl=new QHBoxLayout(stripFrame);
  auto *stripGain=new QSlider(Qt::Vertical,stripFrame);stripGain->setProperty("_obsUiAugmentKnob",true);stripGain->setProperty("_obsUiAugmentIntegratedMeter",true);
  stripGain->setFixedSize(68,76);stripGain->setValue(63);fl->addWidget(stripGain);stripRoot->addWidget(stripFrame,1);
- auto *br=new QHBoxLayout;auto *sm=new QPushButton(strip),*sn=new QPushButton(strip);sm->setFixedSize(24,22);sn->setFixedSize(24,22);br->addWidget(sm);br->addWidget(sn);stripRoot->addLayout(br);
+ auto *br=new QHBoxLayout;auto *sm=new QPushButton(strip),*sn=new QPushButton(strip);br->setSpacing(2);sm->setFixedSize(18,22);sn->setFixedSize(18,22);br->addWidget(sm);br->addWidget(sn);stripRoot->addLayout(br);
  columnMixer.resize(360,500);columnMixer.show();app.processEvents();
  augment::FrontAudioControls columnUi(tmp.filePath("columnMixer.json"),[&]{return current;},{},{});
  REQUIRE(columnUi.attach(&columnMixer));REQUIRE(columnUi.setKnobs(true));columnUi.refresh();app.processEvents();
@@ -447,6 +493,7 @@ int main(int argc,char **argv){
  auto *columnSync=strip->findChild<QDial*>("aftermarket-offset-dial");
  auto *columnSpin=strip->findChild<QSpinBox*>("aftermarket-offset-ms");
  REQUIRE(columnPan&&columnSync&&columnSpin&&columnPan->isVisible()&&columnSync->isVisible()&&!columnSpin->isVisible());
+ REQUIRE(br->spacing()>=14);
  REQUIRE(stripStatus->maximumWidth()==18);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()-stripGain->mapTo(strip,QPoint()).y()-stripGain->height()<30);
@@ -456,7 +503,7 @@ int main(int argc,char **argv){
  REQUIRE(columnSync->isVisible()&&!columnSpin->isVisible());
  columnUi.setKnobs(false);app.processEvents();REQUIRE(columnSpin->isVisible());
  columnUi.detach();app.processEvents();
- REQUIRE(stripRoot->count()==5&&dr->indexOf(stripDb)==0&&stripStatus->maximumWidth()>18&&stripGain->value()==63);
+ REQUIRE(stripRoot->count()==5&&dr->indexOf(stripDb)==0&&stripStatus->maximumWidth()>18&&stripGain->value()==63&&br->spacing()==2);
  // Responsive grid keeps the real horizontal mixer container and channel
  // widgets, and restores the original native box on narrow/disabled views.
  QWidget gridMixer;

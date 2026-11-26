@@ -1,9 +1,26 @@
 #pragma once
 #include <QPainter>
 #include <QPalette>
+#include <QVector>
 #include <cmath>
 
 namespace augment {
+inline QVector<QColor> rotaryThemeColors(const QPalette &palette,QPalette::ColorGroup group=QPalette::Active){
+    const auto accent=palette.color(group,QPalette::Highlight);
+    return {accent,accent.lighter(155),palette.color(group,QPalette::Link),accent};
+}
+inline QColor rotaryMutedAccent(const QColor &surface,const QColor &accent){
+    return QColor::fromRgbF(surface.redF()*.58+accent.redF()*.42,
+        surface.greenF()*.58+accent.greenF()*.42,surface.blueF()*.58+accent.blueF()*.42);
+}
+inline QConicalGradient rotaryThemeGradient(const QPointF &center,const QPalette &palette,QPalette::ColorGroup group){
+    QConicalGradient gradient(center,225);
+    const auto colors=rotaryThemeColors(palette,group);
+    for(int i=0;i<colors.size();++i)gradient.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+    return gradient;
+}
+inline double rotaryDragDistance(const QPointF &delta){return delta.x()-delta.y();}
+
 // Shared gain, balance and encoder visual vocabulary. Geometry is relative
 // to the available diameter; the caller supplies the value semantics and
 // accent brush (which may be the existing animated gain gradient).
@@ -11,7 +28,7 @@ inline void paintRotaryFace(QPainter &p,const QRectF &ring,const QRectF &face,
                             const QPalette &palette,QPalette::ColorGroup group,
                             const QBrush &accent,double start,double sweep,
                             double activeStart,double activeSweep,double pointer,
-                            double scale=1.0){
+                            double scale=1.0,bool compact=false){
     p.setBrush(Qt::NoBrush);
     p.setPen(QPen(palette.color(group,QPalette::Mid),qMax(1.,3.*scale),Qt::SolidLine,Qt::RoundCap));
     p.drawArc(ring,qRound(start*16),qRound(sweep*16));
@@ -24,6 +41,6 @@ inline void paintRotaryFace(QPainter &p,const QRectF &ring,const QRectF &face,
     const auto rad=pointer*pi/180.;
     const QPointF direction(std::cos(rad),-std::sin(rad));
     p.setPen(QPen(palette.color(group,QPalette::ButtonText),qMax(1.15,2.*scale),Qt::SolidLine,Qt::RoundCap));
-    p.drawLine(face.center()+direction*(face.width()*.13),face.center()+direction*(face.width()*.37));
+    p.drawLine(face.center()+direction*(face.width()*(compact?.05:.13)),face.center()+direction*(face.width()*(compact?.41:.37)));
 }
 }

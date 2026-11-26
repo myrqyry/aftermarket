@@ -3796,3 +3796,40 @@ Rosé Pine and Rosé Pine Dawn. Both isolated sessions shut down normally,
 reporting the previously observed three unattributed memory leaks.
 Tools menu, scene transition selector, native filter add menu, and Unscene's
 nested source rows are not integrated in this slice.
+
+## 2026-11-25: correct compact rotary appearance and interaction against actual theme
+
+User rejected previous 24px compact dials and clarified interaction as well
+as appearance must be theme-aware. Inspected read-only live OBS mixer crop
+/tmp/am-user-mixer-left.png (Fluffy Dark Colorway, density -2): gain's
+luminous inner ring, tinted meter scale and visible pointer contrasted
+with small dark-on-dark native-style tracks. No invented replacement
+style: reuse gain palette gradient stop derivation, muted accent blend,
+ring/face painter and relative x-y direction. 32px small knobs with
+muted theme accent outer reference scale, gradient inner indicator,
+legible pointer; no fake peak meters. Pan center-out, sync full circular
+endless indicator, all paint from actual palette/group. No extra clocks;
+custom animated gradient and meter remain gain-only. Pan and sync
+share no-jump relative drag (up/right increases), Shift one tenth;
+pan 150px full span, bounded balance, native wheel/key retained;
+sync 10ms/combined pixel and 1ms Shift, existing wheel/key/exact popup
+and clamps unchanged. Reversible spacing of native column mute/monitor
+buttons derived from actual widths; no native button replacement.
+Other ongoing plugin icon work committed separately during this task;
+preexisting plugin.cpp comment left unstaged.
+
+RED focused contrast test failed old 24px geometry. GREEN real dark
+palette tinted outer track + pointer pixel checks, palette switch,
+relative pan and sync diagonal drags, no press jump, Shift, native
+button spacing restoration. Existing gain knob and meter tests passed.
+Full 43/43 CTest /tmp/am-dial-style-final-ctest.log. Earlier default
+theme native columns 13/13 and rows 10/10; first Fluffy Dark preview
+failed alignment only, corrected spacing. Final isolated actual user
+theme (copied theme assets, no production profile mutation) OBS 32.2.0:
+13/13 /tmp/am-dial-fluffy-final.SKT2as/obs.log and 10/10
+/tmp/am-dial-fluffy-rows.sGwUDd/obs.log; inspected both real screenshots
+and updated README captures. Native probes exercised sync and layout,
+pan diagonal input verified in Qt fixture, not independently native
+audio source input probe. Other themes/platforms not individually
+qualified. Build complete, local commit only; running production OBS
+untouched; not installed/pushed.

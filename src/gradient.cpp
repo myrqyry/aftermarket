@@ -437,7 +437,7 @@ public:
             if(dragging) {
                 if(!(e->buttons()&(Qt::LeftButton|Qt::MiddleButton))) {finishDrag();return true;}
                 const auto delta=e->globalPosition()-start;
-                double movement=(delta.x()-delta.y())/150.;
+                double movement=rotaryDragDistance(delta)/150.;
                 if(s->invertedControls())movement=-movement;
                 const double span=double(s->maximum())-s->minimum();
                 s->setSliderPosition(int(std::round(qBound(double(s->minimum()),startValue+movement*span,double(s->maximum())))));
@@ -480,9 +480,7 @@ public:
             // keep enough headroom between idle and active brightness.
             const QColor surface=pal.color(group,QPalette::Window);
             auto dim=[&](QColor c){
-                return QColor::fromRgbF(surface.redF()*.58+c.redF()*.42,
-                    surface.greenF()*.58+c.greenF()*.42,
-                    surface.blueF()*.58+c.blueF()*.42);
+                return rotaryMutedAccent(surface,c);
             };
             const double gap=.009;
             section(0,pos(-20)-gap,dim(nominal));
@@ -524,10 +522,7 @@ public:
         QPainter painter(this);painter.setRenderHint(QPainter::Antialiasing);
         QVector<QColor> colors=spec.colors;
         if(colors.isEmpty()) {
-            QColor a=parentWidget()->palette().color(QPalette::Highlight);
-            QColor b=a.lighter(155);
-            QColor c=parentWidget()->palette().color(QPalette::Link);
-            colors={a,b,c,a};
+            colors=rotaryThemeColors(parentWidget()->palette());
         }
         if(energy>0)for(auto &color:colors)color=color.lighter(100+int(energy*25));
         if(knob){paintKnob(painter,colors);return;}

@@ -46,7 +46,7 @@ Keep the familiar native mixer or customize selected channels:
 - Per-source audio-reactive gradient faders and native meter color modulation.
 - Compact Pan and Sync controls that operate native OBS source properties.
 - Channel widths independent of source-name length, with readable labels.
-- Compact rotary mixer channels in both orientations: native dB value below gain, aligned mute/monitor and pan/sync controls, status icons in the header. Pan and sync share the gain knob’s theme-aware face and accent-ring renderer. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds.
+- Compact rotary mixer channels in both orientations: native dB value below gain, aligned mute/monitor and pan/sync controls, status icons in the header. Pan and sync use 32px theme-aware two-ring faces and the gain knob’s relative drag direction. Endless relative sync encoder (Shift for fine adjustment); right-click for exact milliseconds.
 - Responsive mixer grid: up to four columns for horizontal-fader rows, and automatic wrapping of compact side-by-side rotary strips when all rows fit. Auto mixer grid toggle in the title menu.
 - Persistent channel order: unlock in the mixer title menu, drag source names,
   then lock again. AudioBus follows the same saved order; reset restores native order.
@@ -57,7 +57,7 @@ Keep the familiar native mixer or customize selected channels:
 
 ![Side-by-side rotary channels wrap into rows when dock height allows](docs/screenshots/readme/mixer-rotary-columns.png)
 
-The rotary screenshots use an isolated OBS 32.2.0 test profile with five synthetic audio sources. To adjust sync, drag vertically or scroll (10 ms per pixel or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
+The rotary screenshots use an isolated OBS 32.2.0 test profile with five synthetic audio sources and the Fluffy Dark Colorway theme. To adjust sync, drag up/right or down/left, or scroll (10 ms per pixel of combined drag or wheel detent), hold Shift for 1 ms, or right-click for exact entry. The indicator turns continuously; the actual offset is clamped, not wrapped.
 
 **Optional independent device sends:** install [Exeldro's Audio Monitor](https://obsproject.com/forum/resources/audio-monitor.1186/) to expose playback devices below the native track nodes. Drag a source to a device; right-click its wire for independent mute, gain, pan and delay. Choose visible destinations from the mixer title menu. Existing Audio Monitor filters are not taken over by Aftermarket. Without the plugin, the native graph works normally.
 
