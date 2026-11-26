@@ -3756,3 +3756,23 @@ Full 42/42 CTest /tmp/am-flat-menu-final-ctest.log; real Qt X11 fixture
 /tmp/am-flat-menu-final-xcb.log passed. Not a production OBS launch.
 Docs updated; built and committed locally, not installed/pushed.
 Existing unrelated plugin.cpp comment preserved.
+
+## Colorway third-party icon integration — 2026-11-25
+Colorway owns the 65 supplied glyph designs, two ink variants, and exact
+source/filter/dock identity registry. Aftermarket renders the optional registry
+without changing stock OBS source categories or plugin binaries. Added optional
+version-1 dockClasses recognition for SourceDock's actual Qt class, taking
+precedence over its user-defined (potentially colliding) dock title. Existing
+registries and absent artwork retain their fallback behavior.
+Verified: Colorway 753 passing tests, one existing skip, Vite build; Aftermarket
+42/42 CTests and full module build. Isolated OBS 32.2.0 with the real Source
+Dock plugin loaded and dynamic dock "Icon Probe Source": 14x14 title glyph
+matched all 196 RGBA pixels of the expected Colorway SVG in Rosé Pine — Pine;
+Rosé Pine Dawn — Pine matched all alpha pixels and 190/196 RGBA pixels, the
+remaining six differing by at most one RGB level from premultiplication rounding.
+Both real theme palettes resolved; both isolated sessions freed OBS context.
+Installed updated Aftermarket binary and Colorway plugin assets with rollback
+copy of the previous binary; verified installed bytes. Existing user theme
+files and scene/settings state were not rewritten for the probe.
+Remaining: dialog/menu-action identities, transition consumer, other unmapped
+glyphs and broader real-UI checks of sources, filters, and fixed-ID docks.
