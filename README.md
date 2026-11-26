@@ -177,6 +177,16 @@ transform, save/load named transform presets, add/search/toggle/reorder/remove
 filters and check scene references, or open native Properties and Filters.
 Transform loads and filter edits participate in OBS Edit → Undo/Redo. [Command center guide](docs/user-guide.md#command-center-and-source-inspector).
 
+### Contextual notes
+
+Private notes attach to scenes, shared sources, filters or specific scene
+items. In Quick Find, right-click a result and choose Add note; in the
+command center, right-click an @ result. The Source Inspector supports notes
+on its source heading, transform context and filter rows. A small circled
+information symbol appears only when a note exists: hover to read the native
+tooltip, click to edit. Search scene, source and filter notes through @.
+No notes dock or broadcast source is required.
+
 ### Quick Find
 
 Click outside either the compact Add Source picker or the Quick Find popup to dismiss it.

@@ -7,6 +7,7 @@ class QMainWindow;
 class QMenuBar;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QDialog;
 class QMessageBox;
 namespace augment {
@@ -16,7 +17,7 @@ public:
  using SourceRunner=std::function<bool(const QuickFindEntry&)>;
  using Commands=std::function<QList<CommandChoice>()>;
  using Runner=std::function<bool(const QString&)>;
- CommandCenter(QMainWindow *,QuickFind::Provider,SourceRunner,Commands,Runner);
+ CommandCenter(QMainWindow *,QuickFind::Provider,SourceRunner,Commands,Runner,SourceRunner noteRunner={});
  ~CommandCenter()override;
  void open(const QString &initial={});
  void detach();
@@ -34,7 +35,8 @@ private:
  QPointer<QListWidget> list_;
  QPointer<QMessageBox> confirm_;
  QuickFind::Provider sourceProvider_;
- SourceRunner sourceRunner_;
+ SourceRunner sourceRunner_,noteRunner_;
+ void editNote(QListWidgetItem *);
  Commands commandProvider_;
  Runner runner_;
  QList<QuickFindEntry> sources_,hits_;

@@ -1,4 +1,5 @@
 #include "quick-find.h"
+#include "context-notes.h"
 #include "plugin-theme-icons.h"
 #include <QHash>
 #include <QVBoxLayout>
@@ -29,6 +30,7 @@ int score(const QuickFindEntry &entry,const QStringList &terms) {
         else if(type.contains(term))total+=25;
         else if(location.contains(term))total+=15;
         else if(detail.contains(term))total+=10;
+        else if(entry.note.contains(term,Qt::CaseInsensitive))total+=8;
         else return -1;
     }
     return total;
@@ -61,7 +63,7 @@ QList<QuickFindEntry> QuickFind::search(const QList<QuickFindEntry> &all,
     return matches;
 }
 
-QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable)
+QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable,bool notesAvailable)
     :QDialog(parent),provider_(std::move(provider)),perform_(std::move(perform)) {
     setObjectName("aftermarket-quick-find");
     setWindowTitle("Aftermarket · Find sources");
@@ -125,17 +127,19 @@ QuickFind::QuickFind(QWidget *parent,Provider provider,Performer perform,bool pi
     });
     auto *escape=new QShortcut(QKeySequence(Qt::Key_Escape),this);
     connect(escape,&QShortcut::activated,this,&QDialog::reject);
+    if(notesAvailable)attachNoteRows(results_,[this](QListWidgetItem *row){results_->setCurrentItem(row);activate(Note);});
     results_->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(results_,&QListWidget::customContextMenuRequested,this,[this](const QPoint &pos){
+    connect(results_,&QListWidget::customContextMenuRequested,this,[this,notesAvailable](const QPoint &pos){
         auto *item=results_->itemAt(pos);if(!item)return;
         const int index=item->data(Qt::UserRole).toInt();
         if(index<0||index>=cached_.size())return;
         const auto &entry=cached_[index];
         const bool canPin=!pin_->isHidden()&&entry.kind!=QuickFindEntry::Filter;
         const bool canConfigure=entry.kind==QuickFindEntry::Source&&entry.performanceAvailable;
-        if(!canPin&&!canConfigure)return;
+        if(!canPin&&!canConfigure&&!notesAvailable)return;
         results_->setCurrentItem(item);
         QMenu menu(this);
+        if(notesAvailable)menu.addAction(entry.note.isEmpty()?"Add note…":"Edit note…",this,[this]{activate(Note);});
         if(canPin)menu.addAction("Pin to workspace",this,[this]{activate(PinSource);});
         if(canConfigure){
             auto *action=menu.addAction("Off-air frame limit…",this,[this]{activate(Performance);});
@@ -175,6 +179,7 @@ void QuickFind::updateResults(){
             if(!iconCache.value(key).isNull())item->setIcon(iconCache.value(key));
         }
         item->setToolTip(secondary);
+        item->setData(NoteTextRole,entry.note);
         // Rows refer to the current catalog by their stable identities.
         for(int j=0;j<cached_.size();++j)
             if(cached_[j].kind==entry.kind && cached_[j].id==entry.id &&

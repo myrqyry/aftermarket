@@ -20,14 +20,15 @@ struct QuickFindEntry {
     QString location;    // parent scene or filter owner name
     QString sceneId;     // parent scene UUID; only for a source hit
     bool performanceAvailable=false;
+    QString note; // private annotation, separate from native source detail
 };
 
 class QuickFind final: public QDialog {
 public:
-    enum Action { Default, Properties, Filters, SceneJump, PinSource, Performance };
+    enum Action { Default, Properties, Filters, SceneJump, PinSource, Performance, Note };
     using Provider=std::function<QList<QuickFindEntry>()>;
     using Performer=std::function<bool(const QuickFindEntry&,Action)>;
-    explicit QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable=false);
+    explicit QuickFind(QWidget *parent,Provider provider,Performer perform,bool pinAvailable=false,bool notesAvailable=false);
     static QList<QuickFindEntry> search(const QList<QuickFindEntry> &all,
                                         const QString &query,int limit=80);
     void open();

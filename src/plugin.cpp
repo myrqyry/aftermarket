@@ -15,6 +15,7 @@
 #include "quick-find.h"
 #include "command-center.h"
 #include "source-inspector-dock.h"
+#include "obs-note-targets.h"
 #include "source-dock-pin.h"
 #include "source-performance.h"
 #include "dock-layouts.h"
@@ -69,6 +70,7 @@ static QPointer<augment::Inspector> inspector;
 static QPointer<augment::QuickFind> quickFind;
 static std::unique_ptr<augment::CommandCenter> commandCenter;
 static QPointer<augment::SourceInspectorDock> sourceInspector;
+static std::shared_ptr<augment::ContextNotes> contextNotes;
 static std::unique_ptr<augment::ToolsMenu> toolsMenu;
 static std::unique_ptr<augment::Panels> panels;
 static std::unique_ptr<augment::PropertySections> propertySections;
@@ -292,18 +294,36 @@ static bool configureSourcePerformance(const augment::QuickFindEntry &hit){
     obs_frontend_save();
     return true;
 }
+static QList<augment::QuickFindEntry> notesCatalog(){
+    auto result=augment::collectObsQuickFind();
+    if(contextNotes){
+        contextNotes->reload();
+        for(auto &entry:result)entry.note=contextNotes->get(augment::entryNoteKey(entry));
+    }
+    return result;
+}
+static bool openEntryNote(const augment::QuickFindEntry &entry){
+    if(!uiActive||!frontendReady||!contextNotes||!augment::noteEntryExists(entry))return false;
+    auto *main=static_cast<QWidget*>(obs_frontend_get_main_window());
+    const auto collection=augment::noteCollection();
+    augment::editContextNote(main,contextNotes,augment::entryNoteKey(entry),entry.name,
+        [collection,entry]{return uiActive&&frontendReady&&collection==augment::noteCollection()&&augment::noteEntryExists(entry);},
+        []{if(sourceInspector)sourceInspector->refresh();});
+    return true;
+}
 static void showQuickFind(){
     if(!uiActive||!frontendReady)return;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
     if(!main)return;
     if(!quickFind){
         quickFind=new augment::QuickFind(main,
-            []{return augment::collectObsQuickFind();},
+            []{return notesCatalog();},
             [](const augment::QuickFindEntry &hit,augment::QuickFind::Action action){
                 if(action==augment::QuickFind::PinSource)return pinSourceDock(hit);
                 if(action==augment::QuickFind::Performance)return configureSourcePerformance(hit);
+                if(action==augment::QuickFind::Note)return openEntryNote(hit);
                 return augment::performObsQuickFind(hit,action);
-            },nativeSourceDockPin()!=nullptr||sourceDockManagerAction()!=nullptr);
+            },nativeSourceDockPin()!=nullptr||sourceDockManagerAction()!=nullptr,contextNotes!=nullptr);
     }
     quickFind->open();
 }
@@ -454,6 +474,9 @@ static void stopCustomUi(){
     if(controller)controller->setRuntimeSafeMode(true);
     delete inspector.data();
     commandCenter.reset();
+    if(auto *main=static_cast<QWidget*>(obs_frontend_get_main_window()))
+        for(auto *editor:main->findChildren<QDialog*>("aftermarket-note-editor"))delete editor;
+    contextNotes.reset();
     if(sourceInspector){obs_frontend_remove_dock("aftermarket-source-inspector-dock");sourceInspector.clear();}
     delete quickFind.data();
     if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
@@ -611,14 +634,15 @@ static bool startCustomUi(){
             *controller,*dockTitleIcons,std::move(services));
     }
     uiActive=true;
+    contextNotes=std::make_shared<augment::ContextNotes>(QFileInfo(stripConfigPath).dir().filePath("context-notes.json"));
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()))){
-        auto *dock=new augment::SourceInspectorDock(main,QFileInfo(stripConfigPath).dir().filePath("property-presets.json"));
+        auto *dock=new augment::SourceInspectorDock(main,QFileInfo(stripConfigPath).dir().filePath("property-presets.json"),contextNotes);
         if(obs_frontend_add_dock_by_id("aftermarket-source-inspector-dock","Source Inspector",dock))sourceInspector=dock;
         else delete dock;
     }
     if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window())))
         commandCenter=std::make_unique<augment::CommandCenter>(main,
-            []{return frontendReady&&uiActive?augment::collectObsQuickFind():QList<augment::QuickFindEntry>{};},
+            []{return frontendReady&&uiActive?notesCatalog():QList<augment::QuickFindEntry>{};},
             [](const auto &hit){
                 if(!frontendReady||!uiActive)return false;
                 if(hit.kind==augment::QuickFindEntry::Source&&sourceInspector)return showSourceInspector(&hit);
@@ -644,7 +668,7 @@ static bool startCustomUi(){
                     action->trigger();return true;
                 }
                 return nativeActions&&nativeActions->triggerHotkey(id);
-            });
+            },openEntryNote);
     if(toolsMenu)toolsMenu->setState(true,frontendReady);
     return true;
 }

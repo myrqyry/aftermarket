@@ -6,18 +6,21 @@
 #include "quick-find.h"
 #include "inspector-edits.h"
 #include "property-presets.h"
+#include "context-notes.h"
 class QLabel;
 class QPushButton;
 class QLineEdit;
 class QListWidget;
+class QListWidgetItem;
 class QMainWindow;
 class QComboBox;
+class QToolButton;
 namespace augment {
 // Initial native inspector: source identity, selection and pinned item
 // context. Native dialogs remain the authoritative editors.
 class SourceInspectorDock final:public QWidget{
 public:
- explicit SourceInspectorDock(QMainWindow *,QString presetFile);
+ explicit SourceInspectorDock(QMainWindow *,QString presetFile,std::shared_ptr<ContextNotes> notes);
  void refresh();
  void clearSelection();
  bool inspect(const QuickFindEntry &);
@@ -27,6 +30,11 @@ protected:
 private:
  InspectorItem target_;
  PropertyPresets presets_;
+ std::shared_ptr<ContextNotes> notes_;
+ QToolButton *sourceNote_,*itemNote_;
+ void editSourceNote(bool item);
+ void editFilterNote(QListWidgetItem *);
+ void refreshNotes();
  bool pinned_=false;
  QTimer refreshTimer_,coalesce_;
  QLabel *heading_,*detail_,*transform_,*usage_;

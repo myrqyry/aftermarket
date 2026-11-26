@@ -1,4 +1,5 @@
 #include "command-center.h"
+#include "context-notes.h"
 #include <QMainWindow>
 #include <QMenuBar>
 #include <QAction>
@@ -15,8 +16,8 @@
 #include <QApplication>
 #include <QSignalBlocker>
 namespace augment {
-CommandCenter::CommandCenter(QMainWindow *main,QuickFind::Provider sources,SourceRunner sourceRunner,Commands commands,Runner runner)
- :main_(main),sourceProvider_(std::move(sources)),sourceRunner_(std::move(sourceRunner)),commandProvider_(std::move(commands)),runner_(std::move(runner)){
+CommandCenter::CommandCenter(QMainWindow *main,QuickFind::Provider sources,SourceRunner sourceRunner,Commands commands,Runner runner,SourceRunner noteRunner)
+ :main_(main),sourceProvider_(std::move(sources)),sourceRunner_(std::move(sourceRunner)),noteRunner_(std::move(noteRunner)),commandProvider_(std::move(commands)),runner_(std::move(runner)){
  if(!main)return;
  bar_=main->menuBar();
  if(bar_&&!bar_->isNativeMenuBar()){
@@ -35,7 +36,12 @@ CommandCenter::CommandCenter(QMainWindow *main,QuickFind::Provider sources,Sourc
  input_->setPlaceholderText("@ Search sources · / Commands and hotkeys");
  input_->setClearButtonEnabled(true);layout->addWidget(input_);
  list_=new QListWidget(popup_);list_->setObjectName("aftermarket-command-results");layout->addWidget(list_,1);
- auto *hint=new QLabel("↑ ↓ Select  ·  Enter Open  ·  Esc Close",popup_);layout->addWidget(hint);
+ if(noteRunner_){
+  attachNoteRows(list_,[this](QListWidgetItem *row){editNote(row);});
+  list_->setContextMenuPolicy(Qt::CustomContextMenu);
+  connect(list_,&QListWidget::customContextMenuRequested,this,[this](const QPoint &p){editNote(list_->itemAt(p));});
+ }
+ auto *hint=new QLabel(noteRunner_?"↑ ↓ Select  ·  Enter Open  ·  Right-click Note  ·  Esc Close":"↑ ↓ Select  ·  Enter Open  ·  Esc Close",popup_);layout->addWidget(hint);
  input_->installEventFilter(this);list_->installEventFilter(this);
  connect(input_,&QLineEdit::textChanged,this,[this]{updateResults();});
  connect(input_,&QLineEdit::returnPressed,this,[this]{activate();});
@@ -116,10 +122,17 @@ void CommandCenter::updateResults(){
   hits_=QuickFind::search(sources_,query);
   for(const auto &entry:hits_){
    const QString type=entry.kind==QuickFindEntry::Scene?"Scene":entry.kind==QuickFindEntry::Filter?"Filter":"Source";
-   list_->addItem(entry.name+"  ·  "+type+(entry.location.isEmpty()?QString{}:"  ·  "+entry.location));
+   auto *row=new QListWidgetItem(entry.name+"  ·  "+type+(entry.location.isEmpty()?QString{}:"  ·  "+entry.location),list_);
+   row->setData(NoteTextRole,entry.note);
   }
  }
  if(list_->count())list_->setCurrentRow(0);
+}
+void CommandCenter::editNote(QListWidgetItem *item){
+ if(!item||!list_||!popup_||commandMode_||!noteRunner_)return;
+ const int row=list_->row(item);if(row<0||row>=hits_.size())return;
+ const auto entry=hits_[row];popup_->hide();
+ QTimer::singleShot(0,this,[this,entry]{if(noteRunner_)noteRunner_(entry);});
 }
 void CommandCenter::activate(){
  if(!list_||!popup_||!popup_->isVisible())return;

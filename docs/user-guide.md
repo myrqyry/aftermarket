@@ -693,6 +693,35 @@ that dependency or declared a repository-wide license. No upstream code
 was copied. Emergency restore removes the field, popup and inspector
 dock without changing source settings or undoing completed edits.
 
+### Contextual notes
+
+Use the existing command center to search for a scene, source or filter
+with `@`, then right-click the result to open its private note editor.
+Quick Find provides **Add note…** or **Edit note…** in its result context
+menu. In the Source Inspector, right-click the source heading, scene-item
+transform description or a filter row to attach a note to that specific
+object. A circled information glyph appears only on objects with notes.
+Hover to read the note as a native tooltip, or click the glyph to edit.
+The filter checkbox and plugin icon remain independent of the note glyph.
+
+Save explicitly; Cancel leaves the previous note unchanged. Clear the
+text and save to delete the note. Notes are plain text (up to 4096 characters);
+HTML characters remain literal. The normal tooltip theme and maximum-width
+preference apply. Scene/source/filter note text participates in Quick Find
+and @ search; item notes are visible in their scene-item inspector context.
+Native OBS Scenes and Sources list rows do not yet carry note glyphs.
+
+Notes are stored locally in Aftermarket's `context-notes.json` using stable
+OBS UUIDs, with the parent UUID for filters and owner scene UUID plus scene-item
+ID for item notes. One note per attachment. The file is separate from scene
+collection export, is not encrypted, and is never sent to a broadcast output.
+Shared source notes are distinct from notes on individual placements. Renames
+do not change identity. Deleting an OBS object does not automatically delete
+its stored note; only currently discoverable objects appear in search.
+Explicit saves validate the target, compare the previously loaded text and
+use an atomic owner-only file update. Invalid or conflicting data is not
+silently overwritten. No new polling or rendering thread is used.
+
 ### Quick Find: jump to sources and filters without another dock
 
 Open **Tools → Aftermarket → Find Sources…** to search the current OBS scene

@@ -3948,3 +3948,45 @@ class recognition only to that verified class. Fixture regression initially
 failed on generic title glyph, then passed exact rendered ink and rename
 invariance. 43/43 CTests passed. Actual third-party QAU and SVG Source
 modules are not installed here; native end-to-end appearance unverified.
+
+## 2026-11-25: private contextual notes with hover glyphs
+
+User wants additional value rather than duplicating Scene Notes Dock/OBS Draw:
+attach a note simply, read it from a small circled-help-style symbol.
+Independent implementation, no upstream code imported. One plain-text note
+per scene/source/filter/item identity, versioned local context-notes.json
+(4MiB store, 4096 chars/note), owner-only atomic QSaveFile with immediate
+QLockFile and compare-expected text; refuse corrupt store, stale concurrent
+edit or invalid target. Keys UUID-based; filter includes owner UUID, item
+includes scene UUID, item ID and source UUID. Collection change during editing
+refuses save. Deleted targets retained in storage, not auto-pruned; notes
+are local not encrypted, not in scene export or stream. No visual annotation
+or broadcast drawing implementation; leave standalone drawing to OBS Draw.
+
+No additional dock. Source Inspector source heading and transform context
+right-click Add/Edit note, glyph only when note exists. Filter rows and
+Quick Find/command center share theme-palette circled-info delegate with
+native hit targets and hover tooltip, click glyph edit. Quick Find right-click
+menu, command center @ right-click opens editor directly. Search note text
+alongside catalog fields (scene/source/filter); item note stays in inspector
+context, not yet indexed. Native OBS Sources/Scenes/Filters row glyphs and
+direct native context actions are follow-on, not implemented. Explicit save
+or cancel; blank save removes. Escaped literal plain text with native Qt
+tooltip width. No new periodic disk reads or timers. Existing note store
+reloaded on editor/catalog open and on mutation; inspector uses cached notes
+and existing refresh. Emergency restore closes note editors.
+
+RED missing context-notes header; GREEN store identity isolation, persisted
+read, permission, stale write/corrupt refusal, 4096 limit, removal and
+badge-only click behavior. Full 44/44 CTest /tmp/am-context-notes-ctest.log
+(17.82s). First native probe 20/21 (test wrongly expected source search
+not to return associated filter); corrected assertion and added scene note
+coverage. Final isolated OBS 32.2.0 /tmp/am-context-notes.gtVNaI/obs.log
+24/24 exit0: source note via command context, actual native tooltip and
+literal HTML, note-content search, badge editing, separate item/filter
+notes, unchanged filter enabled state, rename and deletion, scene note.
+Actual note-badge.png and note-tooltip.png inspected. Native other themes,
+native row decoration, item-note search, concurrent OBS instance UI refresh,
+full collection roundtrip and visual annotations not independently qualified.
+Docs updated. Built, not installed or pushed. Production OBS unchanged.
+Preserve preexisting unrelated src/plugin.cpp comment.

@@ -1,4 +1,7 @@
 #include "source-inspector-dock.h"
+#include "obs-note-targets.h"
+#include <QToolButton>
+#include <QMenu>
 #include "plugin-theme-icons.h"
 #include <obs.hpp>
 #include <obs-frontend-api.h>
@@ -44,17 +47,30 @@ void selected(obs_scene_t *scene,Selection &s){
  s.ancestors.remove(scene);
 }
 }
-SourceInspectorDock::SourceInspectorDock(QMainWindow *main,QString presetFile):QWidget(main),presets_(std::move(presetFile)){
+SourceInspectorDock::SourceInspectorDock(QMainWindow *main,QString presetFile,std::shared_ptr<ContextNotes> notes):QWidget(main),presets_(std::move(presetFile)),notes_(std::move(notes)){
  setObjectName("aftermarket-source-inspector");
  auto *root=new QVBoxLayout(this);root->setContentsMargins(6,6,6,6);
  auto *header=new QHBoxLayout;heading_=new QLabel("Select one source",this);
  heading_->setObjectName("aftermarket-inspect-name");heading_->setTextFormat(Qt::PlainText);heading_->setWordWrap(true);
- header->addWidget(heading_,1);pin_=new QPushButton("Pin",this);pin_->setCheckable(true);pin_->setObjectName("aftermarket-inspect-pin");header->addWidget(pin_);root->addLayout(header);
+ header->addWidget(heading_,1);
+ sourceNote_=new QToolButton(this);sourceNote_->setObjectName("aftermarket-source-note");sourceNote_->setAutoRaise(true);sourceNote_->setText("ⓘ");sourceNote_->setAccessibleName("Edit source note");sourceNote_->hide();header->addWidget(sourceNote_);
+ connect(sourceNote_,&QToolButton::clicked,this,[this]{editSourceNote(false);});
+ heading_->setContextMenuPolicy(Qt::CustomContextMenu);
+ connect(heading_,&QWidget::customContextMenuRequested,this,[this](const QPoint &p){
+  if(target_.source.isEmpty())return;const auto source=target_.source;QMenu menu(this);menu.addAction(sourceNote_->isHidden()?"Add note…":"Edit note…",this,[this,source]{if(target_.source==source)editSourceNote(false);});menu.exec(heading_->mapToGlobal(p));
+ });
+ pin_=new QPushButton("Pin",this);pin_->setCheckable(true);pin_->setObjectName("aftermarket-inspect-pin");header->addWidget(pin_);root->addLayout(header);
  detail_=new QLabel(this);detail_->setTextFormat(Qt::PlainText);detail_->setWordWrap(true);root->addWidget(detail_);
  auto *buttons=new QHBoxLayout;properties_=new QPushButton("Properties…",this);properties_->setObjectName("aftermarket-inspect-properties");
  filters_=new QPushButton("Filters…",this);filters_->setObjectName("aftermarket-inspect-filters");
  buttons->addWidget(properties_);buttons->addWidget(filters_);root->addLayout(buttons);
- transform_=new QLabel(this);transform_->setTextFormat(Qt::PlainText);transform_->setWordWrap(true);transform_->setObjectName("aftermarket-inspect-transform");root->addWidget(transform_);
+ transform_=new QLabel(this);transform_->setTextFormat(Qt::PlainText);transform_->setWordWrap(true);transform_->setObjectName("aftermarket-inspect-transform");auto *transformRow=new QHBoxLayout;transformRow->addWidget(transform_,1);
+ itemNote_=new QToolButton(this);itemNote_->setObjectName("aftermarket-item-note");itemNote_->setAutoRaise(true);itemNote_->setText("ⓘ");itemNote_->setAccessibleName("Edit scene item note");itemNote_->hide();transformRow->addWidget(itemNote_,0,Qt::AlignTop);root->addLayout(transformRow);
+ connect(itemNote_,&QToolButton::clicked,this,[this]{editSourceNote(true);});
+ transform_->setContextMenuPolicy(Qt::CustomContextMenu);
+ connect(transform_,&QWidget::customContextMenuRequested,this,[this](const QPoint &p){
+  if(target_.item<0)return;const auto target=target_;QMenu menu(this);menu.addAction(itemNote_->isHidden()?"Add item note…":"Edit item note…",this,[this,target]{if(target_.source==target.source&&target_.scene==target.scene&&target_.item==target.item)editSourceNote(true);});menu.exec(transform_->mapToGlobal(p));
+ });
  auto *presetRow=new QHBoxLayout;
  transformPresets_=new QComboBox(this);transformPresets_->setObjectName("aftermarket-inspect-transform-presets");
  transformPresets_->setEditable(true);transformPresets_->setInsertPolicy(QComboBox::NoInsert);
@@ -94,6 +110,17 @@ SourceInspectorDock::SourceInspectorDock(QMainWindow *main,QString presetFile):Q
  });
  search_=new QLineEdit(this);search_->setPlaceholderText("Search filters…");search_->setClearButtonEnabled(true);root->addWidget(search_);
  filterList_=new QListWidget(this);filterList_->setObjectName("aftermarket-inspect-filter-list");root->addWidget(filterList_,1);
+ attachNoteRows(filterList_,[this](QListWidgetItem *row){editFilterNote(row);});
+ filterList_->setContextMenuPolicy(Qt::CustomContextMenu);
+ connect(filterList_,&QListWidget::customContextMenuRequested,this,[this](const QPoint &p){
+  auto *row=filterList_->itemAt(p);if(!row)return;
+  // A persistent model index survives selection changes, not row removal.
+  const auto id=row->data(Qt::UserRole).toString(),owner=target_.source;
+  QMenu menu(this);menu.addAction(row->data(NoteTextRole).toString().isEmpty()?"Add note…":"Edit note…",this,[this,id,owner]{
+   if(target_.source!=owner)return;
+   for(int i=0;i<filterList_->count();++i)if(filterList_->item(i)->data(Qt::UserRole).toString()==id){editFilterNote(filterList_->item(i));break;}
+  });menu.exec(filterList_->viewport()->mapToGlobal(p));
+ });
  auto *orderRow=new QHBoxLayout;
  up_=new QPushButton(this);up_->setIcon(style()->standardIcon(QStyle::SP_ArrowUp));up_->setObjectName("aftermarket-inspect-filter-up");up_->setAccessibleName("Move filter up");
  down_=new QPushButton(this);down_->setIcon(style()->standardIcon(QStyle::SP_ArrowDown));down_->setObjectName("aftermarket-inspect-filter-down");down_->setAccessibleName("Move filter down");
@@ -135,7 +162,7 @@ void SourceInspectorDock::setPinned(bool pinned){
  const QSignalBlocker block(pin_);pin_->setChecked(pinned_);pin_->setText(pinned_?"Unpin":"Pin");
 }
 void SourceInspectorDock::clearSelection(){
- target_={};setPinned(false);label(heading_,"Select one source");label(detail_,{});label(transform_,{});label(usage_,{});
+ target_={};sourceNote_->hide();itemNote_->hide();setPinned(false);label(heading_,"Select one source");label(detail_,{});label(transform_,{});label(usage_,{});
  if(!filterRows_.isEmpty()||filterList_->count()){filterRows_.clear();updateFilterList();}setTransformAvailable(false);addFilter_->setEnabled(false);removeFilter_->setEnabled(false);up_->setEnabled(false);down_->setEnabled(false);pin_->setEnabled(false);properties_->setEnabled(false);filters_->setEnabled(false);usageButton_->setEnabled(false);
 }
 void SourceInspectorDock::schedule(){if(isVisible()&&!coalesce_.isActive())coalesce_.start();}
@@ -182,6 +209,7 @@ void SourceInspectorDock::refresh(){
  addFilter_->setEnabled(rows.size()<256);
  if(rows.size()>256)rows.clear();
  if(rows!=filterRows_){filterRows_=rows;updateFilterList();}
+ refreshNotes();
 }
 bool SourceInspectorDock::currentTargetStillValid()const{
  if(target_.source.isEmpty())return false;
@@ -260,9 +288,47 @@ void SourceInspectorDock::updateFilterList(){
   if(!icon.isNull())item->setIcon(icon);
   item->setData(Qt::UserRole,row.id);item->setFlags(item->flags()|Qt::ItemIsUserCheckable);
   item->setCheckState(row.enabled?Qt::Checked:Qt::Unchecked);
+  item->setData(NoteTextRole,notes_?notes_->get(noteKey("filter",row.id,target_.source)):QString{});
   if(!current.isEmpty()&&current==row.id)filterList_->setCurrentItem(item);
  }
  const bool selected=filterList_->currentItem()!=nullptr;up_->setEnabled(selected);down_->setEnabled(selected);removeFilter_->setEnabled(selected);
+}
+void SourceInspectorDock::refreshNotes(){
+ if(!notes_)return;
+ const QSignalBlocker block(filterList_);
+ const auto target=target_;
+ OBSSourceAutoRelease source=obs_get_source_by_uuid(target.source.toUtf8().constData());
+ const auto kind=source&&obs_source_get_type(source)==OBS_SOURCE_TYPE_SCENE?"scene":"source";
+ auto update=[this](QToolButton *button,const QString &key){
+  const auto note=notes_->get(key);const auto tip=note.isEmpty()?QString{}:noteTooltip(note);if(button->toolTip()!=tip)button->setToolTip(tip);if(button->isHidden()!=note.isEmpty())button->setVisible(!note.isEmpty());
+ };
+ update(sourceNote_,noteKey(kind,target.source));
+ update(itemNote_,noteKey("item",target.source,target.scene,target.item));
+ for(int i=0;i<filterList_->count();++i){
+  auto *row=filterList_->item(i);
+  const auto note=notes_->get(noteKey("filter",row->data(Qt::UserRole).toString(),target.source));
+  if(row->data(NoteTextRole).toString()!=note)row->setData(NoteTextRole,note);
+ }
+}
+void SourceInspectorDock::editSourceNote(bool item){
+ if(!notes_||!currentTargetStillValid())return;
+ const auto target=target_;const auto collection=noteCollection();
+ OBSSourceAutoRelease source=obs_get_source_by_uuid(target.source.toUtf8().constData());
+ if(!source||obs_source_removed(source))return;
+ QuickFindEntry entry;entry.kind=obs_source_get_type(source)==OBS_SOURCE_TYPE_SCENE?QuickFindEntry::Scene:QuickFindEntry::Source;entry.id=target.source;
+ const auto key=item?noteKey("item",target.source,target.scene,target.item):entryNoteKey(entry);
+ const QPointer<SourceInspectorDock> self(this);
+ editContextNote(this,notes_,key,utf(obs_source_get_name(source))+(item?" · Scene item":" · Shared source"),
+  [self,collection,target,entry,item]{return self&&collection==noteCollection()&&(item?noteItemExists(target):noteEntryExists(entry));},
+  [self]{if(self)self->refreshNotes();});
+}
+void SourceInspectorDock::editFilterNote(QListWidgetItem *row){
+ if(!row||!notes_||!currentTargetStillValid())return;
+ QuickFindEntry entry;entry.kind=QuickFindEntry::Filter;entry.id=row->data(Qt::UserRole).toString();entry.ownerId=target_.source;
+ const auto collection=noteCollection();const QPointer<SourceInspectorDock> self(this);
+ editContextNote(this,notes_,entryNoteKey(entry),row->text()+" · Filter",
+  [self,collection,entry]{return self&&collection==noteCollection()&&noteEntryExists(entry);},
+  [self]{if(self)self->refreshNotes();});
 }
 void SourceInspectorDock::updateUsage(){
  if(target_.source.isEmpty())return;
