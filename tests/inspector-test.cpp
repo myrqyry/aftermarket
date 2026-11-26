@@ -15,6 +15,9 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QTabWidget>
+#include <QGroupBox>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QTimer>
@@ -368,12 +371,40 @@ int main(int argc,char **argv) {
         REQUIRE(tabs&&tabs->count()==7);
         REQUIRE(inspector.windowTitle()=="Aftermarket · Workspace");
         REQUIRE(tabs->tabText(5)=="Dock layouts"&&tabs->tabText(6)=="Cue Deck");
+        inspector.show();app.processEvents();
+        auto *menuOptions=inspector.findChild<QWidget*>("augment-workspace-menu-options");
+        auto *ruleEditor=inspector.findChild<QScrollArea*>("augment-workspace-rule-scroll");
+        REQUIRE(menuOptions&&ruleEditor&&menuOptions->isVisible());
+        REQUIRE(tabs->widget(0)->findChildren<QGroupBox*>().size()>=2);
+        tabs->setCurrentIndex(1);app.processEvents();
+        REQUIRE(!menuOptions->isVisible());
+        REQUIRE(tabs->widget(1)->findChildren<QGroupBox*>().size()>=3);
+        auto *preview=inspector.findChild<QWidget*>("augment-gradient-preview");
+        auto *paletteField=inspector.findChild<QLineEdit*>("augment-gradient-colors");
+        REQUIRE(preview&&paletteField);
+        tabs->setCurrentIndex(2);app.processEvents();
+        const auto initialPreview=preview->grab().toImage();
+        paletteField->setText("#ff0000, #0000ff");app.processEvents();
+        REQUIRE(preview->property("validPalette").toBool()&&preview->grab().toImage()!=initialPreview);
+        paletteField->setText("#80ff0000, #00ff00");app.processEvents();
+        REQUIRE(!preview->property("validPalette").toBool());
+        paletteField->clear();app.processEvents();
+        REQUIRE(preview->property("validPalette").toBool());
+        REQUIRE(c.gradientSettings().isEmpty());
+        tabs->setCurrentIndex(5);app.processEvents();
+        REQUIRE(!inspector.findChild<QWidget*>("augment-workspace-toolbar")->isVisible());
+
         auto *layoutList=tabs->widget(5)->findChild<QListWidget*>("aftermarket-layout-list");
         REQUIRE(layoutList&&layoutList->count()==1);
         auto *checkpoint=tabs->widget(5)->findChild<QPushButton*>("aftermarket-workspace-checkpoints");
         REQUIRE(checkpoint);checkpoint->click();REQUIRE(checkpoints==1);
         auto *cueList=tabs->widget(6)->findChild<QListWidget*>("aftermarket-cue-list");
         REQUIRE(cueList&&cueList->count()==1);
+        auto *steps=tabs->widget(6)->findChild<QListWidget*>("aftermarket-cue-step-preview");
+        REQUIRE(steps&&steps->count()==1&&steps->item(0)->text().contains("Editing"));
+        REQUIRE(steps->selectionMode()==QAbstractItemView::NoSelection);
+        REQUIRE(tabs->widget(5)->findChild<QGroupBox*>("aftermarket-layout-actions"));
+
         auto *runCue=tabs->widget(6)->findChild<QPushButton*>("aftermarket-cue-run");
         REQUIRE(runCue&&runCue->isEnabled());runCue->click();app.processEvents();
         REQUIRE(cues.status().contains("completed",Qt::CaseInsensitive));
@@ -433,6 +464,21 @@ int main(int argc,char **argv) {
         sourceName->setText("Mic; Music");addSource->click();
         sourceName->setText("Desktop");addSource->click();
         REQUIRE(sourceList->count()==2&&pending->text()=="Unapplied changes");
+        auto *sourceFilter=dialog->findChild<QLineEdit*>("augment-knob-source-filter");
+        REQUIRE(sourceFilter);
+        sourceFilter->setText("Mic;");
+        REQUIRE(sourceList->item(0)->isHidden()&&!sourceList->item(1)->isHidden());
+        REQUIRE(sourceList->item(0)->checkState()==Qt::Checked&&sourceList->item(1)->checkState()==Qt::Checked);
+        sourceFilter->clear();
+        REQUIRE(!sourceList->item(0)->isHidden()&&!sourceList->item(1)->isHidden());
+        sourceFilter->setText("Desktop");
+        augment::WidgetSnapshot mixerTarget;
+        mixerTarget.type="VolumeControl";mixerTarget.mixerSource="Mic; Music";
+        inspector.capture(mixerTarget);
+        REQUIRE(sourceFilter->text().isEmpty()&&sourceList->currentItem()&&!sourceList->currentItem()->isHidden());
+        REQUIRE(sourceList->currentItem()->data(Qt::UserRole).toString()=="Mic; Music");
+        inspector.capture(snap);tabs->setCurrentIndex(1);
+
         auto *knobMeters=dialog->findChild<QCheckBox*>("augment-knob-meters");
         REQUIRE(knobMeters&&knobMeters->isChecked());knobMeters->setChecked(false);
         reactive->setChecked(true);meters->setChecked(true);

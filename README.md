@@ -69,7 +69,7 @@ The mixer still belongs to OBS. AudioBus does not implement a second audio engin
 The main **Tools → Aftermarket → Workspace** window contains seven tabs:
 Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts and
 Cue Deck. Quick Find, Command Center and Emergency restore are the other Tools
-commands. Routine preferences remain in OBS Settings.
+commands. Routine preferences remain in OBS Settings. The Workspace uses compact native sections, a plain theme-palette surface, context-specific controls, searchable mixer sources, and a two-pane cue-step preview.
 
 ### Docks and layouts
 

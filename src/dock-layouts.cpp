@@ -14,6 +14,7 @@
 #include <QUuid>
 #include <QDialog>
 #include <QVBoxLayout>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QPushButton>
@@ -230,12 +231,15 @@ QWidget *DockLayouts::createPage(QWidget *owner,std::function<void(QWidget*)> ch
     auto *page=new Page(owner);
     page->setObjectName("aftermarket-dock-layouts-page");
     auto *root=new QVBoxLayout(page);
+    root->setContentsMargins(6,6,6,6);root->setSpacing(5);
     auto *help=new QLabel("Save and switch native OBS dock arrangements. "
         "These snapshots do not change scenes, audio, or recording settings.",page);
     help->setWordWrap(true);root->addWidget(help);
     auto *list=new QListWidget(page);
     list->setObjectName("aftermarket-layout-list");
-    root->addWidget(list,1);
+    auto *saved=new QGroupBox("Saved layouts",page);
+    auto *savedLayout=new QVBoxLayout(saved);savedLayout->setContentsMargins(6,4,6,4);
+    savedLayout->addWidget(list,1);root->addWidget(saved,1);
     auto refresh=[this,list]{
         const QString selected=list->currentItem()?
             list->currentItem()->data(Qt::UserRole).toString():QString{};
@@ -255,23 +259,32 @@ QWidget *DockLayouts::createPage(QWidget *owner,std::function<void(QWidget*)> ch
     auto *load=new QPushButton("Switch to layout",page);
     auto *undoBtn=new QPushButton("Undo switch",page);
     row1->addWidget(save);row1->addWidget(load);row1->addWidget(undoBtn);
-    root->addLayout(row1);
+    savedLayout->addLayout(row1);
     auto row2=new QHBoxLayout;
     auto *renameBtn=new QPushButton("Rename…",page);
     auto *replaceBtn=new QPushButton("Update from current",page);
     auto *deleteBtn=new QPushButton("Delete",page);
     row2->addWidget(renameBtn);row2->addWidget(replaceBtn);row2->addWidget(deleteBtn);
-    root->addLayout(row2);
+    auto *actions=new QGroupBox("Manage layouts",page);
+    actions->setObjectName("aftermarket-layout-actions");
+    auto *actionsLayout=new QVBoxLayout(actions);actionsLayout->setContentsMargins(6,4,6,4);actionsLayout->setSpacing(3);
+    actionsLayout->addLayout(row2);root->addWidget(actions);
+    QVBoxLayout *recovery=nullptr;
+    if(checkpoints||openCollectionManager){
+        auto *group=new QGroupBox("Recovery",page);
+        recovery=new QVBoxLayout(group);recovery->setContentsMargins(6,4,6,4);recovery->setSpacing(3);
+        root->addWidget(group);
+    }
     if(checkpoints){
         auto *checkpointBtn=new QPushButton("Workspace checkpoints…",page);
         checkpointBtn->setObjectName("aftermarket-workspace-checkpoints");
-        root->addWidget(checkpointBtn);
+        recovery->addWidget(checkpointBtn);
         QObject::connect(checkpointBtn,&QPushButton::clicked,page,[checkpoints,page]{checkpoints(page);});
     }
     if(openCollectionManager){
         auto *managerBtn=new QPushButton("Open Scene Collection Manager…",page);
         managerBtn->setObjectName("aftermarket-open-collection-manager");
-        root->addWidget(managerBtn);
+        recovery->addWidget(managerBtn);
         QObject::connect(managerBtn,&QPushButton::clicked,page,[openCollectionManager,page]{
             QTimer::singleShot(0,page,openCollectionManager);
         });
@@ -339,7 +352,12 @@ QWidget *DockLayouts::createPage(QWidget *owner,std::function<void(QWidget*)> ch
             QMessageBox::warning(page,"Cannot switch layout","One or more saved docks are missing.");
         undoBtn->setEnabled(canUndo());
     });
-    page->refresh=[this,refresh,undoBtn]{refresh();undoBtn->setEnabled(canUndo());};
+    auto selectionState=[=]{
+        const bool hasSelection=list->currentItem()!=nullptr;
+        for(auto *button:{load,renameBtn,replaceBtn,deleteBtn})button->setEnabled(hasSelection);
+    };
+    QObject::connect(list,&QListWidget::currentRowChanged,page,selectionState);
+    page->refresh=[this,refresh,undoBtn,selectionState]{refresh();undoBtn->setEnabled(canUndo());selectionState();};
     page->refresh();
     return page;
 }

@@ -102,21 +102,21 @@ remain in the Workspace; the regular preferences now have their own home.
 ### Unified Workspace
 
 The native Tools menu has one Aftermarket submenu: Workspace, Find Sources, Command Center, and Emergency restore. The Workspace contains Menus & widgets, Mixer, Gradients, Panels, Action strip, Dock layouts, and Cue Deck tabs. In emergency safe mode only Resume UI customizations is visible. Open **Tools → Aftermarket → Workspace** for advanced per-target editing and
-richer visual editors. Its specialized pages remain available for:
+richer visual editors. The Workspace uses the active theme palette without patterned chrome, compact native sections and contextual toolbar/Apply controls. Dense pages scroll at smaller window sizes while their primary actions stay reachable. Its specialized pages remain available for:
 
 - **Menus & widgets:** Pick target with an adjustable 2–10 second delay,
   open a context menu and hover an action. Filter captured labels, see saved
   icon previews, choose an icon/color/animation and save a rule. Technical
   geometry, ancestry and generated JSON are available through Show technical
-  details; ordinary widget capture remains read-only.
+  details in the scrolling rule editor; Save rule, Remove exact rule and Copy JSON remain outside that scroll area. Ordinary widget capture remains read-only.
 - **Mixer:** choose all current/future mixer sources or check individual
-  live source names. Refresh the actual mixer list or add an exact offline
+  live source names. Filter by name without changing checked sources. Refresh the actual mixer list or add an exact offline
   name, including names containing semicolons. Select knobs, integrated
   peak meters, per-source reactive gradients or native meter color pulses.
   Picking a mixer widget opens this page at its source, without changing it.
 - **Gradients:** enable track categories, select theme palette or enter
   custom colors, add colors with the native color picker, preview the
-  sequence and adjust loop duration.
+  sequence and adjust loop duration. The draft preview shares the same theme-aware renderer as native Settings; the first picked color is paired with the theme accent. Use theme clears custom colors.
 - **Panels:** collapse/expand eligible native docks, refresh the list or
   expand all. Optionally move the existing OBS preview and its source toolbar
   into a movable, floatable, closable native dock, or restore it to the center.
@@ -129,7 +129,9 @@ richer visual editors. Its specialized pages remain available for:
 
 - **Action strip:** show or hide the strip, review configured buttons and open its editor.
 - **Dock layouts:** manage saved arrangements, undo a switch and open workspace checkpoints.
-- **Cue Deck:** create, edit, run and stop named sequences of native actions.
+- **Cue Deck:** create, edit, run and stop named sequences of native actions, with a numbered, scrollable step preview beside the selected saved cue.
+
+![Menu rule editor with a captured native File menu](screenshots/readme/workspace-menus.png)
 
 ![Mixer page in OBS](screenshots/readme/workspace-mixer.png)
 
@@ -408,7 +410,7 @@ contents are preserved, not their exact pixel geometry.
 
 Use **Tools → Aftermarket → Workspace → Dock layouts** to save, rename, update, switch and undo native dock arrangements. Add a saved layout to the Action Strip for one-click switching.
 
-![Workspace Dock layouts tab](screenshots/readme/dock-layouts.webp)
+![Earlier Workspace Dock layouts tab with saved arrangements](screenshots/readme/dock-layouts.webp)
 
 ### Source Dock integration
 
@@ -537,7 +539,7 @@ restore removes the shortcut along with other Aftermarket UI additions.
 **OBS Settings → Aftermarket → Action strip** controls visibility and
 opens the button editor. The **Action strip** tab in Tools → Aftermarket → Workspace also opens the same editor.
 
-![Action strip tab inside the unified Workspace](screenshots/readme/workspace-action-strip.webp)
+![Earlier Action strip tab with configured items](screenshots/readme/workspace-action-strip.webp)
 
 Choose
 **Show OBS action strip** to place your configured items at the
@@ -592,7 +594,7 @@ dock late, and stops retrying on emergency recovery. It does not copy Timeline's
 
 **Tools → Aftermarket → Workspace → Cue Deck** opens the embedded cue manager.
 
-![Cue Deck tab inside the unified Workspace](screenshots/readme/workspace-cues.webp)
+![Earlier Cue Deck tab with populated cues](screenshots/readme/workspace-cues.webp)
 Cues are named ordered action sequences—not new OBS scenes or copies of any
 third-party animation engine. Use **New cue**, enter a name, then add steps:
 
@@ -1059,7 +1061,7 @@ Open **Tools → Aftermarket → Workspace → Gradients**. Turn on **Enable gra
 - Sliders and media seek bars: gradient follows native slider position, including vertical faders, inverted appearance and right-to-left geometry. The native thumb and input stay intact.
 - Determinate progress bars: fill follows the widget's actual range and value; text-bearing bars use a thin accent strip to preserve native text. Indeterminate, empty, hidden and disabled tracks are not painted.
 - Dock titlebar accents: a two-logical-pixel gradient underline on supported native dock titles. The original title, glyphs, menu controls and drag targets are unchanged. Floating, vertical and custom titlebars are excluded.
-- **Gradient dock headers:** a subtle full-width palette-derived background wash, using the same animation, colors, loop duration and Motion preference. Native title lettering and child controls are retained. Full-header mode takes precedence over the underline if both are selected. Find it in Gradients in Workspace or Mixer in OBS Settings → Aftermarket. Off by default.
+- **Gradient dock headers:** a subtle full-width palette-derived background wash, using the same animation, colors, loop duration and Motion preference. Native title lettering and child controls are retained. Full-header mode takes precedence over the underline if both are selected. Find it in Gradients in Workspace or Gradients in OBS Settings → Aftermarket. Off by default.
 - Colors: leave blank for the native palette, or specify 2–6 opaque colors separated by commas. Loop duration is adjustable from 400–12000 ms.
 - Animation: **Flow** (existing behavior), **Reverse flow**, **Ping-pong**, **Breathing** (stationary gradient with changing brightness), **Shimmer** (a narrow sweeping highlight using the first two palette colors), or **Static** (no decorative animation). The pattern applies to slider fills, progress accents, rotary gain rings and title accents together; it does not change the native meter scale or actual values.
 

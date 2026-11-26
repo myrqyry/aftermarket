@@ -1,6 +1,8 @@
 #include "cue-deck.h"
 #include <QDialog>
 #include <QFormLayout>
+#include <QSplitter>
+#include <QGroupBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -334,13 +336,27 @@ QWidget *CueDeck::createPage(QWidget *parent){
     manager_=dialog;
     dialog->setObjectName("aftermarket-cue-deck-manager");
     auto *root=new QVBoxLayout(dialog);
-    auto *title=new QLabel("Cue Deck · native layouts + OBS and plugin actions",dialog);
-    root->addWidget(title);
-    auto *list=new QListWidget(dialog);
-    list->setObjectName("aftermarket-cue-list");
-    root->addWidget(list,1);
-    auto *detail=new QLabel("Select a cue to inspect its steps.",dialog);
-    detail->setWordWrap(true);root->addWidget(detail);
+    root->setContentsMargins(6,6,6,6);root->setSpacing(5);
+    auto *title=new QLabel("Sequence native layouts, OBS actions and delays.",dialog);
+    title->setWordWrap(true);root->addWidget(title);
+    auto *split=new QSplitter(Qt::Horizontal,dialog);split->setChildrenCollapsible(false);
+    auto *cueGroup=new QGroupBox("Saved cues",split);
+    auto *cueLayout=new QVBoxLayout(cueGroup);cueLayout->setContentsMargins(6,4,6,4);
+    auto *list=new QListWidget(cueGroup);
+    list->setObjectName("aftermarket-cue-list");list->setTextElideMode(Qt::ElideRight);
+    cueLayout->addWidget(list,1);
+    auto *stepGroup=new QGroupBox("Cue steps",split);
+    auto *stepLayout=new QVBoxLayout(stepGroup);stepLayout->setContentsMargins(6,4,6,4);
+    auto *detail=new QListWidget(stepGroup);
+    detail->setObjectName("aftermarket-cue-step-preview");
+    detail->setSelectionMode(QAbstractItemView::NoSelection);
+    detail->setFocusPolicy(Qt::NoFocus);
+    detail->setWordWrap(true);detail->setTextElideMode(Qt::ElideNone);
+    detail->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    detail->setAccessibleName("Steps of selected cue");
+    stepLayout->addWidget(detail,1);
+    split->addWidget(cueGroup);split->addWidget(stepGroup);split->setSizes({240,380});
+    root->addWidget(split,1);
     auto *status=new QLabel(status_,dialog);
     status->setObjectName("aftermarket-cue-status");
     status->setWordWrap(true);root->addWidget(status);
@@ -352,7 +368,8 @@ QWidget *CueDeck::createPage(QWidget *parent){
     run->setObjectName("aftermarket-cue-run");
     auto *stop=new QPushButton("Stop",dialog);
     stop->setObjectName("aftermarket-cue-stop");
-    for(auto *b:{create,edit,remove,run,stop})buttons->addWidget(b);
+    for(auto *b:{create,edit,remove})buttons->addWidget(b);
+    buttons->addStretch();buttons->addWidget(run);buttons->addWidget(stop);
     root->addLayout(buttons);
     QPointer<QWidget> safe=dialog;
     auto selected=[list](){auto *item=list->currentItem();return item?item->data(Qt::UserRole).toString():QString{};};
@@ -378,7 +395,11 @@ QWidget *CueDeck::createPage(QWidget *parent){
             const auto hotkeys=hotkeys_?hotkeys_():QList<CueChoice>{};
             for(const auto &step:it->steps)labels<<stepLabel(step,layouts,hotkeys);
         }
-        detail->setText(labels.isEmpty()?"No steps":labels.join("  →  ").left(2000));
+        detail->clear();
+        for(int i=0;i<labels.size();++i){
+            auto *step=new QListWidgetItem(QString("%1.  %2").arg(i+1).arg(labels.at(i)),detail);
+            step->setToolTip(labels.at(i));
+        }
         edit->setEnabled(!running_&&it!=cues_.end());
         remove->setEnabled(!running_&&it!=cues_.end());
         run->setEnabled(!running_&&it!=cues_.end()&&!it->steps.isEmpty());

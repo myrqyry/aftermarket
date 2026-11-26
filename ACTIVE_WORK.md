@@ -4174,3 +4174,26 @@ gradient screenshots. Evidence /tmp/am-settings-polish.TmZ5x0 and
 /tmp/am-settings-polish.fpfhUp. Refreshed relevant docs screenshots.
 Color picker uses native QColorDialog; selection interaction itself
 not separately automated. Existing unrelated plugin.cpp comment untouched.
+
+## Advanced Workspace polish — 2026-11-25
+All seven existing tabs preserved. Scoped plain palette window surface
+removes visually noisy background pattern only from the Workspace.
+Menu-only options in Menus & widgets, Pick target in menu/mixer contexts,
+Motion in menu/mixer/gradients, shared Apply/Reload only Mixer/Gradients.
+Menu rule editor uses native appearance and placement groups with
+scrollable technical details and persistent Save/Remove/Copy actions.
+Mixer has grouped controls and a source filter preserving checked IDs,
+including exact offline names; picking a mixer source clears stale search.
+Shared palette-preview.h used by native Settings and Workspace; same
+opaque color validation, first picked color paired with theme accent.
+Panels and Action strip spacing/grouping; Dock layouts grouped saved,
+management, recovery; Cue Deck has a split read-only numbered step list.
+No configuration schema or saved behavior changes. RED/GREEN regressions,
+46/46 CTests and 7/7 native checks each Fluffy Dark and Latte Blue at
+820x590 and 640x480: no horizontal overflow, no scroll at default,
+native menu capture, contextual toolbar/footer and draft palette reset.
+Evidence /tmp/am-workspace-polish.vSnel1 and .46Vf1S. Inspected dark
+screenshots. Later picked-source filter fix verified by full regression
+suite. Four docs screenshots refreshed; older populated cue/layout/strip
+screenshots retained as earlier examples. Unrelated plugin.cpp comment
+left unstaged. No push.

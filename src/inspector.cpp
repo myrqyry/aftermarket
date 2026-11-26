@@ -16,6 +16,9 @@
 #include <QSlider>
 #include "motion.h"
 #include "gradient.h"
+#include "palette-preview.h"
+#include <QScrollArea>
+#include <QTabBar>
 #include "panels.h"
 #include "property-sections.h"
 #include "row-stripes.h"
@@ -287,6 +290,31 @@ QStringList mixerSources(QWidget *host) {
     }
     result.sort();return result;
 }
+// Native theme sections, with predictable layout spacing and no custom
+// foreground/background colors. Keep the controls themselves native.
+QVBoxLayout *compactSection(QWidget *parent,QVBoxLayout *layout,const QString &title,int stretch=0){
+    auto *group=new QGroupBox(title,parent);
+    auto *content=new QVBoxLayout(group);
+    content->setContentsMargins(6,4,6,4);content->setSpacing(3);
+    layout->addWidget(group,stretch);
+    return content;
+}
+QFormLayout *compactForm(){
+    auto *form=new QFormLayout;
+    form->setContentsMargins(0,0,0,0);
+    form->setHorizontalSpacing(8);form->setVerticalSpacing(4);
+    form->setLabelAlignment(Qt::AlignRight|Qt::AlignVCenter);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    return form;
+}
+QScrollArea *workspaceScroll(QWidget *content,QWidget *parent){
+    auto *area=new QScrollArea(parent);
+    area->setFrameShape(QFrame::NoFrame);
+    area->setWidgetResizable(true);
+    area->setWidget(content);
+    return area;
+}
 struct SettingsPages {
     QJsonObject baseline;
     std::function<void()> refreshSources;
@@ -296,8 +324,8 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto state=std::make_shared<SettingsPages>();
     auto *mixer=new QWidget(tabs);auto *ml=new QVBoxLayout(mixer);
     auto *gradient=new QWidget(tabs);auto *gl=new QVBoxLayout(gradient);
-    ml->setContentsMargins(12,12,12,12);gl->setContentsMargins(12,12,12,12);
-    ml->setSpacing(8);gl->setSpacing(8);
+    ml->setContentsMargins(6,6,6,6);gl->setContentsMargins(6,6,6,6);
+    ml->setSpacing(5);gl->setSpacing(5);
     auto heading=[](const QString &title,const QString &desc,QVBoxLayout *layout,QWidget *parent){
         auto *label=new QLabel(title,parent);
         label->setObjectName(title=="Mixer controls"?"augment-heading-mixer":"augment-heading-gradient");
@@ -308,40 +336,57 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     auto check=[](const QString &label,const QString &id,QVBoxLayout *layout,QWidget *parent){
         auto *w=new QCheckBox(label,parent);w->setObjectName(id);layout->addWidget(w);return w;
     };
-    heading("Mixer controls","Choose which channels use rotary controls. The original OBS gain and audio behavior stay intact.",ml,mixer);
-    auto *knobs=check("Replace mixer faders with knobs","augment-gradient-knobs",ml,mixer);
-    auto *knobMeters=check("Integrate peak meter into knob","augment-knob-meters",ml,mixer);
+    heading("Mixer controls","Native OBS gain and routing remain unchanged.",ml,mixer);
+    auto *gain=compactSection(mixer,ml,"Gain");
+    auto *gainParent=gain->parentWidget();
+    auto *knobs=check("Replace mixer faders with knobs","augment-gradient-knobs",gain,gainParent);
+    auto *knobMeters=check("Integrate peak meter into knob","augment-knob-meters",gain,gainParent);
     knobMeters->setToolTip("Outer ring: maximum-channel peak. Inner ring: gain. Disable to keep detailed native meters.");
-    auto *all=check("All mixer sources","augment-knob-all",ml,mixer);
-    auto *selectionHint=new QLabel("Check the sources you want, or double-click a row to toggle it.",mixer);selectionHint->setWordWrap(true);ml->addWidget(selectionHint);
-    auto *sources=new QListWidget(mixer);sources->setObjectName("augment-knob-source-list");ml->addWidget(sources,1);state->sources=sources;
+    auto *sourceGroup=compactSection(mixer,ml,"Source selection",1);
+    auto *sourceParent=sourceGroup->parentWidget();
+    auto *all=check("All mixer sources","augment-knob-all",sourceGroup,sourceParent);
+    auto *selectionHint=new QLabel("Check the sources you want, or double-click a row to toggle it.",mixer);selectionHint->setWordWrap(true);sourceGroup->addWidget(selectionHint);
+    auto *sourceFilter=new QLineEdit(sourceParent);
+    sourceFilter->setObjectName("augment-knob-source-filter");
+    sourceFilter->setPlaceholderText("Filter mixer sources…");sourceFilter->setClearButtonEnabled(true);
+    sourceGroup->addWidget(sourceFilter);
+    auto *sources=new QListWidget(mixer);sources->setObjectName("augment-knob-source-list");sources->setMinimumHeight(72);sources->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Ignored);sourceGroup->addWidget(sources,1);state->sources=sources;
     auto *sourceRow=new QHBoxLayout;
     auto *name=new QLineEdit(mixer);name->setObjectName("augment-knob-add-name");name->setPlaceholderText("Exact source name (including offline sources)");
     auto *add=new QPushButton("Add source",mixer);add->setObjectName("augment-knob-add");
     auto *refresh=new QPushButton("Refresh sources",mixer);refresh->setObjectName("augment-knob-refresh");
-    sourceRow->addWidget(name,1);sourceRow->addWidget(add);sourceRow->addWidget(refresh);ml->addLayout(sourceRow);
-    auto *reactive=check("Audio-reactive mixer gradients","augment-gradient-reactive",ml,mixer);
-    auto *meters=check("Pulse native meter colors","augment-gradient-meters",ml,mixer);
-    auto *audioHint=new QLabel("Reactive gradients need enabled gradient tracks, sliders and Motion. Integrated peak meters work even with Motion off.",mixer);
-    audioHint->setWordWrap(true);ml->addWidget(audioHint);
-    heading("Gradient tracks","Use the active theme palette or a custom color sequence. Motion controls decorative animation globally.",gl,gradient);
-    auto *enable=check("Enable gradient tracks","augment-gradient-enabled",gl,gradient);
-    auto *sliders=check("Sliders and rotary rings","augment-gradient-sliders",gl,gradient);
-    auto *progress=check("Progress bars","augment-gradient-progress",gl,gradient);
-    auto *titlebars=check("Dock titlebar accents","augment-gradient-titlebars",gl,gradient);
-    auto *titlebarFill=check("Gradient dock headers","augment-gradient-titlebar-fill",gl,gradient);
+    sourceRow->addWidget(name,1);sourceRow->addWidget(add);sourceRow->addWidget(refresh);sourceGroup->addLayout(sourceRow);
+    auto *effects=compactSection(mixer,ml,"Audio effects");
+    auto *reactive=check("Audio-reactive mixer gradients","augment-gradient-reactive",effects,effects->parentWidget());
+    auto *meters=check("Pulse native meter colors","augment-gradient-meters",effects,effects->parentWidget());
+    reactive->setToolTip("Requires enabled gradient tracks, sliders and Motion. Integrated peak meters work with Motion off.");
+    heading("Gradient tracks","Use the theme palette or customize the color sequence.",gl,gradient);
+    auto *surfaces=compactSection(gradient,gl,"Surfaces");
+    auto *surfaceParent=surfaces->parentWidget();
+    auto *enable=check("Enable gradient tracks","augment-gradient-enabled",surfaces,surfaceParent);
+    auto *sliders=check("Sliders and rotary rings","augment-gradient-sliders",surfaces,surfaceParent);
+    auto *progress=check("Progress bars","augment-gradient-progress",surfaces,surfaceParent);
+    auto *titlebars=check("Dock titlebar accents","augment-gradient-titlebars",surfaces,surfaceParent);
+    auto *titlebarFill=check("Gradient dock headers","augment-gradient-titlebar-fill",surfaces,surfaceParent);
     titlebarFill->setToolTip("Tint the whole native dock header instead of only its underline.");
-    auto *form=new QFormLayout;
+    auto *paletteGroup=compactSection(gradient,gl,"Palette and motion");
+    auto *form=compactForm();
     auto *pattern=new QComboBox(gradient);pattern->setObjectName("augment-gradient-pattern");
     for(const auto &id:GradientSpec::patterns())pattern->addItem(GradientSpec::patternLabel(id),id);
     form->addRow("Animation",pattern);
-    auto *colors=new QLineEdit(gradient);colors->setObjectName("augment-gradient-colors");colors->setPlaceholderText("Theme palette (or 2–6 colors, comma-separated)");
+    auto *colors=new QLineEdit(gradient);colors->setObjectName("augment-gradient-colors");colors->setPlaceholderText("Theme palette");colors->setToolTip("2–6 opaque colors, comma-separated; empty uses the theme.");
     auto *colorRow=new QHBoxLayout;auto *pickColor=new QPushButton("Add color…",gradient);
-    auto *theme=new QPushButton("Use theme",gradient);colorRow->addWidget(colors,1);colorRow->addWidget(pickColor);colorRow->addWidget(theme);form->addRow("Colors",colorRow);
+    auto *theme=new QPushButton("Use theme",gradient);
+    pickColor->setObjectName("augment-gradient-add-color");theme->setObjectName("augment-gradient-use-theme");
+    form->addRow("Colors",colors);
+    colorRow->addStretch();colorRow->addWidget(pickColor);colorRow->addWidget(theme);
     auto *period=new QSpinBox(gradient);period->setObjectName("augment-gradient-period");period->setRange(400,12000);period->setSingleStep(100);period->setSuffix(" ms");form->addRow("Loop duration",period);
-    gl->addLayout(form);
-    heading("Preview selection","Colorway-aware native transform outlines and round visual handles. Original OBS dragging and hit targets stay unchanged.",gl,gradient);
-    auto *modernTransforms=check("Modern transform frame and handles","augment-modern-transform",gl,gradient);
+    paletteGroup->addLayout(form);
+    auto *preview=new PalettePreview(paletteGroup->parentWidget());preview->setObjectName("augment-gradient-preview");
+    paletteGroup->addWidget(preview);paletteGroup->addLayout(colorRow);
+    auto *colorHint=new QLabel(paletteGroup->parentWidget());colorHint->setWordWrap(true);paletteGroup->addWidget(colorHint);
+    auto *selection=compactSection(gradient,gl,"Preview selection");
+    auto *modernTransforms=check("Modern transform frame and handles","augment-modern-transform",selection,selection->parentWidget());
     modernTransforms->setChecked(controller.modernTransformFrame());
     modernTransforms->setToolTip("Use the active theme accent for OBS's native selection, crop, and hover colors, with a visual-only rounded-handle layer. Off restores the previous OBS accessibility colors.");
     QObject::connect(modernTransforms,&QCheckBox::toggled,gradient,[&controller,modernTransforms,status](bool value){
@@ -354,10 +399,17 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
             status->setText(error);
         }
     });
-    auto *preview=new QLabel(gradient);preview->setObjectName("augment-gradient-preview");preview->setMinimumHeight(32);preview->setAlignment(Qt::AlignCenter);gl->addWidget(preview);
-    auto *colorHint=new QLabel(gradient);colorHint->setWordWrap(true);gl->addWidget(colorHint);gl->addStretch();
-    tabs->addTab(mixer,"Mixer");tabs->addTab(gradient,"Gradients");
+    gl->addStretch();
+    tabs->addTab(workspaceScroll(mixer,tabs),"Mixer");tabs->addTab(workspaceScroll(gradient,tabs),"Gradients");
     auto checkedNames=[=]{QStringList result;for(int i=0;i<sources->count();++i)if(sources->item(i)->checkState()==Qt::Checked)result.append(sources->item(i)->data(Qt::UserRole).toString());result.sort();return result;};
+    auto filterSources=[=]{
+        const auto text=sourceFilter->text();
+        for(int i=0;i<sources->count();++i){
+            auto *item=sources->item(i);
+            item->setHidden(!item->data(Qt::UserRole).toString().contains(text,Qt::CaseInsensitive));
+        }
+    };
+    QObject::connect(sourceFilter,&QLineEdit::textChanged,mixer,filterSources);
     auto populate=[=](QStringList chosen,QStringList extra={}){
         const QSignalBlocker block(sources);auto live=mixerSources(host);auto names=live;
         for(const auto &n:chosen+extra)if(!names.contains(n))names.append(n);
@@ -366,31 +418,29 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
             auto *item=new QListWidgetItem(n+(live.contains(n)?"":"  ·  Not in current mixer"),sources);
             item->setData(Qt::UserRole,n);item->setFlags(item->flags()|Qt::ItemIsUserCheckable);item->setCheckState(chosen.contains(n)?Qt::Checked:Qt::Unchecked);
         }
+        filterSources();
     };
     state->refreshSources=[=]{populate(checkedNames());};
     auto enablement=[=]{
         all->setEnabled(knobs->isChecked());knobMeters->setEnabled(knobs->isChecked());
-        const bool specific=knobs->isChecked()&&!all->isChecked();sources->setEnabled(specific);name->setEnabled(specific);add->setEnabled(specific);
+        const bool specific=knobs->isChecked()&&!all->isChecked();sources->setEnabled(specific);sourceFilter->setEnabled(specific);name->setEnabled(specific);add->setEnabled(specific);
         meters->setEnabled(reactive->isChecked());
-        selectionHint->setText(all->isChecked()?"All current and future mixer sources are included. Uncheck All mixer sources to choose individually.":"Check the sources you want, or double-click a row to toggle it.");
+        selectionHint->setText(all->isChecked()?"All current and future sources.":"Check sources or add an exact offline name.");
     };
     auto updatePreview=[=]{
-        QJsonArray arr;for(const auto &v:colors->text().split(',',Qt::SkipEmptyParts))arr.append(v.trimmed());
-        GradientSpec spec;bool valid=GradientSpec::parse(QJsonObject{{"colors",arr}},spec);
-        if(!colors->text().trimmed().isEmpty()&&arr.isEmpty())valid=false;
-        if(!valid){preview->clear();colorHint->setText("Enter 2–6 valid opaque colors, or clear the field for the theme palette.");return;}
-        auto palette=spec.colors;
-        if(palette.isEmpty()){auto p=gradient->palette();palette={p.color(QPalette::Highlight),p.color(QPalette::Highlight).lighter(155),p.color(QPalette::Link),p.color(QPalette::Highlight)};}
-        if(palette.first()!=palette.last())palette.append(palette.first());
-        QPixmap image(320,24);image.fill(Qt::transparent);QPainter p(&image);p.setRenderHint(QPainter::Antialiasing);
-        QLinearGradient brush(0,0,image.width(),0);for(int i=0;i<palette.size();++i)brush.setColorAt(double(i)/(palette.size()-1),palette.at(i));
-        p.setPen(Qt::NoPen);p.setBrush(brush);p.drawRoundedRect(image.rect(),12,12);p.end();preview->setPixmap(image);colorHint->setText(spec.colors.isEmpty()?"Using the active Qt theme palette.":"Custom palette preview. Timing is set by loop duration.");
+        const auto text=colors->text().trimmed();
+        preview->setColors(text);
+        const auto valid=preview->property("validPalette").toBool();
+        pickColor->setEnabled(text.isEmpty()||text.split(',').size()<6);
+        theme->setEnabled(!text.isEmpty());
+        colorHint->setText(text.isEmpty()?"Using active theme colors.":valid?
+            "Custom palette. Motion controls animation.":"Enter 2–6 valid opaque colors, or use the theme.");
     };
-    auto *buttons=new QHBoxLayout(footer);buttons->setContentsMargins(0,3,0,3);footer->setMinimumHeight(40);footer->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
+    auto *buttons=new QHBoxLayout(footer);buttons->setContentsMargins(0,1,0,1);buttons->setSpacing(5);footer->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Fixed);
     auto *pending=new QLabel("Settings saved",footer);pending->setObjectName("augment-settings-state");
     auto *reload=new QPushButton("Reload saved settings",footer);reload->setObjectName("augment-settings-reload");
     auto *apply=new QPushButton("Apply changes",footer);apply->setObjectName("augment-gradient-apply");
-    reload->setMinimumHeight(30);apply->setMinimumHeight(30);
+    apply->setDefault(false);apply->setAutoDefault(false);reload->setAutoDefault(false);
     buttons->addWidget(pending);buttons->addStretch();buttons->addWidget(reload);buttons->addWidget(apply);
     auto draft=[=]{
         auto next=state->baseline;
@@ -429,7 +479,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     QObject::connect(theme,&QPushButton::clicked,colors,&QLineEdit::clear);
     QObject::connect(pickColor,&QPushButton::clicked,gradient,[=]{
         const auto color=QColorDialog::getColor(gradient->palette().color(QPalette::Highlight),gradient,"Add gradient color");
-        if(color.isValid())colors->setText(colors->text().trimmed().isEmpty()?color.name():colors->text()+", "+color.name());
+        if(color.isValid())colors->setText(colors->text().trimmed().isEmpty()?color.name()+", "+gradient->palette().color(QPalette::Highlight).name():colors->text()+", "+color.name());
     });
     QObject::connect(reload,&QPushButton::clicked,footer,[=]{load();status->setText("Reloaded saved mixer and gradient settings.");});
     QObject::connect(apply,&QPushButton::clicked,footer,[=,&controller]{
@@ -469,6 +519,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     // font weights inside this plugin-owned dialog: inherit the theme's
     // actual font family, font size, palette, borders and control styling.
     setStyleSheet(QStringLiteral(
+        "QDialog#aftermarket-inspector { background-image: none; background: palette(window); }"
         "QLabel, QCheckBox, QComboBox, QLineEdit, QListWidget, "
         "QPlainTextEdit, QSpinBox, QPushButton, QToolButton { font-weight: normal; }"
         "QTabBar::tab { font-weight: normal; }"
@@ -479,11 +530,15 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     resize(820,590);
     setMinimumSize(570,420);
     auto *root=new QVBoxLayout(this);
-    root->setContentsMargins(11,11,11,11);root->setSpacing(7);
-    auto *toolbar=new QHBoxLayout;
+    root->setContentsMargins(6,6,6,6);root->setSpacing(5);
+    auto *toolbarHost=new QWidget(this);toolbarHost->setObjectName("augment-workspace-toolbar");
+    auto *toolbar=new QHBoxLayout(toolbarHost);toolbar->setContentsMargins(0,0,0,0);toolbar->setSpacing(5);
+    auto *menuOptions=new QWidget(this);menuOptions->setObjectName("augment-workspace-menu-options");
+    auto *optionsLayout=new QHBoxLayout(menuOptions);optionsLayout->setContentsMargins(0,0,0,0);optionsLayout->setSpacing(5);
     ui->pick=new QPushButton("Pick target",this);
     ui->pick->setObjectName("augment-pick");
-    ui->status=new QLabel("Click Pick target, then open a context menu and hover an action before the timer expires.",this);
+    ui->pick->setToolTip("Pick target, then open a context menu and hover an action before the timer expires.");
+    ui->status=new QLabel("Ready. Pick a target to edit menu artwork or inspect a widget.",this);
     ui->status->setWordWrap(true);ui->status->setTextFormat(Qt::PlainText);
     toolbar->addWidget(ui->pick);toolbar->addStretch();
     ui->motion=new QCheckBox("Motion",this);ui->motion->setObjectName("augment-motion");
@@ -491,7 +546,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->motion->setChecked(controller.motionEnabled());
     ui->compactMenus=new QCheckBox("Compact menus",this);ui->compactMenus->setObjectName("augment-compact-menus");
     ui->compactMenus->setToolTip("Tighten long menus into visible columns. Only explicitly selected actions enter More actions. Reopen a menu to apply.");
-    ui->compactMenus->setChecked(controller.compactMenusEnabled());toolbar->addWidget(ui->compactMenus);
+    ui->compactMenus->setChecked(controller.compactMenusEnabled());optionsLayout->addWidget(ui->compactMenus);
     if(compactBar){
         auto *main=qobject_cast<QMainWindow*>(parent);
         auto *bar=main?main->menuBar():nullptr;
@@ -501,7 +556,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
             toggle->setToolTip("Replace the native top-level OBS menu labels with one hamburger menu. Alt+M opens the original menus. Reversible.");
             toggle->setAccessibleName("Compact hamburger menu bar");
             toggle->setChecked(controller.hamburgerMenuBarEnabled());
-            toolbar->addWidget(toggle);
+            optionsLayout->addWidget(toggle);
             QPointer<MenuBarCompact> safe(compactBar);
             QPointer<QMenuBar> safeBar(bar);
             connect(toggle,&QCheckBox::toggled,this,
@@ -535,10 +590,12 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
         }
     });
     ui->pickDelay=new QSpinBox(this);ui->pickDelay->setRange(2,10);ui->pickDelay->setValue(4);ui->pickDelay->setSuffix(" s");ui->pickDelay->setToolTip("Time to open a menu or hover a widget");toolbar->insertWidget(1,ui->pickDelay);
-    root->addLayout(toolbar);
-    ui->tabs=new QTabWidget(this);ui->tabs->setObjectName("augment-workspace");root->addWidget(ui->tabs,1);
-    auto *menus=new QWidget(ui->tabs);auto *menuLayout=new QVBoxLayout(menus);menuLayout->setContentsMargins(8,8,8,8);menuLayout->setSpacing(6);
+    root->addWidget(toolbarHost);
+    ui->tabs=new QTabWidget(this);ui->tabs->setObjectName("augment-workspace");ui->tabs->setUsesScrollButtons(true);ui->tabs->tabBar()->setExpanding(false);root->addWidget(ui->tabs,1);
+    auto *menus=new QWidget(ui->tabs);auto *menuLayout=new QVBoxLayout(menus);menuLayout->setContentsMargins(6,6,6,6);menuLayout->setSpacing(4);
     ui->tabs->addTab(menus,"Menus & widgets");
+    menuLayout->addWidget(menuOptions);
+    optionsLayout->addStretch();
     auto *tooltipRow=new QHBoxLayout;
     tooltipRow->addWidget(new QLabel("Maximum tooltip width",menus));
     ui->tooltipWidth=new QComboBox(menus);ui->tooltipWidth->setObjectName("augment-tooltip-width");
@@ -578,42 +635,49 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
         if(ui->actions->currentRow()<0)for(int i=0;i<ui->actions->count();++i)if(!ui->actions->item(i)->isHidden()){ui->actions->setCurrentRow(i);break;}
     });
     ui->actions=new QListWidget(left);ui->actions->setObjectName("augment-actions");ll->addWidget(ui->actions,1);
-    auto *right=new QWidget(split);auto *rl=new QVBoxLayout(right);rl->setContentsMargins(5,0,0,0);rl->setSpacing(5);
+    auto *editor=new QWidget(split);auto *editorLayout=new QVBoxLayout(editor);editorLayout->setContentsMargins(0,0,0,0);editorLayout->setSpacing(4);
+    auto *right=new QWidget;auto *rl=new QVBoxLayout(right);rl->setContentsMargins(2,0,2,0);rl->setSpacing(5);
+    auto *ruleScroll=workspaceScroll(right,editor);ruleScroll->setObjectName("augment-workspace-rule-scroll");
+    editorLayout->addWidget(ruleScroll,1);
+    auto *art=compactSection(right,rl,"Appearance");
+    auto *artForm=compactForm();
     auto *iconRow=new QHBoxLayout;
     ui->sample=new QLabel(right);ui->sample->setFixedSize(32,32);ui->sample->setAlignment(Qt::AlignCenter);
     ui->icons=new QComboBox(right);ui->icons->setObjectName("augment-icon");ui->icons->setIconSize(QSize(18,18));
     for (auto name:iconNames()) ui->icons->addItem(previewIcon(name,palette().color(QPalette::Text)),name);
-    iconRow->addWidget(ui->sample);iconRow->addWidget(ui->icons,1);rl->addLayout(iconRow);
+    iconRow->addWidget(ui->sample);iconRow->addWidget(ui->icons,1);artForm->addRow("Icon",iconRow);
     auto *colorRow=new QHBoxLayout;
-    auto *cl=new QLabel("Color",right);ui->color=new QLineEdit(right);ui->color->setObjectName("augment-color");
+    ui->color=new QLineEdit(right);ui->color->setObjectName("augment-color");
     ui->color->setPlaceholderText("Theme text color");
     ui->choose=new QPushButton("Pick…",right);
-    colorRow->addWidget(cl);colorRow->addWidget(ui->color,1);colorRow->addWidget(ui->choose);
-    rl->addLayout(colorRow);
+    colorRow->addWidget(ui->color,1);colorRow->addWidget(ui->choose);
+    artForm->addRow("Color",colorRow);
     auto *motionRow=new QHBoxLayout;
-    motionRow->addWidget(new QLabel("Animation",right));
     ui->preset=new QComboBox(right);ui->preset->setObjectName("augment-motion-preset");
     ui->preset->addItems({"soft","pop","spin","fade","lift","none"});
     ui->preset->setToolTip("soft: fade/slide and gentle hover growth; pop: stronger scale; spin: rotation; fade: opacity only; lift: vertical rise; none: static.");
     motionRow->addWidget(ui->preset,1);
     ui->duration=new QSpinBox(right);ui->duration->setObjectName("augment-motion-duration");
     ui->duration->setRange(60,600);ui->duration->setSingleStep(20);ui->duration->setSuffix(" ms");ui->duration->setValue(160);
-    motionRow->addWidget(ui->duration);rl->addLayout(motionRow);
+    motionRow->addWidget(ui->duration);artForm->addRow("Animation",motionRow);
+    art->addLayout(artForm);
     ui->scope=new QCheckBox("Scope to observed menu",right);ui->scope->setObjectName("augment-scope");ui->scope->setChecked(true);
     ui->replace=new QCheckBox("Replace existing native icon",right);
-    rl->addWidget(ui->scope);rl->addWidget(ui->replace);
+    art->addWidget(ui->replace);
+    auto *placement=compactSection(right,rl,"Scope and placement");
+    placement->addWidget(ui->scope);
     ui->overflow=new QCheckBox("Move to More actions",right);ui->overflow->setObjectName("augment-overflow");
     ui->overflow->setToolTip("Save this action's placement independently of its icon. Uncheck to restore it. No actions are hidden automatically.");
-    rl->addWidget(ui->overflow);
+    placement->addWidget(ui->overflow);
     ui->hideEntry=new QCheckBox("Hide this default entry",right);
     ui->hideEntry->setObjectName("augment-hide-entry");
     ui->hideEntry->setToolTip("Only hides the selected item from matching popup menus. OBS's QAction remains untouched; use Manage entries to restore.");
-    rl->addWidget(ui->hideEntry);
+    placement->addWidget(ui->hideEntry);
     ui->showValues=new QCheckBox("Show selected submenu choices",right);
     ui->showValues->setObjectName("augment-show-submenu-selections");
     ui->showValues->setToolTip("Draw the currently checked choice in parentheses at the trailing edge, using the active theme’s link color. Native labels and submenu arrows stay intact. Applied when menus reopen.");
     ui->showValues->setChecked(controller.showSubmenuSelections());
-    rl->addWidget(ui->showValues);
+    optionsLayout->insertWidget(optionsLayout->count()-1,ui->showValues);
     connect(ui->showValues,&QCheckBox::toggled,this,[this](bool enabled){
         QString error;
         if(ui->controller.setShowSubmenuSelections(enabled,&error))
@@ -640,7 +704,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     ui->addEntry=new QPushButton("Add custom…",right);ui->addEntry->setObjectName("augment-add-entry");
     ui->manageEntries=new QPushButton("Manage entries…",right);ui->manageEntries->setObjectName("augment-manage-entries");
     entryButtons->addWidget(ui->addEntry);entryButtons->addWidget(ui->manageEntries);
-    rl->addLayout(entryButtons);
+    placement->addLayout(entryButtons);
     connect(ui->addEntry,&QPushButton::clicked,this,[this]{
         if(!ui->snapshot.isMenu){ui->status->setText("Capture the target menu first.");return;}
         auto entry=openCustomEditor(this,{});
@@ -743,21 +807,24 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
         else ui->status->setText(error);
         updatePreview();
     });
-    ui->scopeHint=new QLabel(right);ui->scopeHint->setWordWrap(true);rl->addWidget(ui->scopeHint);
+    ui->scopeHint=new QLabel(right);ui->scopeHint->setWordWrap(true);placement->addWidget(ui->scopeHint);
     rl->addWidget(ui->advanced);
     ui->selector=new QPlainTextEdit(right);ui->selector->setReadOnly(true);ui->selector->setObjectName("augment-selector");
     ui->selector->setMinimumHeight(95);detailsLayout->addWidget(ui->selector,1);
-    menuLayout->addWidget(ui->details);ui->details->hide();
+    rl->addWidget(ui->details);ui->details->hide();
     auto *buttons=new QHBoxLayout;
     ui->copy=new QPushButton("Copy JSON",right);
     ui->remove=new QPushButton("Remove exact rule",right);
     ui->save=new QPushButton("Save rule",right);ui->save->setObjectName("augment-save");
     buttons->addWidget(ui->copy);buttons->addWidget(ui->remove);buttons->addWidget(ui->save);
-    rl->addStretch();rl->addLayout(buttons);split->addWidget(left);split->addWidget(right);split->setSizes({310,420});
+    rl->addStretch();editorLayout->addLayout(buttons);split->addWidget(left);split->addWidget(editor);split->setSizes({300,460});
     ui->footer=new QWidget(this);root->addWidget(ui->footer);root->addWidget(ui->status);
     ui->settings=buildSettings(controller,ui->tabs,parent,ui->footer,ui->status);
     if(panels){
         auto *page=panels->createPage(qobject_cast<QMainWindow*>(parent),ui->tabs);
+        if(auto *layout=qobject_cast<QVBoxLayout*>(page->layout())){
+            layout->setContentsMargins(6,6,6,6);layout->setSpacing(4);
+        }
         if(mixerToggle){
             auto *toggle=new QCheckBox("Audio Mixer backside (native routing)",page);
             toggle->setObjectName("augment-mixer-backside");
@@ -804,7 +871,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
         if(rowStripes){
             auto *section=new QGroupBox("Alternating list backgrounds",page);
             section->setObjectName("augment-striped-list-settings");
-            auto *contents=new QVBoxLayout(section);
+            auto *contents=new QVBoxLayout(section);contents->setContentsMargins(6,4,6,4);contents->setSpacing(3);
             auto *hint=new QLabel("Use native row striping in OBS's Scenes and Sources lists. Source-specific colors remain native.",section);
             hint->setWordWrap(true);contents->addWidget(hint);
             QPointer<RowStripes> safe(rowStripes);
@@ -920,12 +987,12 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
             if(auto *layout=qobject_cast<QVBoxLayout*>(page->layout()))
                 layout->insertWidget(1,section);
         }
-        ui->tabs->addTab(page,"Panels");
+        ui->tabs->addTab(workspaceScroll(page,ui->tabs),"Panels");
     }
     if(actionStrip){
         auto *page=new QWidget(ui->tabs);
         auto *layout=new QVBoxLayout(page);
-        layout->setContentsMargins(10,10,10,10);
+        layout->setContentsMargins(6,6,6,6);layout->setSpacing(5);
         auto *heading=new QLabel("Action strip",page);
         heading->setFont(subtleHeadingFont(heading->font()));
         layout->addWidget(heading);
@@ -937,17 +1004,19 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
         layout->addWidget(description);
         auto *main=qobject_cast<QMainWindow*>(parent);
         auto *bar=main?main->menuBar():nullptr;
+        auto *controls=compactSection(page,layout,"Menu bar shortcuts");
         auto *visible=new QCheckBox("Show action strip",page);
         visible->setObjectName("augment-action-strip-enable");
         visible->setChecked(actionStrip->enabled());
-        layout->addWidget(visible);
+        controls->addWidget(visible);
         auto *edit=new QPushButton("Edit buttons and status readouts…",page);
         edit->setObjectName("augment-action-strip-edit");
-        layout->addWidget(edit);
+        controls->addWidget(edit);
         auto *contents=new QLabel(page);
         contents->setObjectName("augment-action-strip-summary");
         contents->setWordWrap(true);
-        layout->addWidget(contents);
+        auto *summary=compactSection(page,layout,"Current items");
+        summary->addWidget(contents);
         layout->addStretch();
         QPointer<ActionStrip> safeStrip(actionStrip);
         QPointer<QMenuBar> safeBar(bar);
@@ -957,7 +1026,7 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
             for(const auto &item:safeStrip->items())
                 labels.append(item.label.isEmpty()?item.target:item.label);
             contents->setText(labels.isEmpty()?"No buttons configured yet. Select Edit to add them.":
-                "Current items: "+labels.join(" · "));
+                labels.join(" · "));
             const QSignalBlocker block(visible);
             visible->setChecked(safeStrip->enabled());
         };
@@ -984,7 +1053,9 @@ Inspector::Inspector(Controller &controller,QWidget *parent,Panels *panels,Prope
     if(cues)if(auto *page=cues->createPage(ui->tabs))
         ui->tabs->addTab(page,"Cue Deck");
     ui->footer->hide();
-    connect(ui->tabs,&QTabWidget::currentChanged,this,[this](int index){
+    connect(ui->tabs,&QTabWidget::currentChanged,this,[this,toolbarHost](int index){
+        toolbarHost->setVisible(index<=2);
+        ui->pick->setVisible(index<=1);ui->pickDelay->setVisible(index<=1);
         ui->footer->setVisible(index==1||index==2);
         if(index==1)ui->settings->refreshSources();
         if(index==3)if(auto *refresh=ui->tabs->widget(index)->findChild<QPushButton*>("augment-panel-refresh"))refresh->click();
@@ -1111,6 +1182,8 @@ void Inspector::capture(const WidgetSnapshot &snapshot) {
         "Widget inspected. This slice can edit menu actions; other widgets are read-only.");
     selectRow(ui->actions->currentRow());
     if(!snapshot.mixerSource.isEmpty()) {
+        // A picked source must be visible even when a previous search is active.
+        if(auto *filter=findChild<QLineEdit*>("augment-knob-source-filter"))filter->clear();
         ui->settings->refreshSources();
         if(auto *sources=ui->settings->sources.data())for(int i=0;i<sources->count();++i)
             if(sources->item(i)->data(Qt::UserRole).toString()==snapshot.mixerSource)sources->setCurrentRow(i);
