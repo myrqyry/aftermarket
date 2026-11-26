@@ -15,7 +15,8 @@ struct PropertySections::State {
     struct Entry {
         QPointer<QFormLayout> form;
         QPointer<QToolButton> button;
-        QVector<bool> initialVisible;
+        struct Visibility {QPointer<QWidget> widget;bool visible;};
+        QVector<Visibility> visibility;
         bool collapsed=false;
     };
     QHash<QGroupBox*,Entry> groups;
@@ -52,8 +53,9 @@ void PropertySections::restore(QGroupBox *group) {
     if(it==state->groups.end())return;
     const auto entry=it.value();
     state->groups.erase(it);
-    if(entry.form)for(int row=0;row<entry.form->rowCount()&&row<entry.initialVisible.size();++row)
-        entry.form->setRowVisible(row,entry.initialVisible.at(row));
+    if(entry.collapsed)for(const auto &item:entry.visibility)
+        if(item.widget)item.widget->setVisible(item.visible);
+    group->setProperty("aftermarket-section-collapsed",QVariant());
     delete entry.button.data();
 }
 void PropertySections::positionButton(QGroupBox *group) {
@@ -75,8 +77,7 @@ void PropertySections::attach(QGroupBox *group) {
     }
     if(!withinPropertiesView)return;
     State::Entry entry;entry.form=form;
-    for(int row=0;row<form->rowCount();++row)
-        entry.initialVisible.append(form->isRowVisible(row));
+
     auto *button=new QToolButton(group);
     button->setObjectName("aftermarket-group-toggle");
     button->setAutoRaise(true);
@@ -91,8 +92,26 @@ void PropertySections::attach(QGroupBox *group) {
         auto it=state->groups.find(group);
         if(it==state->groups.end()||!it->form)return;
         it->collapsed=!it->collapsed;
-        for(int row=0;row<it->form->rowCount()&&row<it->initialVisible.size();++row)
-            it->form->setRowVisible(row,!it->collapsed&&it->initialVisible.at(row));
+        if(it->collapsed){
+            // Row indices change under responsive reflow. Capture actual
+            // layout-owned widgets, including nested slider/spinbox pairs,
+            // without touching the contents of child group widgets.
+            it->visibility.clear();
+            auto capture=[&](auto &&self,QLayout *layout)->void{
+                for(int i=0;i<layout->count();++i){
+                    auto *item=layout->itemAt(i);
+                    if(auto *w=item->widget())it->visibility.append({w,!w->isHidden()});
+                    else if(auto *child=item->layout())self(self,child);
+                }
+            };
+            capture(capture,it->form);
+            group->setProperty("aftermarket-section-collapsed",true);
+            for(const auto &item:it->visibility)if(item.widget)item.widget->hide();
+        }else{
+            for(const auto &item:it->visibility)if(item.widget)item.widget->setVisible(item.visible);
+            it->visibility.clear();
+            group->setProperty("aftermarket-section-collapsed",false);
+        }
         if(it->button){
             it->button->setArrowType(it->collapsed?Qt::RightArrow:Qt::DownArrow);
             it->button->setToolTip(it->collapsed?"Expand section":"Collapse section");

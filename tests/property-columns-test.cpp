@@ -87,6 +87,43 @@ int main(int argc,char **argv){
  REQUIRE(firstGroup->y()<secondGroup->y());
  toggle->click();settle();REQUIRE(!sections.collapsed(firstGroup));
 
+ // A full-width section must get its own responsive layout; use
+ // available group width, not the outer viewport for nested sections.
+ auto *groupContainer=new QWidget;groupContainer->setObjectName("PropertiesContainer");
+ auto *groupOuter=new QFormLayout(groupContainer);
+ auto *camera=new QGroupBox("Camera Controls");
+ auto *cameraForm=new QFormLayout(camera);
+ QList<QSpinBox*> cameraSpins;
+ for(int i=0;i<6;++i){
+  auto *pair=new QHBoxLayout;pair->addWidget(new QSlider(Qt::Horizontal));
+  auto *spin=new QSpinBox;spin->setValue(i+20);cameraSpins.append(spin);pair->addWidget(spin);
+  cameraForm->addRow(QString("Camera %1").arg(i),pair);
+ }
+ auto *secret=new QSpinBox;cameraForm->addRow("Hidden",secret);cameraForm->setRowVisible(6,false);
+ groupOuter->addRow(camera);
+ view->setWidget(groupContainer);columns.setMode(2);dialog.resize(1000,560);settle();
+ REQUIRE(cameraSpins[0]->y()==cameraSpins[1]->y()&&cameraSpins[0]->x()<cameraSpins[1]->x());
+ REQUIRE(secret->isHidden());
+ auto *cameraToggle=camera->findChild<QToolButton*>("aftermarket-group-toggle");REQUIRE(cameraToggle);
+ cameraToggle->click();settle();
+ for(auto *spin:cameraSpins)REQUIRE(spin->isHidden());
+ columns.setMode(1);settle();
+ REQUIRE(cameraForm->rowCount()==7);
+ for(auto *spin:cameraSpins)REQUIRE(spin->isHidden());
+ cameraToggle->click();settle();
+ for(int i=0;i<6;++i)REQUIRE(cameraSpins[i]->isVisible()&&cameraSpins[i]->value()==i+20);
+ REQUIRE(secret->isHidden());
+ columns.setMode(2);settle();
+ REQUIRE(cameraSpins[0]->y()==cameraSpins[1]->y());
+ dialog.resize(460,560);settle();
+ REQUIRE(cameraForm->rowCount()==7&&cameraSpins[0]->y()<cameraSpins[1]->y());
+ REQUIRE(secret->isHidden());
+ dialog.resize(1000,560);settle();
+ REQUIRE(cameraSpins[0]->y()==cameraSpins[1]->y());
+ cameraToggle->click();settle();sections.setEnabled(false);settle();
+ for(auto *spin:cameraSpins)REQUIRE(spin->isVisible());
+ REQUIRE(secret->isHidden());
+
  std::cout<<"PROPERTY_COLUMNS_PASS\n";
 }
 #include "property-columns-test.moc"

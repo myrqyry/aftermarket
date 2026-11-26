@@ -1,5 +1,6 @@
 #include "property-preset-footer.h"
 #include "property-presets.h"
+#include "dock-header-button.h"
 #include "filter-chain-presets.h"
 #include <obs.hpp>
 #include <obs-frontend-api.h>
@@ -84,7 +85,7 @@ struct Footer:QWidget {
         combo->setMinimumContentsLength(8);combo->setMaximumWidth(190);
         load=new QToolButton(this);load->setObjectName("aftermarket-preset-load");load->setText("Load");load->setToolTip("Apply selected preset");
         save=new QToolButton(this);save->setObjectName("aftermarket-preset-save");save->setText("Save");save->setToolTip("Save current properties as a new preset");
-        more=new QToolButton(this);more->setObjectName("aftermarket-preset-more");more->setText("⋮");more->setPopupMode(QToolButton::InstantPopup);more->setToolTip("Manage presets");
+        more=new DockHeaderButton(DockHeaderGlyph::More,this);more->setObjectName("aftermarket-preset-more");more->setAccessibleName("Manage presets");more->setPopupMode(QToolButton::InstantPopup);more->setToolTip("Manage presets");
         menu=new QMenu(more);more->setMenu(menu);
         update=menu->addAction("Update selected preset…");rename=menu->addAction("Rename…");remove=menu->addAction("Delete…");
         menu->addSeparator();undo=menu->addAction("Undo last preset load");

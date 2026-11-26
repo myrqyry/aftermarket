@@ -201,12 +201,18 @@ void PropertyColumns::scan(){
     for(auto it=state->entries.begin();it!=state->entries.end();)
         if(!it->form)it=state->entries.erase(it);else ++it;
     for(auto *w:QApplication::allWidgets()){
-        if(w->objectName()!="PropertiesContainer"||!w->isVisible())continue;
-        auto *view=propertyView(w);
+        if(!w->isVisible())continue;
+        auto *container=w;
+        const bool nested=qobject_cast<QGroupBox*>(w)!=nullptr;
+        if(nested){
+            if(w->property("aftermarket-section-collapsed").toBool())continue;
+            for(;container&&container->objectName()!="PropertiesContainer";container=container->parentWidget()){}
+        }
+        auto *view=propertyView(container);
         auto *form=qobject_cast<QFormLayout*>(w->layout());
         if(!view||!form)continue;
         const auto margins=form->contentsMargins();
-        const int width=view->viewport()->width()-margins.left()-margins.right();
+        const int width=(nested?w->contentsRect().width():view->viewport()->width())-margins.left()-margins.right();
         const int maxCols=state->mode==0?3:state->mode;
         const int cols=qBound(1,width/340,maxCols);
         auto &entry=state->entries[w];
@@ -218,9 +224,9 @@ void PropertyColumns::scan(){
 }
 bool PropertyColumns::eventFilter(QObject *obj,QEvent *event){
     if(state->mode==1)return false;
-    if(event->type()!=QEvent::Show&&event->type()!=QEvent::Resize)return false;
+    if(event->type()!=QEvent::Show&&event->type()!=QEvent::Resize&&event->type()!=QEvent::DynamicPropertyChange)return false;
     auto *w=qobject_cast<QWidget*>(obj);
-    if(w&&(w->objectName()=="PropertiesContainer"||w->inherits("OBSPropertiesView")||
+    if(w&&(qobject_cast<QGroupBox*>(w)||w->objectName()=="PropertiesContainer"||w->inherits("OBSPropertiesView")||
         (w->parentWidget()&&w->parentWidget()->inherits("OBSPropertiesView"))))schedule();
     return false;
 }

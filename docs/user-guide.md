@@ -144,7 +144,8 @@ The 2/3 column preferences are maximums, not forced widths; 1 column
 restores the original form. Sliders, spinboxes, checkboxes, combo boxes and
 recognized native color picker rows are packed in original row-major order
 when their minimum sizes fit. Adjacent compact groups can share a row;
-their internal native forms and collapse controls remain intact. File
+each native section independently reflows its internal compact rows using
+its own available width, rather than the outer dialog width. File
 paths, multiline text, complex controls, and other unrecognized or oversized
 rows keep the original full-width layout. OBS's existing widgets and
 callbacks are preserved, and replacement property containers reflow after
@@ -157,8 +158,9 @@ as `propertyColumns` (0 = Auto, 1–3 = maximum columns) in rules.json.
 Property-group folding is off by default and saved as `collapsiblePropertyGroups` in
 `rules.json`. It affects native `OBSPropertiesView` **ordinary QGroupBox sections**
 only, not ungrouped filter controls or checkable enable/disable groups. Expanded
-content is the original OBS form, and disabling the feature restores its
-original row visibility. The folded state is session-only; groups rebuilt by
+content retains the original OBS controls. Collapse snapshots widget visibility
+by identity, so resizing or switching column preferences while collapsed
+restores the correct fields on expansion or disabling folding. The folded state is session-only; groups rebuilt by
 OBS begin expanded. No settings values are changed by folding.
 
 ### Named source and filter presets
@@ -171,7 +173,7 @@ strip next to **Defaults**:
 - **Load** applies the selected preset to the currently edited source
   or filter. Selecting a name alone never changes settings.
 - **Save** captures the current properties under a new name.
-- The overflow menu offers **Update selected preset…**, **Rename…**,
+- The single theme-aware three-dot overflow button opens **Update selected preset…**, **Rename…**,
   **Delete…**, and **Undo last preset load**. Update and delete ask for
   confirmation. Undo is scoped to the same dialog and source identity;
   it refuses to overwrite settings that have changed since the load.

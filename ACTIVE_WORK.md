@@ -4030,3 +4030,18 @@ and three differently named sources at requested 320px dock width.
 Each strip 110px, gain frame y54, dB y132, sync y148, no clipped controls
 within strips. Native horizontal scrolling remains available if needed.
 Evidence /tmp/am-mixer-columns.5Qrbk2. Actual user session not restarted.
+
+## Responsive property sections and preset overflow — 2026-11-25
+User reported Camera Controls section stayed single column and overlapping
+preset menu glyphs. PropertyColumns now scans native nested QGroupBox
+forms within verified source/filter property views, using group content
+width. PropertySections captures visibility of actual layout widgets at
+collapse (not stale form row indices), retains hidden fields and skips
+reflow while collapsed; expansion schedules reflow. Preset overflow uses
+existing palette-aware DockHeaderButton More renderer, not text plus
+native menu arrow. Native combo and preset operations unchanged.
+RED group reflow test, GREEN 44/44 CTests. Real OBS 32.2.0 isolated fixture
+with Fluffy Dark at density -2/font 10: 6/6 checks for actual native group,
+wide columns, single ellipsis, menu opening, collapse and narrow expand.
+Evidence /tmp/am-section-layout.CyaWjk. Synthetic native property source,
+not user's physical camera. Actual user OBS left running.
