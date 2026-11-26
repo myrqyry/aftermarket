@@ -515,9 +515,9 @@ int main(int argc,char **argv){
  auto *bodyRow=new QHBoxLayout;channelBox->addLayout(bodyRow,6);
  auto *leftButtons=new QVBoxLayout;bodyRow->addLayout(leftButtons);
  auto *mute=new QPushButton("Mute",channel),*monitor=new QPushButton("Monitor",channel);
- mute->setToolTip("Mute");monitor->setToolTip("Enable Monitoring");leftButtons->addWidget(mute);leftButtons->addWidget(monitor);
+ mute->setToolTip("Mute");monitor->setToolTip("Enable Monitoring");mute->setFixedSize(18,22);monitor->setFixedSize(18,22);leftButtons->addWidget(mute);leftButtons->addWidget(monitor);
  auto *frame=new QFrame(channel);frame->setObjectName("volMeterFrame");auto *frameBox=new QVBoxLayout(frame);
- auto *gain=new QSlider(Qt::Horizontal,frame);gain->setProperty("_obsUiAugmentKnob",true);gain->setMinimumHeight(68);gain->setValue(51);frameBox->addWidget(gain);bodyRow->addWidget(frame);
+ auto *gain=new QSlider(Qt::Horizontal,frame);gain->setProperty("_obsUiAugmentKnob",true);gain->setFixedSize(68,76);gain->setProperty("_obsUiAugmentIntegratedMeter",true);gain->setValue(51);frameBox->addWidget(gain);bodyRow->addWidget(frame);
  rotary.resize(360,200);rotary.show();app.processEvents();
  augment::FrontAudioControls rotaryUi(tmp.filePath("rotary.json"),[&]{return current;},{},{});
  REQUIRE(rotaryUi.attach(&rotary));REQUIRE(rotaryUi.setKnobs(true));app.processEvents();rotaryUi.refresh();app.processEvents();
@@ -526,10 +526,20 @@ int main(int argc,char **argv){
  auto *panRight=channel->findChild<QDial*>("aftermarket-pan-dial");
  auto *syncRight=channel->findChild<QDial*>("aftermarket-offset-dial");
  auto *precise=channel->findChild<QSpinBox*>("aftermarket-offset-ms");
- REQUIRE(center&&center->itemAt(0)->widget()==frame&&center->itemAt(1)->widget()==db);
- REQUIRE(bodyRow->indexOf(adjust)>=0&&panRight->isVisible()&&syncRight->isVisible()&&!precise->isVisible());
+ auto *pairGrid=channel->findChild<QGridLayout*>("aftermarket-rotary-pairs");
+ REQUIRE(center&&center->itemAt(0)->widget()==frame&&pairGrid&&pairGrid->itemAtPosition(1,1)->widget()==db);
+ REQUIRE(pairGrid->indexOf(adjust)>=0&&panRight->isVisible()&&syncRight->isVisible()&&!precise->isVisible());
  REQUIRE(panRight->mapTo(channel,QPoint()).x()>gain->mapTo(channel,QPoint()).x());
  REQUIRE(panRight->mapTo(channel,QPoint()).y()<syncRight->mapTo(channel,QPoint()).y());
+ // Vertical channels align the outside edges of the two side pairs
+ // to the circular gain face, not the center of its value readout.
+ rotaryUi.refresh();app.processEvents();
+ const int gc=gain->mapTo(channel,gain->rect().center()).y();
+ const int radius=(qMin(68,qMin(gain->width(),gain->height()))-6)/2;
+ REQUIRE(qAbs(mute->mapTo(channel,QPoint()).y()-(gc-radius))<=4);
+ REQUIRE(qAbs(monitor->mapTo(channel,QPoint(0,monitor->height())).y()-(gc+radius))<=4);
+ REQUIRE(qAbs(panRight->mapTo(channel,QPoint(0,2)).y()-(gc-radius))<=4);
+ REQUIRE(qAbs(syncRight->mapTo(channel,QPoint(0,syncRight->height()-2)).y()-(gc+radius))<=4);
  REQUIRE(status->text()=="Pinned"&&status->maximumWidth()<=20&&header->stretch(0)==1);
  REQUIRE(gain->value()==51);
  REQUIRE(QMetaObject::invokeMethod(syncRight,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,QPoint(8,8))));
@@ -572,16 +582,19 @@ int main(int argc,char **argv){
  auto *columnSync=strip->findChild<QDial*>("aftermarket-offset-dial");
  auto *columnSpin=strip->findChild<QSpinBox*>("aftermarket-offset-ms");
  REQUIRE(columnPan&&columnSync&&columnSpin&&columnPan->isVisible()&&columnSync->isVisible()&&!columnSpin->isVisible());
- // Native buttons at left, gain at center, and vertically stacked
- // pan/sync at right; all hit targets fit the widened compact strip.
+ // Side-by-side channels use buttons ABOVE and dials BELOW the gain.
  const auto middle=stripGain->mapTo(strip,stripGain->rect().center());
  const auto ml=sm->mapTo(strip,sm->rect().center()),nl=sn->mapTo(strip,sn->rect().center());
  const auto pr=columnPan->mapTo(strip,columnPan->rect().center()),srp=columnSync->mapTo(strip,columnSync->rect().center());
- REQUIRE(ml.x()<middle.x()&&nl.x()<middle.x()&&pr.x()>middle.x()&&srp.x()>middle.x());
- REQUIRE(ml.x()==nl.x()&&pr.x()==srp.x()&&ml.y()<nl.y()&&pr.y()<srp.y());
- REQUIRE(qAbs(ml.y()-pr.y())<=6&&qAbs(nl.y()-srp.y())<=6);
- REQUIRE(sm->mapTo(strip,QPoint()).x()>=0&&columnPan->mapTo(strip,QPoint(columnPan->width(),0)).x()<=strip->width());
- REQUIRE(br->direction()==QBoxLayout::TopToBottom&&strip->width()>=118);
+ REQUIRE(ml.y()<middle.y()&&nl.y()<middle.y()&&pr.y()>middle.y()&&srp.y()>middle.y());
+ REQUIRE(ml.y()==nl.y()&&pr.y()==srp.y()&&ml.x()<nl.x()&&pr.x()<srp.x());
+ // Outer edges, not centers, align to the gain's circular footprint.
+ const int diameter=qMin(68,qMin(stripGain->width(),stripGain->height()))-6;
+ REQUIRE(qAbs((ml.x()-sm->width()/2)-(middle.x()-diameter/2))<=4);
+ REQUIRE(qAbs((nl.x()+sn->width()/2)-(middle.x()+diameter/2))<=4);
+ REQUIRE(qAbs((pr.x()-columnPan->width()/2+2)-(middle.x()-diameter/2))<=4);
+ REQUIRE(qAbs((srp.x()+columnSync->width()/2-2)-(middle.x()+diameter/2))<=4);
+ REQUIRE(br->direction()==QBoxLayout::LeftToRight&&strip->width()<=110);
 
  REQUIRE(stripStatus->maximumWidth()==18);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);

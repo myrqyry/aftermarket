@@ -291,6 +291,14 @@ struct FrontAudioControls::State {
         Qt::Alignment columnButtonsAlignment;
         QMargins columnButtonMargins;
         QList<Qt::Alignment> columnButtonAlignments;
+        QPointer<QBoxLayout> rotaryButtons;
+        int rotaryButtonSpacing=0;
+        QMargins rotaryButtonMargins;
+        Qt::Alignment rotaryButtonAlignment;
+        QList<Qt::Alignment> rotaryButtonItemAlignments;
+        bool rotaryEdges=false;
+        QPointer<QGridLayout> rotaryGrid;
+        int rotaryButtonsStretch=0;
 
     };
     QObject *owner=nullptr;
@@ -786,9 +794,8 @@ struct FrontAudioControls::State {
             auto *adjust=qobject_cast<QBoxLayout*>(r.controls->layout());
             if(frameIndex!=3||!buttons||!adjust||r.header->indexOf(r.db)<0||
                root->indexOf(r.controls)!=5)return true;
-            // The native 110px cap cannot contain a 68px gain, 32px dials,
-            // and native mute/monitor buttons together. Expand only this
-            // compact presentation, retaining native widget sizes.
+            // Compact side-by-side channels: buttons above the gain face,
+            // adjustment dials below it. Preserve native strip width.
             r.originalColumnMax=r.volume->maximumWidth();
             r.columnButtonsStretch=root->stretch(4);
             r.columnButtonsAlignment=buttons->alignment();
@@ -797,52 +804,82 @@ struct FrontAudioControls::State {
             for(int i=0;i<buttons->count();++i)r.columnButtonAlignments.append(buttons->itemAt(i)->alignment());
             root->removeWidget(frame);root->removeItem(buttons);
             root->removeWidget(r.controls);r.header->removeWidget(r.db);
-            auto *body=new QHBoxLayout;
+            auto *body=new QVBoxLayout;
             body->setObjectName("aftermarket-column-side-controls");
             body->setContentsMargins(0,0,0,0);body->setSpacing(2);
             auto *middle=new QVBoxLayout;
             middle->setContentsMargins(0,0,0,0);middle->setSpacing(0);
             middle->addWidget(frame,0,Qt::AlignHCenter);
             middle->addWidget(r.db,0,Qt::AlignHCenter);
-            buttons->setDirection(QBoxLayout::TopToBottom);
-            auto buttonHeight=[buttons](int index){
+            buttons->setDirection(QBoxLayout::LeftToRight);
+            auto buttonWidth=[buttons](int index){
                 auto *w=buttons->itemAt(index)->widget();
-                return qBound(w->minimumHeight(),w->sizeHint().height(),w->maximumHeight());
+                return qBound(w->minimumWidth(),w->sizeHint().width(),w->maximumWidth());
             };
-            const int first=buttonHeight(0),second=buttonHeight(1);
-            buttons->setSpacing(qMax(2,compactDialSize+2-(first+second)/2));
-            buttons->setContentsMargins(r.columnButtonMargins.left(),qMax(0,1+(compactDialSize-first)/2),r.columnButtonMargins.right(),0);
-            buttons->setAlignment(Qt::AlignCenter);
-            for(int i=0;i<buttons->count();++i)buttons->setAlignment(buttons->itemAt(i)->widget(),Qt::AlignHCenter);
-            adjust->setDirection(QBoxLayout::TopToBottom);
-            r.controls->setFixedSize(compactDialSize+2,2*compactDialSize+4);
+            constexpr int faceDiameter=62; // integrated 68px knob minus 6px inset
+            buttons->setSpacing(qMax(2,faceDiameter-buttonWidth(0)-buttonWidth(1)));
+            buttons->setContentsMargins(0,0,0,0);
+            buttons->setAlignment(Qt::AlignHCenter);
+            for(int i=0;i<buttons->count();++i)buttons->setAlignment(buttons->itemAt(i)->widget(),Qt::AlignVCenter);
+            adjust->setDirection(QBoxLayout::LeftToRight);
+            r.controls->setFixedSize(2*compactDialSize+4,compactDialSize+2);
             r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Fixed);
-            adjust->setAlignment(r.panDial,Qt::AlignHCenter);
-            adjust->setAlignment(r.offsetDial,Qt::AlignHCenter);
+            adjust->setAlignment(r.panDial,Qt::AlignVCenter);
+            adjust->setAlignment(r.offsetDial,Qt::AlignVCenter);
             body->addLayout(buttons);
-            body->addLayout(middle,1);
-            body->addWidget(r.controls,0,Qt::AlignTop);
-            // Center side controls on the gain face, not the dB label.
-            buttons->setAlignment(Qt::AlignTop|Qt::AlignHCenter);
+            body->addLayout(middle);
+            body->addWidget(r.controls,0,Qt::AlignHCenter);
             root->insertLayout(frameIndex,body);
             root->addStretch(1);r.columnSpacer=root->itemAt(root->count()-1)->spacerItem();
             r.columnBody=body;r.columnCenter=middle;r.columnGain=true;
-            const auto margins=root->contentsMargins();
-            const int required=body->minimumSize().width()+margins.left()+margins.right()+4;
-            r.appliedColumnMax=qMax(r.originalColumnMax,qMax(134,required));
-            r.volume->setMaximumWidth(r.appliedColumnMax);
+            r.appliedColumnMax=r.originalColumnMax;
             r.volume->updateGeometry();
         }
         return true;
+    }
+    void restoreRotaryEdges(Row &r){
+        if(!r.rotaryEdges)return;
+        if(r.rotaryButtons){
+            r.rotaryButtons->setSpacing(r.rotaryButtonSpacing);
+            r.rotaryButtons->setContentsMargins(r.rotaryButtonMargins);
+            r.rotaryButtons->setAlignment(r.rotaryButtonAlignment);
+            for(int i=0;i<r.rotaryButtonItemAlignments.size()&&i<r.rotaryButtons->count();++i)
+                if(auto *w=r.rotaryButtons->itemAt(i)->widget())
+                    r.rotaryButtons->setAlignment(w,r.rotaryButtonItemAlignments[i]);
+        }
+        r.rotaryEdges=false;
+    }
+    void syncRotaryPairSpacing(Row &r){
+        auto *buttons=r.rotaryButtons.data();
+        if(!r.rotaryGrid||!buttons||buttons->count()!=2)return;
+        auto *first=buttons->itemAt(0)->widget(),*second=buttons->itemAt(1)->widget();
+        if(!first||!second)return;
+        auto height=[](QWidget *w){return qBound(w->minimumHeight(),w->sizeHint().height(),w->maximumHeight());};
+        constexpr int diameter=62;
+        const int gap=qMax(2,diameter-height(first)-height(second));
+        if(buttons->spacing()!=gap)buttons->setSpacing(gap);
     }
     void restoreRotary(Row &r){
         restoreColumn(r);
         restoreStatus(r);
         if(!r.center)return;
+        restoreRotaryEdges(r);
         if(r.root&&r.body&&r.header&&r.frame&&r.db&&r.controls){
-            r.body->removeWidget(r.controls);
-            r.center->removeWidget(r.frame);r.center->removeWidget(r.db);
-            r.body->removeItem(r.center);delete r.center.data();
+            r.center->removeWidget(r.frame);
+            if(r.rotaryGrid){
+                r.rotaryGrid->removeWidget(r.controls);
+                r.rotaryGrid->removeWidget(r.db);
+                r.rotaryGrid->removeItem(r.center);
+                r.rotaryGrid->removeItem(r.rotaryButtons);
+                r.body->removeItem(r.rotaryGrid);
+                delete r.rotaryGrid.data();
+                if(r.rotaryButtons)r.body->insertLayout(0,r.rotaryButtons,r.rotaryButtonsStretch);
+                delete r.center.data();
+            }else{
+                r.body->removeWidget(r.controls);
+                r.center->removeWidget(r.db);
+                r.body->removeItem(r.center);delete r.center.data();
+            }
             r.body->insertWidget(r.frameIndex,r.frame,r.frameStretch,r.frameAlignment);
             r.header->insertWidget(r.dbIndex,r.db,r.dbStretch,r.dbAlignment);
             r.root->insertWidget(r.controlsIndex,r.controls,r.controlsStretch,r.controlsAlignment);
@@ -857,6 +894,7 @@ struct FrontAudioControls::State {
         if(r.nameRow&&r.nameHandle&&r.nameIndex>=0&&r.nameRow->indexOf(r.nameHandle)==r.nameIndex)
             r.nameRow->setStretch(r.nameIndex,r.nameStretch);
         r.nameRow.clear();r.nameIndex=-1;
+        r.rotaryButtons.clear();r.rotaryGrid.clear();
         r.center.clear();r.root.clear();r.body.clear();r.header.clear();r.frame.clear();r.db.clear();r.status.clear();
     }
     bool syncRotary(Row &r){
@@ -869,7 +907,9 @@ struct FrontAudioControls::State {
         if(!gain||gain->orientation()!=Qt::Horizontal||!gain->property("_obsUiAugmentKnob").toBool()){
             restoreRotary(r);return false;
         }
-        if(r.center){syncStatus(r);return true;}
+        const bool integrated=gain->property("_obsUiAugmentIntegratedMeter").toBool();
+        if(r.center&&bool(r.rotaryGrid)!=integrated)restoreRotary(r);
+        if(r.center){syncStatus(r);syncRotaryPairSpacing(r);return true;}
         auto *root=qobject_cast<QBoxLayout*>(r.volume->layout());
         auto *db=r.volume->findChild<QLabel*>("volLabel",Qt::FindDirectChildrenOnly);
         auto *body=containingBox(root,frame),*header=containingBox(root,db);
@@ -889,6 +929,7 @@ struct FrontAudioControls::State {
         auto *adjust=qobject_cast<QBoxLayout*>(r.controls->layout());
         if(!adjust)return false;
         r.root=root;r.body=body;r.header=header;r.frame=frame;r.db=db;r.status=status;
+        r.rotaryButtons=left;
         r.frameIndex=body->indexOf(frame);r.frameStretch=body->stretch(r.frameIndex);r.frameAlignment=body->itemAt(r.frameIndex)->alignment();
         r.dbIndex=header->indexOf(db);r.dbStretch=header->stretch(r.dbIndex);r.dbAlignment=header->itemAt(r.dbIndex)->alignment();
         r.controlsIndex=root->indexOf(r.controls);r.controlsStretch=root->stretch(r.controlsIndex);r.controlsAlignment=root->itemAt(r.controlsIndex)->alignment();
@@ -908,14 +949,43 @@ struct FrontAudioControls::State {
         header->removeWidget(db);body->removeWidget(frame);root->removeWidget(r.controls);
         auto *center=new QVBoxLayout;center->setObjectName("aftermarket-rotary-center");
         center->setContentsMargins(0,0,0,0);center->setSpacing(0);
-        center->addWidget(frame,1);center->addWidget(db,0,Qt::AlignHCenter);
-        body->insertLayout(r.frameIndex,center,1);r.center=center;
+        center->addWidget(frame,1);
+        r.center=center;
         adjust->setDirection(QBoxLayout::TopToBottom);
-        r.controls->setMinimumSize(compactDialSize+4,0);r.controls->setMaximumSize(compactDialSize+4,QWIDGETSIZE_MAX);
-        r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Expanding);
         adjust->setAlignment(r.panDial,Qt::AlignHCenter);
         adjust->setAlignment(r.offsetDial,Qt::AlignHCenter);
-        body->addWidget(r.controls);
+        if(integrated){
+            // One real layout row for the gain face and both side pairs.
+            // The readout has its own row, so it cannot skew alignment.
+            r.rotaryButtonSpacing=left->spacing();
+            r.rotaryButtonMargins=left->contentsMargins();
+            r.rotaryButtonAlignment=left->alignment();
+            r.rotaryButtonItemAlignments={left->itemAt(0)->alignment(),left->itemAt(1)->alignment()};
+            r.rotaryButtonsStretch=body->stretch(0);r.rotaryEdges=true;
+            body->removeItem(left);
+            left->setContentsMargins(0,0,0,0);
+            left->setAlignment(Qt::AlignCenter);
+            for(int i=0;i<left->count();++i)left->setAlignment(left->itemAt(i)->widget(),Qt::AlignCenter);
+            auto *grid=new QGridLayout;
+            grid->setObjectName("aftermarket-rotary-pairs");
+            grid->setContentsMargins(0,0,0,0);grid->setHorizontalSpacing(2);grid->setVerticalSpacing(0);
+            grid->addLayout(left,0,0,Qt::AlignCenter);
+            grid->addLayout(center,0,1);
+            r.controls->setFixedSize(compactDialSize+4,2*compactDialSize+4);
+            r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Fixed);
+            grid->addWidget(r.controls,0,2,Qt::AlignCenter);
+            grid->addWidget(db,1,1,Qt::AlignHCenter);
+            grid->setColumnStretch(1,1);
+            body->addLayout(grid,1);r.rotaryGrid=grid;
+            syncRotaryPairSpacing(r);
+        }else{
+            center->addWidget(db,0,Qt::AlignHCenter);
+            body->insertLayout(r.frameIndex,center,1);
+            r.controls->setMinimumSize(compactDialSize+4,0);
+            r.controls->setMaximumSize(compactDialSize+4,QWIDGETSIZE_MAX);
+            r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Expanding);
+            body->addWidget(r.controls);
+        }
         syncStatus(r);
         return true;
     }

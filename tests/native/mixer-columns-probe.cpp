@@ -87,13 +87,19 @@ static void probe(){
    const auto dbPos=db->mapTo(w,db->rect().center());
    const auto panPos=pan->mapTo(w,pan->rect().center()),syncPos=offset->mapTo(w,offset->rect().center());
    position&=gain&&pan->isVisible()&&offset->isVisible()&&!spin->isVisible()&&
-       dbPos.y()>frame->geometry().bottom()&&dbPos.y()-gain->mapTo(w,QPoint()).y()-gain->height()<30&&panPos.x()==syncPos.x()&&panPos.y()<syncPos.y()&&buttons.size()==2;
-   if(buttons.size()==2){
+       dbPos.y()>frame->geometry().bottom()&&dbPos.y()-gain->mapTo(w,QPoint()).y()-gain->height()<30&&panPos.y()==syncPos.y()&&panPos.x()<syncPos.x()&&buttons.size()==2;
+   if(gain&&buttons.size()==2){
       const auto first=buttons[0]->mapTo(w,buttons[0]->rect().center()),second=buttons[1]->mapTo(w,buttons[1]->rect().center());
       const auto gainPos=gain->mapTo(w,gain->rect().center());
-      position&=first.x()==second.x()&&first.x()<gainPos.x()&&gainPos.x()<panPos.x()&&
-       std::abs(panPos.y()-std::min(first.y(),second.y()))<=6&&std::abs(syncPos.y()-std::max(first.y(),second.y()))<=6;
-      blog(LOG_INFO,"GRIDDETAIL width=%d left=%d,%d gain=%d,%d right=%d,%d / %d,%d",w->width(),first.x(),first.y(),gainPos.x(),gainPos.y(),panPos.x(),panPos.y(),syncPos.x(),syncPos.y());
+      const int radius=(qMin(68,qMin(gain->width(),gain->height()))-6)/2;
+      auto left=[w](QWidget *control,int inset=0){return control->mapTo(w,QPoint(inset,0)).x();};
+      auto right=[w](QWidget *control,int inset=0){return control->mapTo(w,QPoint(control->width()-inset,0)).x();};
+      position&=first.y()==second.y()&&first.y()<gainPos.y()&&gainPos.y()<panPos.y()&&
+        std::abs(left(buttons[0])-(gainPos.x()-radius))<=5&&
+        std::abs(right(buttons[1])-(gainPos.x()+radius))<=5&&
+        std::abs(left(pan,2)-(gainPos.x()-radius))<=5&&
+        std::abs(right(offset,2)-(gainPos.x()+radius))<=5;
+      blog(LOG_INFO,"GRIDDETAIL width=%d gain=%d,%d radius=%d buttons=%d..%d dials=%d..%d",w->width(),gainPos.x(),gainPos.y(),radius,left(buttons[0]),right(buttons[1]),left(pan,2),right(offset,2));
    }
    bool icon=false;
    for(auto *label:w->findChildren<QLabel*>(QString(),Qt::FindDirectChildrenOnly))
@@ -205,7 +211,7 @@ static void probe(){
   bool narrow=channels().size()==5;
   for(auto *w:channels()){
     auto *offset=w->findChild<QDial*>("aftermarket-offset-dial");
-    narrow&=offset&&offset->isVisible()&&w->width()>=118&&w->width()<=150;
+    narrow&=offset&&offset->isVisible()&&w->width()<=110;
   }
   check("narrow_column_encoder",narrow);
   auto *g=grid();

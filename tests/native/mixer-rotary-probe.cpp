@@ -79,7 +79,7 @@ static void probe(){
    auto *pan=w->findChild<QDial*>("aftermarket-pan-dial");
    auto *offset=w->findChild<QDial*>("aftermarket-offset-dial");
    auto *spin=w->findChild<QSpinBox*>("aftermarket-offset-ms");
-   layout&=center&&db&&frame&&center->indexOf(db)>=0&&db->isVisible();
+   layout&=center&&db&&frame&&center->indexOf(frame)>=0&&db->isVisible();
    if(!db||!frame||!pan||!offset||!spin){position=false;exact=false;continue;}
    QList<QAbstractButton*> buttons;
    for(auto *b:w->findChildren<QAbstractButton*>(QString(),Qt::FindDirectChildrenOnly))
@@ -88,10 +88,19 @@ static void probe(){
    const auto panPos=pan->mapTo(w,pan->rect().center()),syncPos=offset->mapTo(w,offset->rect().center());
    position&=pan->isVisible()&&offset->isVisible()&&!spin->isVisible()&&
       dbPos.y()>frame->geometry().bottom()&&panPos.x()>dbPos.x()&&panPos.y()<syncPos.y()&&buttons.size()==2;
-   if(buttons.size()==2){
-     const int y1=buttons[0]->mapTo(w,buttons[0]->rect().center()).y(),y2=buttons[1]->mapTo(w,buttons[1]->rect().center()).y();
-     position&=std::abs(panPos.y()-std::min(y1,y2))<=6&&std::abs(syncPos.y()-std::max(y1,y2))<=6;
-   }
+   auto *gain=frame->findChild<QSlider*>();
+   if(gain&&buttons.size()==2){
+     const auto middle=gain->mapTo(w,gain->rect().center());
+     const int radius=(qMin(68,qMin(gain->width(),gain->height()))-6)/2;
+     auto top=[w](QWidget *control,int inset=0){return control->mapTo(w,QPoint(0,inset)).y();};
+     auto bottom=[w](QWidget *control,int inset=0){return control->mapTo(w,QPoint(0,control->height()-inset)).y();};
+     position&=buttons[0]->mapTo(w,buttons[0]->rect().center()).x()<middle.x()&&middle.x()<panPos.x()&&
+      std::abs(top(buttons[0])-(middle.y()-radius))<=5&&
+      std::abs(bottom(buttons[1])-(middle.y()+radius))<=5&&
+      std::abs(top(pan,2)-(middle.y()-radius))<=5&&
+      std::abs(bottom(offset,2)-(middle.y()+radius))<=5;
+     blog(LOG_INFO,"GRIDDETAIL vertical gain=%d,%d radius=%d buttons=%d..%d dials=%d..%d",middle.x(),middle.y(),radius,top(buttons[0]),bottom(buttons[1]),top(pan,2),bottom(offset,2));
+   }else position=false;
    bool icon=false;
    for(auto *label:w->findChildren<QLabel*>(QString(),Qt::FindDirectChildrenOnly))
       if(label->text()=="Active"&&label->maximumWidth()==18&&label->toolTip()=="Active")icon=true;

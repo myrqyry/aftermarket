@@ -3896,3 +3896,25 @@ values, original menu actions, relative drag, encoder, layout and grid.
 Evidence /tmp/am-mixer-columns.Wu6XOz. Isolated side-by-side mixer runtime;
 other orientation uses same controls but was not separately probed this
 turn. Unrelated plugin.cpp comment left unstaged.
+
+## Orientation-aware gain-face control spacing — 2026-11-25
+User clarified horizontal mixer means side-by-side channels (vertical native
+faders): mute/monitor above gain and pan/sync below. Vertical mixer means
+stacked channels (horizontal native faders): preserve left/right pairs.
+Align the outside edges of each pair to the integrated gain face (62px
+painted diameter), rather than crowding controls at the center. Preserve
+existing gain/32px dial sizes, native interactions and theme-derived paint.
+Side-by-side channels return to the native 110px maximum width. For stacked
+channels a common grid row holds the native button layout, gain frame and
+adjustment dials; dB label in a separate center-column row. Restore original
+layout slots and button alignment/spacing when leaving compact mode.
+RED: geometry tests rejected old side placement and misaligned vertical
+pairs. Initial native vertical probe exposed a 20px offset; replaced the
+position calculation with the shared grid row. Final build and 43/43 CTests
+passed. Side-by-side native OBS 32.2.0 probe passed 17/17 checks before the
+vertical-only grid correction, including 110px width, knob reset menus and
+wrapping (/tmp/am-mixer-columns.eYZcXN). Final stacked-channel native probe
+passed 10/10 checks (/tmp/am-mixer-rotary.SvnVSu), five channels with pair
+edges within three pixels of the gain-face bounds. No exact user-theme
+runtime measurement this turn. Existing README screenshots predate this
+layout. Unrelated plugin.cpp comment left unstaged.
