@@ -113,9 +113,15 @@ int main(int argc,char **argv) {
   // snapshots. The actual mixer/routing widgets retain identity, ownership
   // and native effects, and become interactive immediately underneath it.
   motionOn=true;
+  // Solid, distinguishable faces make the *visual* contract testable.
+  auto frontPalette=native->palette();frontPalette.setColor(QPalette::Window,QColor("#c83232"));
+  native->setPalette(frontPalette);native->setAutoFillBackground(true);
+  auto backPalette=back->palette();backPalette.setColor(QPalette::Window,QColor("#3278c8"));
+  back->setPalette(backPalette);back->setAutoFillBackground(true);
+  app.processEvents();
   const int paintsBefore=back->paints;
   flip->click();
-  REQUIRE(back->paints==paintsBefore); // no synchronous destination capture
+  REQUIRE(back->paints<=paintsBefore+1); // at most one bounded destination capture
   app.processEvents();
   REQUIRE(faces.backVisible(a)&&back->isVisible());
   auto *surface=stack->findChild<QWidget*>("aftermarket-view-flip");
@@ -127,13 +133,39 @@ int main(int argc,char **argv) {
   auto *flipMotion=surface->findChild<QVariantAnimation*>("aftermarket-view-flip-motion");
   REQUIRE(flipMotion&&flipMotion->state()==QAbstractAnimation::Running);
   REQUIRE(flipMotion->duration()>=175&&flipMotion->duration()<=260);
-  // At midway the old face must fold out of view; the new face folds in.
-  // Compare real paint frames, not only the animation's running flag.
-  auto first=surface->grab().toImage();
-  QEventLoop foldLoop;
-  QTimer::singleShot(95,&foldLoop,&QEventLoop::quit);
-  foldLoop.exec();app.processEvents();
-  REQUIRE(surface->grab().toImage()!=first);
+  // Sample the real painted overlay at exact times. The outgoing face must
+  // be visible first, contract around a perspective edge, vanish at the
+  // midpoint, and the incoming face must expand from the opposite edge.
+  flipMotion->pause();
+  auto sample=[&](int ms){flipMotion->setCurrentTime(ms);return surface->grab().toImage();};
+  const auto first=sample(0);
+  const QColor red("#c83232"),blue("#3278c8");
+  auto count=[&](const QImage &img,const QColor &color){
+    int n=0;for(int y=0;y<img.height();++y)for(int x=0;x<img.width();++x)
+      if(img.pixelColor(x,y)==color)++n;
+    return n;
+  };
+  REQUIRE(count(first,red)>first.width()*first.height()/2);
+  const int beforeSample=back->paints;
+  const auto turning=sample(70);
+  const auto midpoint=sample(105);
+  const auto incoming=sample(140);
+  const auto almost=sample(209);
+  REQUIRE(count(turning,red)>0&&count(turning,red)<count(first,red));
+  REQUIRE(count(turning,blue)==0);
+  REQUIRE(count(midpoint,red)==0&&count(midpoint,blue)==0);
+  REQUIRE(count(incoming,blue)>0&&count(incoming,red)==0);
+  REQUIRE(count(almost,blue)>count(incoming,blue));
+  // The shrinking face must be skewed, not an untransformed live reveal.
+  auto bounds=[&](const QImage &img,const QColor &color,int x){
+    int top=img.height(),bottom=-1;
+    for(int y=0;y<img.height();++y)if(img.pixelColor(x,y)==color){top=qMin(top,y);bottom=qMax(bottom,y);}
+    return bottom-top+1;
+  };
+  const int l=turning.width()*2/5,r=turning.width()*3/5;
+  REQUIRE(bounds(turning,red,l)>bounds(turning,red,r));
+  REQUIRE(bounds(incoming,blue,l)<bounds(incoming,blue,r));
+  REQUIRE(back->paints==beforeSample); // frames never recapture the live widgets
   REQUIRE(stack->currentWidget()==back&&back->isVisible());
   flip->click();app.processEvents(); // rapid reversal cancels previous
   REQUIRE(!faces.backVisible(a)&&native->isVisible());

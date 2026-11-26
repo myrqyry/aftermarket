@@ -1255,17 +1255,16 @@ in five steps (up to roughly 30 Hz) instead of resizing on every animation
 tick. Expanding content becomes visible at the final layout; missed steps
 are discarded rather than replayed. Tabbed, floating and custom-title
 docks remain governed by the existing native restrictions. Switching between
-**Audio Mixer and AudioBus** uses a **210 ms folding reveal**. The live
-native destination is selected immediately. A theme-colored paint-only
-overlay opens around the center, with no widget screenshots, perspective
-texture transforms, graphics effects, or new rendering surfaces. The
-overlay is click-through and uses at most six elapsed-time updates; it
-invalidates only the covered areas and never replays missed frames.
-Reversing, hiding, resizing or changing the theme discards the previous
-overlay. Oversized panels (above 1,048,576 physical pixels) and destination pages with native/GPU
-child surfaces switch immediately rather than attempting unreliable
-compositing. Native QWidget page roots are supported by painting inside the
-destination itself, not by adding another native window.
+**Audio Mixer and AudioBus** uses a **210 ms two-sided perspective flip**.
+The outgoing face rotates away to its edge; the incoming face rotates in
+from the opposite edge. The two bounded snapshots are captured once per
+switch, then only their immutable pixmaps are transformed with InOutSine
+easing. The real destination is selected immediately and the overlay is
+click-through. Reversing, hiding, resizing or changing the theme discards
+the overlay. Oversized panels (above 1,048,576 physical pixels) and either
+page with separate native/GPU child surfaces switch immediately rather
+than substituting a different animation. Native QWidget page roots are
+supported by painting inside the destination, without a new native window.
 
 Aftermarket-owned title controls and AudioBus, Studio and Action Strip dock
 toggles use short **132 ms** palette-based hover/press/checked feedback,
@@ -1274,11 +1273,11 @@ at roughly 30 Hz. The animation clocks stop when settled or hidden. These
 decorations do not resize controls or change their hit targets. Existing OBS
 native state and routing are never animated.
 
-Qt widget layout and painting remain on the GUI thread. This removes the
-synchronous capture and transformation work from the flip, but does not
-guarantee zero GUI latency: the real page switch, native route refresh and
-ordinary widget painting still have a cost. No work is moved to OBS's
-audio or graphics threads. Motion off uses immediate state changes.
+Qt widget layout, the two bounded captures and perspective painting
+remain on the GUI thread. Frames sample elapsed time; they do not recapture
+widgets or replay missed ticks. This preserves the actual flip appearance
+without claiming zero GUI latency. No work is moved to OBS's audio or
+graphics threads. Motion off uses immediate state changes.
 
 
 These are **OBS interface animations**, not OBS's video scene-transition
@@ -1380,13 +1379,13 @@ Inspector slice verification (same isolated OBS configuration):
 Real OBS testing is limited to Linux/X11 with OBS 32.2.0 and Qt 6.4.2, using native themes and Colorway.
 Additional themes, DPI scaling, RTL, other platforms and unsupported native widgets need validation. See the [verification history](../ACTIVE_WORK.md) for individual runtime receipts and known limitations.
 
-Current local verification: **39/39 CTests passed**. Isolated OBS runs
+Current local verification: **43/43 CTests passed**. Isolated OBS runs
 covered responsive source/filter settings, dynamic property reloads, native
 mixer reorder and optional device sends, checkpoint capture, Source Dock
 pinning and lightweight previews, and the unified Workspace with emergency
 recovery during an open checkpoint dialog. Additional native probes cover
 property presets and portable filter chains, picker dismissal, bounded dock
-motion, mixer reflow and relative sync encoder input. The snapshot-free mixer reveal passed seven native checks, including zero synchronous paint events during both page switches. The installed modules were also
+motion, mixer reflow and relative sync encoder input. The two-sided mixer flip is tested with bounded face captures and painted-frame geometry checks. The installed modules were also
 loaded together in a disposable profile; OBS exited normally. No claim is
 made that every combination of plugins, source types, hardware or graphics
 drivers has been exercised. Optional preview caching is SDR-only and total

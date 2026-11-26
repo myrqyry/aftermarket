@@ -11,6 +11,7 @@
 #include <QEvent>
 #include <QImage>
 #include <QStyle>
+#include <QVariantAnimation>
 OBS_DECLARE_MODULE()
 static QMainWindow *mainWindow=nullptr;
 static QPointer<QStackedWidget> stack;
@@ -19,11 +20,13 @@ static QPointer<QWidget> original,alternate;
 static void check(const char *label,bool pass){blog(pass?LOG_INFO:LOG_ERROR,"FLIPCHECK %s=%d",label,pass);}
 class PaintCounter final:public QObject {
 public:
- int paints=0;
+ int paints=0,frontPaints=0,backPaints=0;
  bool eventFilter(QObject *obj,QEvent *e)override{
    if(e->type()==QEvent::Paint&&stack){
      if(auto *w=qobject_cast<QWidget*>(obj);w&&
         (w==stack||stack->isAncestorOf(w)))++paints;
+     if(obj==original)++frontPaints;
+     if(obj==alternate)++backPaints;
    }
    return false;
  }
@@ -33,8 +36,8 @@ static void switchPage(bool back,const char *label){
  qApp->installEventFilter(&counter);
  QElapsedTimer t;t.start();flip->click();const auto elapsed=t.nsecsElapsed();
  qApp->removeEventFilter(&counter);
- blog(LOG_INFO,"FLIPMETRIC %s synchronous_paints=%d dispatch_us=%lld",label,counter.paints,(long long)(elapsed/1000));
- check(label,counter.paints==0&&stack->currentWidget()==(back?alternate:original));
+ blog(LOG_INFO,"FLIPMETRIC %s synchronous_paints=%d front=%d back=%d dispatch_us=%lld",label,counter.paints,counter.frontPaints,counter.backPaints,(long long)(elapsed/1000));
+ check(label,counter.frontPaints<=1&&counter.backPaints<=1&&stack->currentWidget()==(back?alternate:original));
 }
 static void probe(){
  mainWindow=static_cast<QMainWindow*>(obs_frontend_get_main_window());
@@ -53,12 +56,30 @@ static void probe(){
      for(auto *w:list)if(w->testAttribute(Qt::WA_NativeWindow)||w->testAttribute(Qt::WA_PaintOnScreen)||w->inherits("QOpenGLWidget")||w->inherits("OBSQTDisplay"))
        blog(LOG_INFO,"FLIPDETAIL surface class=%s name=%s native=%d paintOnScreen=%d",w->metaObject()->className(),qPrintable(w->objectName()),w->testAttribute(Qt::WA_NativeWindow),w->testAttribute(Qt::WA_PaintOnScreen));
    }
-   switchPage(true,"back_no_sync_paint");
+   switchPage(true,"back_bounded_capture");
    auto *surface=stack->findChild<QWidget*>("aftermarket-view-flip");
    check("overlay",surface&&surface->parentWidget()==alternate&&!surface->testAttribute(Qt::WA_NativeWindow)&&surface->testAttribute(Qt::WA_TransparentForMouseEvents)&&!original->graphicsEffect()&&!alternate->graphicsEffect());
-   // Capture test evidence only; never performed by production transition code.
-   if(surface)stack->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/flip-reveal.png");
-   switchPage(false,"reverse_no_sync_paint");
+   // Inspect the painted frames on the real native mixer, at exact times.
+   auto *anim=surface?surface->findChild<QVariantAnimation*>("aftermarket-view-flip-motion"):nullptr;
+   bool geometry=false;
+   if(anim){
+     anim->pause();
+     QList<QImage> frames;
+     for(int ms:{0,70,105,140,209}){
+       anim->setCurrentTime(ms);
+       auto frame=surface->grab().toImage();
+       frame.save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+QString("/flip-%1.png").arg(ms));
+       frames.append(frame);
+     }
+     const auto mid=frames[2];
+     const auto background=mid.pixelColor(0,0);
+     int nonBackground=0;
+     for(int y=0;y<mid.height();++y)for(int x=0;x<mid.width();++x)
+       if(mid.pixelColor(x,y)!=background)++nonBackground;
+     geometry=nonBackground==0&&frames[0]!=frames[1]&&frames[1]!=mid&&frames[3]!=mid&&frames[0]!=frames[4]&&frames[3]!=frames[4];
+   }
+   check("two_face_geometry",geometry);
+   switchPage(false,"reverse_bounded_capture");
    check("one_overlay",stack->findChildren<QWidget*>("aftermarket-view-flip").size()==1);
  });
  QTimer::singleShot(1000,qApp,[]{

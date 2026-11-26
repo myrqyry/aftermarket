@@ -3833,3 +3833,24 @@ pan diagonal input verified in Qt fixture, not independently native
 audio source input probe. Other themes/platforms not individually
 qualified. Build complete, local commit only; running production OBS
 untouched; not installed/pushed.
+
+## Restore the actual two-sided AudioBus flip — 2026-11-25
+User rejected the curtain reveal introduced in 6f3039e. Restore the
+original two-face projective geometry and 210ms InOutSine timing from
+4142f4d/bd9f386, retaining the destination-root overlay, click-through
+behavior, cancellation on hide/resize/theme/motion/reversal, physical pixel
+budget and native child/GPU exclusions. Capture each face exactly once per
+switch, no recapture or layout mutation during frames. If unsafe, switch
+immediately, never substitute a different visual. Preserve the design contract
+when optimizing; a changed silhouette or motion is a design change, not an
+optimization. No unrelated rotary/icon or user configuration changes.
+RED: deterministic painted-frame test failed on the curtain's missing
+outgoing face. GREEN: outgoing contraction/skew, blank edge-on midpoint,
+opposite incoming skew/expansion and no recapture during animation.
+43/43 CTests, full build, 8/8 actual OBS 32.2.0 native probe checks.
+Evidence /tmp/am-mixer-flip.ZqWljS: actual 344x202 native mixer/AudioBus
+frames at 0/70/105/140/209ms; one root paint per face each switch; observed
+dispatch 26.664ms first switch / 1.541ms reverse, not a latency guarantee.
+Isolated profile has no representative full populated production mixer.
+OBS exited normally, two unattributed shutdown allocations. User's live
+OBS process not restarted. Preserve prior installed module for rollback.

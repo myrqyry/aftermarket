@@ -20,6 +20,7 @@
 #include <QVariantAnimation>
 #include <QPainter>
 #include <QPaintEvent>
+#include <QTransform>
 #include <QGuiApplication>
 #include <QtMath>
 #include <functional>
@@ -39,25 +40,21 @@ DockHeaderButton *button(QWidget *parent,const char *name,const QString &tooltip
     result->setAccessibleName(tooltip);
     return result;
 }
-// Reveal the live destination around a folding edge, without capturing,
-// transforming or repainting either page synchronously. The native page
-// switches immediately; this decoration has no hit targets.
+// A paint-only, short two-sided flip. Neither real OBS widget is transformed
+// or reassigned a graphics effect. Frame images are captured only once, not
+// repeatedly on every paint; the animation remains inside the original dock.
 class FlipFrame final : public QWidget {
 public:
-    explicit FlipFrame(QWidget *parent):QWidget(parent){
+    FlipFrame(QPixmap outgoing,QPixmap incoming,QWidget *parent)
+        :QWidget(parent),outgoing_(std::move(outgoing)),incoming_(std::move(incoming)){
         setObjectName("aftermarket-view-flip");
         setAttribute(Qt::WA_TransparentForMouseEvents);
         setFocusPolicy(Qt::NoFocus);
         parent->installEventFilter(this);
     }
     void setProgress(qreal value){
-        const int previous=coverWidth();
         progress_=qBound(qreal(0),value,qreal(1));
-        const int dirty=qMax(previous,coverWidth());
-        if(previous==coverWidth()||dirty<=0)return;
-        // Repaint only the area the old/new curtains occupy.
-        update(QRegion(QRect(0,0,dirty,height()))+
-               QRegion(QRect(width()-dirty,0,dirty,height())));
+        update();
     }
     void cancel(){
         hide();
@@ -73,22 +70,41 @@ protected:
     }
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
-        const auto pal=palette();
-        const int cover=coverWidth();
-        if(cover<=0)return;
-        const auto base=pal.color(QPalette::Window);
-        const auto shade=paletteBlend(base,pal.color(QPalette::Shadow),18);
-        const auto edge=paletteBlend(base,pal.color(QPalette::Highlight),32);
-        painter.fillRect(QRect(0,0,cover,height()),base);
-        painter.fillRect(QRect(width()-cover,0,cover,height()),base);
-        const int fold=qMin(cover,8);
-        painter.fillRect(QRect(cover-fold,0,fold,height()),shade);
-        painter.fillRect(QRect(width()-cover,0,fold,height()),shade);
-        painter.fillRect(QRect(cover-1,0,1,height()),edge);
-        painter.fillRect(QRect(width()-cover,0,1,height()),edge);
+        painter.fillRect(rect(),parentWidget()->parentWidget()->palette().color(QPalette::Window));
+        if(width()<=0||height()<=0)return;
+        const bool first=progress_<0.5;
+        const QPixmap &face=first?outgoing_:incoming_;
+        if(face.isNull())return;
+        const qreal halfTurn=first?progress_*2:(1-progress_)*2;
+        const qreal angle=halfTurn*M_PI_2;
+        const qreal amount=qCos(angle);
+        if(amount<0.01)return;
+        const qreal halfWidth=width()*amount/2;
+        const qreal cx=width()/2.0;
+        const qreal inset=height()*0.09*qSin(angle);
+        // One vertical edge recedes as the card rotates away; the other
+        // recedes as the second side turns in. The perspective is intentionally
+        // restrained to avoid a distracting gimmick in a working mixer.
+        const qreal leftInset=first?0:inset;
+        const qreal rightInset=first?inset:0;
+        const QPolygonF target{
+            QPointF(cx-halfWidth,leftInset),
+            QPointF(cx+halfWidth,rightInset),
+            QPointF(cx+halfWidth,height()-rightInset),
+            QPointF(cx-halfWidth,height()-leftInset)
+        };
+        const qreal pixelRatio=face.devicePixelRatio();
+        const QRectF bounds(0,0,face.width()/pixelRatio,face.height()/pixelRatio);
+        const QPolygonF source{bounds.topLeft(),bounds.topRight(),
+                               bounds.bottomRight(),bounds.bottomLeft()};
+        QTransform perspective;
+        if(!QTransform::quadToQuad(source,target,perspective))return;
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.setTransform(perspective);
+        painter.drawPixmap(bounds,face,QRectF(QPointF(0,0),face.size()/pixelRatio));
     }
 private:
-    int coverWidth()const{return qRound(width()*0.48*(1-progress_));}
+    QPixmap outgoing_,incoming_;
     qreal progress_=0;
 };
 }
@@ -256,9 +272,10 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     // Keep only the latest transition during rapid user reversals.
     if(it->transition)delete it->transition.data();
     it->transition=nullptr;
-    // The decoration belongs INSIDE the destination page. A native page
-    // root can paint ordinary alien QWidget children; a native descendant
-    // or GPU surface cannot reliably compose below that overlay.
+    // Snapshot each face only once, with a physical-pixel limit. Native
+    // page roots are supported, but separate native child windows and GPU
+    // surfaces cannot be reliably captured/composited. Never substitute a
+    // different animation when the flip is unsafe; switch immediately.
     const qreal dpr=stack->devicePixelRatioF();
     const bool withinBudget=qreal(stack->width())*stack->height()*dpr*dpr<=1024*1024;
     auto compositable=[](QWidget *page){
@@ -274,10 +291,12 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
     const bool animate=withinBudget&&state->motionEnabled&&state->motionEnabled()&&
         stack->isVisible()&&stack->width()>0&&stack->height()>0&&
         stack->style()->styleHint(QStyle::SH_Widget_Animate,nullptr,stack)&&
-        compositable(destination);
+        compositable(stack->currentWidget())&&compositable(destination);
+    const QPixmap outgoing=animate?stack->currentWidget()->grab():QPixmap{};
     stack->setCurrentWidget(destination);
-    if(animate){
-        auto *surface=new FlipFrame(destination);
+    const QPixmap incoming=animate?destination->grab():QPixmap{};
+    if(!outgoing.isNull()&&!incoming.isNull()){
+        auto *surface=new FlipFrame(outgoing,incoming,destination);
         surface->setGeometry(destination->rect());
         surface->show();
         surface->raise();
@@ -286,16 +305,19 @@ bool DockFaces::showBack(QDockWidget *dock,bool visible) {
         animation->setDuration(210);
         animation->setStartValue(0.0);
         animation->setEndValue(1.0);
+        animation->setEasingCurve(QEasingCurve::InOutSine);
         QPointer<FlipFrame> safe=surface;
         QPointer<QDockWidget> target=dock;
         connect(animation,&QVariantAnimation::valueChanged,surface,
-            [this,safe,animation,budget=MotionFrameBudget{}](const QVariant &) mutable {
+            [this,safe](const QVariant &value) {
                 if(!safe)return;
                 if(!safe->isVisible()||!state->motionEnabled||!state->motionEnabled()){
                     safe->cancel();return;
                 }
-                if(budget.advance(animation->currentTime(),animation->duration()))
-                    safe->setProgress(QEasingCurve(QEasingCurve::OutCubic).valueForProgress(budget.progress(animation->duration())));
+                // QVariantAnimation samples elapsed time on the GUI clock.
+                // Paint only the two immutable pixmaps; no frame recapture,
+                // layout mutation or queue of missed intermediate frames.
+                safe->setProgress(value.toReal());
             });
         connect(animation,&QVariantAnimation::finished,this,[this,target,safe]{
             if(target){

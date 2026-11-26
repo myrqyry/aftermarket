@@ -17,5 +17,5 @@ set -e
 echo "OBS_EXIT=$rc"
 grep -E "FLIPCHECK|FLIPMETRIC|FLIPDETAIL" "$root/obs.log" || true
 [[ "$rc" == 0 ]]
-[[ $(grep -c 'FLIPCHECK .*=[1]$' "$root/obs.log") == 7 ]]
+[[ $(grep -c 'FLIPCHECK .*=[1]$' "$root/obs.log") == 8 ]]
 ! grep -q 'FLIPCHECK .*=[0]$' "$root/obs.log"
