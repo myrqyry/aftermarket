@@ -3854,3 +3854,27 @@ dispatch 26.664ms first switch / 1.541ms reverse, not a latency guarantee.
 Isolated profile has no representative full populated production mixer.
 OBS exited normally, two unattributed shutdown allocations. User's live
 OBS process not restarted. Preserve prior installed module for rollback.
+
+## Compact side-by-side mixer control alignment and source menu — 2026-11-25
+User requested vertical ellipsis instead of native VolumeName down arrow
+and side controls around gain. Preserve the already-good stacked-channel
+layout. Integrated rotary side-by-side strips now reuse the original
+mute/monitor layout as a left vertical stack, original frame and dB label
+in the center, and unchanged compact rotary dials as a right vertical
+stack. Restore original width, button margins/spacing/direction/alignment
+and native layout slots on fallback/detach. Native 110px cap cannot fit
+the preserved targets; measured strip width was 138px. Grid row fit uses
+actual size hints instead of the obsolete 180px floor. No gain styling,
+drag sensitivity, DSP, routing or flip geometry change. Ellipsis replaces
+only the verified OBS 32.2 VolumeName indicator paint; pixel-aligned dots
+remain separate under binary rasterization. Existing native menu click,
+text, accessibility and channel ordering unchanged.
+RED: old arrow and below-gain controls failed pixel and position tests.
+Native first attempts caught joined dots and outdated grid row floor.
+GREEN: 43/43 CTests and 15/15 real OBS 32.2.0 checks, including actual
+five-channel side placement, three separate dots, native menu opening,
+precise sync editor/relative encoder, grid wrap/order/short-dock fallback
+and unchanged source values. Evidence /tmp/am-mixer-columns.HImAij.
+Default native theme in isolated probe; user's exact Colorway theme and
+live populated mixer not separately measured. Existing README images
+predate this layout. No unrelated plugin.cpp comment staged.

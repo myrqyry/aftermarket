@@ -770,7 +770,7 @@ Enable **AudioBus alternate routing view** in **OBS Settings → Aftermarket →
 
 ![Compact rotary mixer channels in an isolated OBS test profile](screenshots/readme/mixer-rotary-current.png)
 
-In the side-by-side (vertical-fader) orientation, **Pan and sync as knobs** uses the two small dials aligned beneath the native mute/monitor pair (button spacing adapts to the native theme and is restored when compact mode is disabled), with icon-based status above the source name. With integrated rotary peak meters enabled, the original dB readout moves below the gain knob and the compact control group stays together. Full-height native meters retain their original placement. Turning off the adjustment knobs restores the native labels and adjustment row.
+In the side-by-side (vertical-fader) orientation, **Pan and sync as knobs** with integrated rotary peak meters places the native mute and monitor buttons in a vertical stack at left, the existing gain knob and dB readout in the middle, and the existing 32px pan and sync dials in a vertical stack at right. The compact strip widens only enough for the three control groups (138px in the native test). Without integrated gain meters, the original control rows and width are restored. Source-name buttons in supported OBS VolumeName rows paint a palette-aware vertical ellipsis in their existing indicator bounds; the native menu and drag-to-reorder behavior are unchanged. The horizontal-fader rotary layout remains unchanged apart from the ellipsis. Turning off adjustment knobs restores the original layouts and width.
 
 ![Side-by-side compact rotary strips wrapped in the native OBS mixer](screenshots/readme/mixer-rotary-columns.png)
 

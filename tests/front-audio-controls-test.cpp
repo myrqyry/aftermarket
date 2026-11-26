@@ -26,8 +26,35 @@
 #include <QKeyEvent>
 #include <QImage>
 #include <QPalette>
+#include <QStylePainter>
+#include <QStyleOptionButton>
+#include <QAbstractButton>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
+// Reproduce the actual OBS 32.2 VolumeName painter and reserved indicator
+// geometry; the native child label continues to render independently.
+class VolumeName final : public QAbstractButton {
+ Q_OBJECT
+public:
+ explicit VolumeName(const QString &name,QWidget *parent):QAbstractButton(parent){
+  setText(name);auto *box=new QHBoxLayout(this);
+  box->setContentsMargins(0,0,style()->pixelMetric(QStyle::PM_MenuButtonIndicator,nullptr,this),0);
+  box->addWidget(new QLabel(name,this));
+ }
+ QRect indicatorRect()const{
+  QStyleOptionButton opt;opt.initFrom(this);
+  const int padding=opt.rect.right()-style()->subElementRect(QStyle::SE_PushButtonContents,&opt,this).right();
+  const int w=style()->pixelMetric(QStyle::PM_MenuButtonIndicator,&opt,this);
+  return QRect(opt.rect.right()-w-padding/2,opt.rect.center().y()-w/2,w,w);
+ }
+protected:
+ void paintEvent(QPaintEvent *)override{
+  QStylePainter p(this);QStyleOptionButton opt;opt.initFrom(this);
+  p.drawControl(QStyle::CE_PushButtonBevel,opt);
+  QStyleOption arrow=opt;arrow.rect=indicatorRect();
+  p.drawPrimitive(QStyle::PE_IndicatorArrowDown,arrow);
+ }
+};
 int main(int argc,char **argv){
  QApplication app(argc,argv);app.setStyle("Fusion");
  QTemporaryDir tmp;REQUIRE(tmp.isValid());
@@ -334,6 +361,37 @@ int main(int argc,char **argv){
  oneName->setText("Renamed TTS");restored.refresh();
  REQUIRE(layout->itemAt(0)->widget()==two&&layout->itemAt(1)->widget()==one);
  restored.detach();
+ // Preserve the native button, child label, width and action. Only its
+ // arrow primitive becomes three vertical dots; detach restores the arrow.
+ QWidget menuMixer;auto *menuLayout=new QVBoxLayout(&menuMixer);
+ auto *menuChannel=new QWidget(&menuMixer);menuChannel->setObjectName("VolumeControl");
+ menuChannel->setMaximumWidth(110);auto *menuChannelLayout=new QVBoxLayout(menuChannel);
+ menuChannelLayout->setContentsMargins(0,0,0,0);
+ auto *volumeName=new VolumeName("Media Source",menuChannel);
+ volumeName->setFixedHeight(24);menuChannelLayout->addWidget(volumeName);
+ menuLayout->addWidget(menuChannel);menuMixer.resize(140,140);menuMixer.show();app.processEvents();
+ auto *label=volumeName->findChild<QLabel*>();REQUIRE(label);
+ int clicks=0;QObject::connect(volumeName,&QAbstractButton::clicked,[&]{++clicks;});
+ auto palette=volumeName->palette();palette.setColor(QPalette::ButtonText,QColor("#ff00ff"));
+ volumeName->setPalette(palette);
+ const auto originalArrow=volumeName->grab().toImage().copy(volumeName->indicatorRect());
+ augment::FrontAudioControls menuUi(tmp.filePath("menu-test.json"),[&]{return current;},{},{});
+ REQUIRE(menuUi.attach(&menuMixer));app.processEvents();
+ const auto glyph=volumeName->grab().toImage().copy(volumeName->indicatorRect());
+ REQUIRE(glyph!=originalArrow);
+ // Three disjoint painted runs down the vertical center, not a triangle.
+ const auto ink=QColor("#ff00ff");
+ int runs=0;bool previous=false;
+ for(int y=0;y<glyph.height();++y){
+  bool hit=false;for(int x=0;x<glyph.width();++x){const auto c=glyph.pixelColor(x,y);hit|=c.red()>180&&c.blue()>180&&c.green()<100;}
+  if(hit&&!previous)++runs;previous=hit;
+ }
+ REQUIRE(runs==3);
+ REQUIRE(volumeName->findChild<QLabel*>()==label&&volumeName->text()=="Media Source");
+ volumeName->click();REQUIRE(clicks==1);
+ menuUi.detach();app.processEvents();
+ const auto restoredArrow=volumeName->grab().toImage().copy(volumeName->indicatorRect());
+ REQUIRE(restoredArrow==originalArrow);
  // Real OBS has narrow side-by-side VolumeControl columns. Both
  // adjustment rows must have an actual hit target at 90px column width.
  QWidget narrow;
@@ -493,13 +551,23 @@ int main(int argc,char **argv){
  auto *columnSync=strip->findChild<QDial*>("aftermarket-offset-dial");
  auto *columnSpin=strip->findChild<QSpinBox*>("aftermarket-offset-ms");
  REQUIRE(columnPan&&columnSync&&columnSpin&&columnPan->isVisible()&&columnSync->isVisible()&&!columnSpin->isVisible());
- REQUIRE(br->spacing()>=14);
+ // Native buttons at left, gain at center, and vertically stacked
+ // pan/sync at right; all hit targets fit the widened compact strip.
+ const auto middle=stripGain->mapTo(strip,stripGain->rect().center());
+ const auto ml=sm->mapTo(strip,sm->rect().center()),nl=sn->mapTo(strip,sn->rect().center());
+ const auto pr=columnPan->mapTo(strip,columnPan->rect().center()),srp=columnSync->mapTo(strip,columnSync->rect().center());
+ REQUIRE(ml.x()<middle.x()&&nl.x()<middle.x()&&pr.x()>middle.x()&&srp.x()>middle.x());
+ REQUIRE(ml.x()==nl.x()&&pr.x()==srp.x()&&ml.y()<nl.y()&&pr.y()<srp.y());
+ REQUIRE(qAbs(ml.y()-pr.y())<=6&&qAbs(nl.y()-srp.y())<=6);
+ REQUIRE(sm->mapTo(strip,QPoint()).x()>=0&&columnPan->mapTo(strip,QPoint(columnPan->width(),0)).x()<=strip->width());
+ REQUIRE(br->direction()==QBoxLayout::TopToBottom&&strip->width()>=118);
+
  REQUIRE(stripStatus->maximumWidth()==18);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()>stripGain->mapTo(strip,QPoint()).y()+stripGain->height()-1);
  REQUIRE(stripDb->mapTo(strip,QPoint()).y()-stripGain->mapTo(strip,QPoint()).y()-stripGain->height()<30);
  REQUIRE(stripGain->value()==63&&stripGain->parentWidget()==stripFrame);
  stripGain->setProperty("_obsUiAugmentKnob",false);stripGain->setProperty("_obsUiAugmentIntegratedMeter",false);columnUi.refresh();app.processEvents();
- REQUIRE(dr->indexOf(stripDb)==0&&stripRoot->stretch(stripRoot->indexOf(stripFrame))==1);
+ REQUIRE(dr->indexOf(stripDb)==0&&stripRoot->stretch(stripRoot->indexOf(stripFrame))==1&&br->direction()==QBoxLayout::LeftToRight&&strip->maximumWidth()==110);
  REQUIRE(columnSync->isVisible()&&!columnSpin->isVisible());
  columnUi.setKnobs(false);app.processEvents();REQUIRE(columnSpin->isVisible());
  columnUi.detach();app.processEvents();
@@ -720,3 +788,5 @@ int main(int argc,char **argv){
  std::cout<<"native vertical and horizontal Audio Mixer channel widths are name-independent; reversible layout verified\n";
  return 0;
 }
+
+#include "front-audio-controls-test.moc"

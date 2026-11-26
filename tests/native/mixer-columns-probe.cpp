@@ -19,6 +19,10 @@
 #include <QSpinBox>
 #include <QMenu>
 #include <QAbstractButton>
+#include <QStyleOptionButton>
+#include <QStyle>
+#include <QImage>
+#include <QEventLoop>
 #include <cmath>
 OBS_DECLARE_MODULE()
 static QMainWindow *mainWindow=nullptr;
@@ -74,7 +78,7 @@ static void probe(){
    auto *offset=w->findChild<QDial*>("aftermarket-offset-dial");
    auto *spin=w->findChild<QSpinBox*>("aftermarket-offset-ms");
    auto *gain=frame?frame->findChild<QSlider*>():nullptr;
-   layout&=root&&db&&frame&&gain&&root->indexOf(db)==root->indexOf(frame)+1&&db->isVisible()&&gain->property("_obsUiAugmentIntegratedMeter").toBool();
+   layout&=root&&db&&frame&&gain&&db->isVisible()&&gain->property("_obsUiAugmentIntegratedMeter").toBool();
    if(!db||!frame||!pan||!offset||!spin){position=false;exact=false;continue;}
    QList<QAbstractButton*> buttons;
    for(auto *b:w->findChildren<QAbstractButton*>(QString(),Qt::FindDirectChildrenOnly))
@@ -82,16 +86,55 @@ static void probe(){
    const auto dbPos=db->mapTo(w,db->rect().center());
    const auto panPos=pan->mapTo(w,pan->rect().center()),syncPos=offset->mapTo(w,offset->rect().center());
    position&=gain&&pan->isVisible()&&offset->isVisible()&&!spin->isVisible()&&
-       dbPos.y()>frame->geometry().bottom()&&dbPos.y()-gain->mapTo(w,QPoint()).y()-gain->height()<30&&panPos.x()<syncPos.x()&&panPos.y()==syncPos.y()&&buttons.size()==2;
+       dbPos.y()>frame->geometry().bottom()&&dbPos.y()-gain->mapTo(w,QPoint()).y()-gain->height()<30&&panPos.x()==syncPos.x()&&panPos.y()<syncPos.y()&&buttons.size()==2;
    if(buttons.size()==2){
-      const int x1=buttons[0]->mapTo(w,buttons[0]->rect().center()).x(),x2=buttons[1]->mapTo(w,buttons[1]->rect().center()).x();
-      position&=std::abs(panPos.x()-std::min(x1,x2))<=6&&std::abs(syncPos.x()-std::max(x1,x2))<=6&&panPos.y()>buttons[0]->mapTo(w,QPoint()).y();
+      const auto first=buttons[0]->mapTo(w,buttons[0]->rect().center()),second=buttons[1]->mapTo(w,buttons[1]->rect().center());
+      const auto gainPos=gain->mapTo(w,gain->rect().center());
+      position&=first.x()==second.x()&&first.x()<gainPos.x()&&gainPos.x()<panPos.x()&&
+       std::abs(panPos.y()-std::min(first.y(),second.y()))<=6&&std::abs(syncPos.y()-std::max(first.y(),second.y()))<=6;
+      blog(LOG_INFO,"GRIDDETAIL width=%d left=%d,%d gain=%d,%d right=%d,%d / %d,%d",w->width(),first.x(),first.y(),gainPos.x(),gainPos.y(),panPos.x(),panPos.y(),syncPos.x(),syncPos.y());
    }
    bool icon=false;
    for(auto *label:w->findChildren<QLabel*>(QString(),Qt::FindDirectChildrenOnly))
       if(label->text()=="Active"&&label->maximumWidth()==18&&label->toolTip()=="Active")icon=true;
    status&=icon;
    values&=db->text().contains("dB")&&db->text().contains("-7.5");
+   if(w==all.first()){
+    QAbstractButton *nameButton=nullptr;
+    for(auto *b:w->findChildren<QAbstractButton*>())if(b->inherits("VolumeName"))nameButton=b;
+    bool dots=false,nativeMenuOpened=false;
+    if(nameButton){
+      QStyleOptionButton opt;opt.initFrom(nameButton);
+      const int padding=opt.rect.right()-nameButton->style()->subElementRect(QStyle::SE_PushButtonContents,&opt,nameButton).right();
+      const int width=nameButton->style()->pixelMetric(QStyle::PM_MenuButtonIndicator,&opt,nameButton);
+      const QRect area(opt.rect.right()-width-padding/2,opt.rect.center().y()-width/2,width,width);
+      const auto img=nameButton->grab().toImage().copy(area);
+      // Compare against palette foreground; each dot yields a distinct
+      // connected vertical run through the glyph's center.
+      const auto fg=nameButton->palette().color(QPalette::ButtonText);
+      int runs=0;bool before=false;
+      for(int y=0;y<img.height();++y){
+        bool hit=false;
+        for(int x=0;x<img.width();++x){
+          const auto c=img.pixelColor(x,y);
+          hit|=std::abs(c.red()-fg.red())+std::abs(c.green()-fg.green())+std::abs(c.blue()-fg.blue())<120;
+        }
+        if(hit&&!before)++runs;before=hit;
+      }
+      dots=runs==3;
+      nameButton->grab().save(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/channel-menu-dots.png");
+      QTimer::singleShot(50,qApp,[&nativeMenuOpened]{
+        for(auto *widget:QApplication::topLevelWidgets())
+          if(auto *menu=qobject_cast<QMenu*>(widget);menu&&menu->isVisible()&&!menu->actions().isEmpty()){
+            nativeMenuOpened=true;menu->close();
+          }
+      });
+      nameButton->click();
+      QEventLoop settle;QTimer::singleShot(100,&settle,&QEventLoop::quit);settle.exec();
+    }
+    check("channel_menu_three_dots",dots);
+    check("channel_menu_native_action",nativeMenuOpened);
+   }
    if(w==all.first()){
     QMetaObject::invokeMethod(offset,"customContextMenuRequested",Qt::DirectConnection,Q_ARG(QPoint,QPoint(8,8)));
     auto *menu=offset->findChild<QMenu*>("aftermarket-precise-sync-menu");
@@ -127,7 +170,7 @@ static void probe(){
   bool narrow=channels().size()==5;
   for(auto *w:channels()){
     auto *offset=w->findChild<QDial*>("aftermarket-offset-dial");
-    narrow&=offset&&offset->isVisible()&&w->width()<=110;
+    narrow&=offset&&offset->isVisible()&&w->width()>=118&&w->width()<=150;
   }
   check("narrow_column_encoder",narrow);
   auto *g=grid();

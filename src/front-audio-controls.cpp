@@ -11,6 +11,8 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QPainter>
+#include <QStylePainter>
+#include <QStyleOptionButton>
 #include <QPainterPath>
 #include <QMenu>
 #include <QToolBar>
@@ -205,6 +207,35 @@ void paintStatus(QLabel *label,ChannelStatus kind){
         painter.drawEllipse(QRectF(4,4,8,8));
     }
 }
+// OBS 32.2 VolumeName is a QAbstractButton with a child QLabel and
+// explicitly paints PE_IndicatorArrowDown (not a menu-indicator subcontrol).
+// Retain its exact native bevel and indicator bounds, replacing only the
+// painted arrow. Its native click, menu, focus, label and drag paths remain.
+bool paintVolumeNameMenu(QAbstractButton *button){
+    if(!button||!button->inherits("VolumeName")||
+       !button->findChild<QLabel*>(QString(),Qt::FindDirectChildrenOnly))return false;
+    QStyleOptionButton opt;opt.initFrom(button);
+    const auto *style=button->style();
+    const int padding=opt.rect.right()-style->subElementRect(QStyle::SE_PushButtonContents,&opt,button).right();
+    const int w=style->pixelMetric(QStyle::PM_MenuButtonIndicator,&opt,button);
+    const QRect indicator(opt.rect.right()-w-padding/2,opt.rect.center().y()-w/2,w,w);
+    if(w<7||!opt.rect.contains(indicator))return false;
+    QStylePainter p(button);
+    p.drawControl(QStyle::CE_PushButtonBevel,opt);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(Qt::NoPen);
+    p.setBrush(opt.palette.color(button->isEnabled()?QPalette::Active:QPalette::Disabled,QPalette::ButtonText));
+    // Use a pixel-aligned dot at this tiny native indicator size.
+    // Guaranteed gaps also on binary, non-antialiased paint targets.
+    const int step=qMin(4,qMax(2,(w-1)/3));
+    const int diameter=step>=3?2:1;
+    const auto color=p.brush().color();
+    for(int i=-1;i<=1;++i)
+        p.fillRect(QRect(indicator.center().x()-diameter/2,
+                         indicator.center().y()+i*step-diameter/2,
+                         diameter,diameter),color);
+    return true;
+}
 QWidget *sourceNameLabel(QWidget *volume){
     if(!volume)return nullptr;
     for(auto *candidate:volume->findChildren<QWidget*>()){
@@ -235,7 +266,7 @@ struct FrontAudioControls::State {
         QCursor originalCursor;
         bool hadCursor=false;
         // Preserve all native layout slots and widget identities.
-        QPointer<QBoxLayout> root,body,header,center,nameRow,columnButtons;
+        QPointer<QBoxLayout> root,body,header,center,nameRow,columnButtons,columnBody,columnCenter;
         int originalButtonSpacing=-1,appliedButtonSpacing=-1;
         int nameIndex=-1,nameStretch=0;
         QPointer<QWidget> frame;
@@ -249,6 +280,11 @@ struct FrontAudioControls::State {
         bool statusDecorated=false;
         bool columnMode=false,columnGain=false;
         QSpacerItem *columnSpacer=nullptr;
+        int originalColumnMax=0,appliedColumnMax=0;
+        int columnButtonsStretch=0;
+        Qt::Alignment columnButtonsAlignment;
+        QMargins columnButtonMargins;
+        QList<Qt::Alignment> columnButtonAlignments;
 
     };
     QObject *owner=nullptr;
@@ -338,7 +374,10 @@ struct FrontAudioControls::State {
         const auto margins=box->contentsMargins();
         const int width=scroll->viewport()->width()-margins.left()-margins.right();
         const bool strips=box->direction()==QBoxLayout::LeftToRight;
-        int minimum=strips?80:240,minimumHeight=180;
+        // Compact side-control strips are shorter than the former vertically
+        // stacked control group. Use their measured size hints, not the old
+        // 180px row floor, while still requiring every row to fit.
+        int minimum=strips?80:240,minimumHeight=0;
         for(auto *w:widgets){
             if(w->isHidden()||w->property("aftermarket-foreign").toBool())return 1;
             minimum=qMax(minimum,qMax(w->minimumWidth(),w->minimumSizeHint().width()));
@@ -632,23 +671,42 @@ struct FrontAudioControls::State {
     }
     void restoreColumnGain(Row &r){
         if(!r.columnGain)return;
-        if(r.root){
+        if(r.root&&r.columnBody&&r.columnCenter&&r.columnButtons&&r.frame&&r.db&&r.controls){
             if(r.columnSpacer){
-                const int count=r.root->count();
-                for(int i=0;i<count;++i)if(r.root->itemAt(i)==r.columnSpacer){
+                for(int i=0;i<r.root->count();++i)if(r.root->itemAt(i)==r.columnSpacer){
                     delete r.root->takeAt(i);break;
                 }
             }
-            if(r.db&&r.header&&r.root->indexOf(r.db)>=0){
-                r.root->removeWidget(r.db);
-                r.header->insertWidget(r.dbIndex,r.db,r.dbStretch,r.dbAlignment);
+            r.columnCenter->removeWidget(r.frame);
+            r.columnCenter->removeWidget(r.db);
+            r.columnBody->removeItem(r.columnButtons);
+            r.columnBody->removeWidget(r.controls);
+            r.root->removeItem(r.columnBody);
+            delete r.columnBody.data();
+            r.columnButtons->setDirection(QBoxLayout::LeftToRight);
+            for(int i=0;i<r.columnButtonAlignments.size()&&i<r.columnButtons->count();++i)
+                r.columnButtons->setAlignment(r.columnButtons->itemAt(i)->widget(),r.columnButtonAlignments[i]);
+            r.columnButtons->setSpacing(r.originalButtonSpacing);
+            r.appliedButtonSpacing=r.originalButtonSpacing;
+            r.columnButtons->setContentsMargins(r.columnButtonMargins);
+            r.columnButtons->setAlignment(r.columnButtonsAlignment);
+            r.root->insertWidget(3,r.frame,r.frameStretch,r.frameAlignment);
+            r.root->insertLayout(4,r.columnButtons,r.columnButtonsStretch);
+            r.root->insertWidget(5,r.controls,0,r.controlsAlignment);
+            r.header->insertWidget(r.dbIndex,r.db,r.dbStretch,r.dbAlignment);
+            if(auto *adjust=qobject_cast<QBoxLayout*>(r.controls->layout())){
+                adjust->setDirection(QBoxLayout::LeftToRight);
+                if(r.panDial)adjust->setAlignment(r.panDial,Qt::Alignment{});
+                if(r.offsetDial)adjust->setAlignment(r.offsetDial,Qt::Alignment{});
             }
-            if(r.frame&&r.root->indexOf(r.frame)>=0){
-                r.root->setStretch(r.root->indexOf(r.frame),r.frameStretch);
-                r.root->setAlignment(r.frame,r.frameAlignment);
-            }
+            r.controls->setFixedWidth(2*compactDialSize+4);
+            r.controls->setMinimumHeight(r.controlsMin.height());
+            r.controls->setMaximumHeight(r.controlsMax.height());
+            r.controls->setSizePolicy(r.controlsPolicy);
         }
-        r.columnSpacer=nullptr;r.columnGain=false;
+        if(r.volume&&r.volume->maximumWidth()==r.appliedColumnMax)
+            r.volume->setMaximumWidth(r.originalColumnMax);
+        r.columnBody.clear();r.columnCenter.clear();r.columnSpacer=nullptr;r.columnGain=false;
     }
     void restoreColumn(Row &r){
         if(!r.columnMode)return;
@@ -706,7 +764,7 @@ struct FrontAudioControls::State {
             r.appliedButtonSpacing=r.originalButtonSpacing;
             r.controls->setFixedWidth(2*compactDialSize+4);root->setAlignment(r.controls,Qt::AlignHCenter);
         }
-        if(r.columnButtons&&r.columnButtons->count()==2){
+        if(!r.columnGain&&r.columnButtons&&r.columnButtons->count()==2){
             auto *left=r.columnButtons->itemAt(0)->widget(),*right=r.columnButtons->itemAt(1)->widget();
             if(left&&right&&r.columnButtons->spacing()==r.appliedButtonSpacing){
                 const int spacing=qMax(r.originalButtonSpacing,compactDialSize+2-(left->width()+right->width())/2);
@@ -718,14 +776,56 @@ struct FrontAudioControls::State {
         if(!integrated){restoreColumnGain(r);return true;}
         if(!r.columnGain){
             const int frameIndex=root->indexOf(frame);
-            if(frameIndex<0||r.header->indexOf(r.db)<0)return true;
-            r.header->removeWidget(r.db);
-            root->setStretch(frameIndex,0);root->setAlignment(frame,Qt::AlignHCenter|Qt::AlignTop);
-            root->insertWidget(frameIndex+1,r.db,0,Qt::AlignHCenter);
-            // Keep the small rotary group together. Extra dock height is
-            // not inserted between the gain knob and its native buttons.
+            auto *buttons=r.columnButtons.data();
+            auto *adjust=qobject_cast<QBoxLayout*>(r.controls->layout());
+            if(frameIndex!=3||!buttons||!adjust||r.header->indexOf(r.db)<0||
+               root->indexOf(r.controls)!=5)return true;
+            // The native 110px cap cannot contain a 68px gain, 32px dials,
+            // and native mute/monitor buttons together. Expand only this
+            // compact presentation, retaining native widget sizes.
+            r.originalColumnMax=r.volume->maximumWidth();
+            r.columnButtonsStretch=root->stretch(4);
+            r.columnButtonsAlignment=buttons->alignment();
+            r.columnButtonMargins=buttons->contentsMargins();
+            r.columnButtonAlignments.clear();
+            for(int i=0;i<buttons->count();++i)r.columnButtonAlignments.append(buttons->itemAt(i)->alignment());
+            root->removeWidget(frame);root->removeItem(buttons);
+            root->removeWidget(r.controls);r.header->removeWidget(r.db);
+            auto *body=new QHBoxLayout;
+            body->setObjectName("aftermarket-column-side-controls");
+            body->setContentsMargins(0,0,0,0);body->setSpacing(2);
+            auto *middle=new QVBoxLayout;
+            middle->setContentsMargins(0,0,0,0);middle->setSpacing(0);
+            middle->addWidget(frame,0,Qt::AlignHCenter);
+            middle->addWidget(r.db,0,Qt::AlignHCenter);
+            buttons->setDirection(QBoxLayout::TopToBottom);
+            auto buttonHeight=[buttons](int index){
+                auto *w=buttons->itemAt(index)->widget();
+                return qBound(w->minimumHeight(),w->sizeHint().height(),w->maximumHeight());
+            };
+            const int first=buttonHeight(0),second=buttonHeight(1);
+            buttons->setSpacing(qMax(2,compactDialSize+2-(first+second)/2));
+            buttons->setContentsMargins(r.columnButtonMargins.left(),qMax(0,1+(compactDialSize-first)/2),r.columnButtonMargins.right(),0);
+            buttons->setAlignment(Qt::AlignCenter);
+            for(int i=0;i<buttons->count();++i)buttons->setAlignment(buttons->itemAt(i)->widget(),Qt::AlignHCenter);
+            adjust->setDirection(QBoxLayout::TopToBottom);
+            r.controls->setFixedSize(compactDialSize+2,2*compactDialSize+4);
+            r.controls->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Fixed);
+            adjust->setAlignment(r.panDial,Qt::AlignHCenter);
+            adjust->setAlignment(r.offsetDial,Qt::AlignHCenter);
+            body->addLayout(buttons);
+            body->addLayout(middle,1);
+            body->addWidget(r.controls,0,Qt::AlignTop);
+            // Center side controls on the gain face, not the dB label.
+            buttons->setAlignment(Qt::AlignTop|Qt::AlignHCenter);
+            root->insertLayout(frameIndex,body);
             root->addStretch(1);r.columnSpacer=root->itemAt(root->count()-1)->spacerItem();
-            r.columnGain=true;
+            r.columnBody=body;r.columnCenter=middle;r.columnGain=true;
+            const auto margins=root->contentsMargins();
+            const int required=body->minimumSize().width()+margins.left()+margins.right()+4;
+            r.appliedColumnMax=qMax(r.originalColumnMax,qMax(134,required));
+            r.volume->setMaximumWidth(r.appliedColumnMax);
+            r.volume->updateGeometry();
         }
         return true;
     }
@@ -816,6 +916,7 @@ struct FrontAudioControls::State {
     void remove(Row &r){
         restoreRotary(r);
         if(r.nameHandle){
+            r.nameHandle->update();
             if(r.hadCursor)r.nameHandle->setCursor(r.originalCursor);
             else r.nameHandle->unsetCursor();
         }
@@ -1023,12 +1124,15 @@ bool FrontAudioControls::setMenuButton(QToolButton *button){
     return true;
 }
 bool FrontAudioControls::eventFilter(QObject *watched,QEvent *event){
-    if(event->type()==QEvent::Paint)
+    if(event->type()==QEvent::Paint){
+        for(const auto &row:state->rows)
+            if(row.nameHandle==watched&&paintVolumeNameMenu(qobject_cast<QAbstractButton*>(watched)))return true;
         for(const auto &row:state->rows)if(row.statusDecorated&&row.status==watched){
             const auto kind=statusKind(row.status->text());
             if(kind!=ChannelStatus::Unknown){paintStatus(row.status,kind);return true;}
             break;
         }
+    }
     if(watched==state->native&&(event->type()==QEvent::Resize||event->type()==QEvent::Show))
         state->gridDebounce.start();
     if(watched==state->menuButton&&
@@ -1332,6 +1436,7 @@ void FrontAudioControls::refresh(){
                 row.originalCursor=row.nameHandle->cursor();
                 row.hadCursor=row.nameHandle->testAttribute(Qt::WA_SetCursor);
                 row.nameHandle->installEventFilter(this);
+                row.nameHandle->update();
             }
             row.panSlider=pan;row.panDial=panDial;row.offsetSpin=offset;
             row.offsetDial=offsetDial;row.panLabel=panLabel;row.offsetLabel=offsetLabel;
