@@ -35,6 +35,8 @@
 #include "dock-title-icons.h"
 #include "obs-settings-page.h"
 #include "source-picker.h"
+#include "health-stats.h"
+#include "health-resources.h"
 #include "native-plugin-icons.h"
 #include <obs.hpp>
 #include <QVariant>
@@ -93,10 +95,47 @@ static std::unique_ptr<augment::DockFaces> dockFaces;
 static std::unique_ptr<augment::DockTitleIcons> dockTitleIcons;
 static std::unique_ptr<augment::ObsSettingsPage> nativeSettings;
 static std::unique_ptr<augment::SourcePicker> sourcePicker;
+static std::unique_ptr<augment::HealthStats> healthStats;
+static std::unique_ptr<augment::HealthResources> healthResources;
+static std::unique_ptr<os_cpu_usage_info_t,decltype(&os_cpu_usage_info_destroy)> healthCpu(nullptr,os_cpu_usage_info_destroy);
 static std::unique_ptr<augment::NativePluginIcons> nativePluginIcons;
 static std::unique_ptr<augment::FrontAudioControls> frontAudio;
 static std::unique_ptr<augment::EmergencyRecovery> emergency;
 static bool uiActive=false,frontendReady=false;
+static void setHealthResources(bool enabled){
+    if(enabled){
+        if(!healthResources){healthResources=std::make_unique<augment::HealthResources>();healthResources->start();}
+        if(!healthCpu)healthCpu.reset(os_cpu_usage_info_start());
+    }else{
+        healthResources.reset();healthCpu.reset();
+    }
+}
+static augment::HealthSample sampleHealth(){
+    augment::HealthSample s;
+    if(!frontendReady||!uiActive){s.valid=false;return s;}
+    auto *video=obs_get_video();
+    if(!video){s.valid=false;return s;}
+    s.rendered=obs_get_total_frames();s.renderMissed=obs_get_lagged_frames();
+    s.encoded=video_output_get_total_frames(video);s.encodeSkipped=video_output_get_skipped_frames(video);
+    if(healthCpu)s.obsCpu=os_cpu_usage_info_query(healthCpu.get());
+    obs_video_info info{};
+    if(obs_get_video_info(&info)&&info.fps_den&&info.fps_num)
+        s.renderBudget=double(obs_get_average_frame_time_ns())*double(info.fps_num)/double(info.fps_den)/1e7;
+    if(auto *output=obs_frontend_get_streaming_output()){
+        s.stream=obs_output_active(output)||obs_output_reconnecting(output);
+        s.reconnecting=obs_output_reconnecting(output);
+        s.streamId=reinterpret_cast<uintptr_t>(output);
+        if(s.stream){
+            s.networkDropped=uint64_t(qMax(0,obs_output_get_frames_dropped(output)));
+            s.congestion=double(obs_output_get_congestion(output));
+        }
+        obs_output_release(output);
+    }
+    if(healthResources){
+        const auto resources=healthResources->latest();s.systemCpu=resources.cpu;s.gpu=resources.gpu;s.gpuLabel=resources.gpuLabel;
+    }
+    return s;
+}
 static obs_hotkey_id quickFindHotkey=OBS_INVALID_HOTKEY_ID;
 // OBS frontend_save posts SaveProjectDeferred. Its callback receives module
 // data, not the whole scene JSON, so wait for that save to finish before
@@ -495,6 +534,7 @@ static void stopCustomUi(){
     delete quickFind.data();
     if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
     nativeSettings.reset(); // remove only plugin page from any open native Settings
+    healthStats.reset();setHealthResources(false);
     sourcePicker.reset(); // existing native source dialogs finish normally
     if(panels)panels->restoreAll();
     mixerRetry.reset();
@@ -604,6 +644,10 @@ static bool startCustomUi(){
         sourcePicker=std::make_unique<augment::SourcePicker>(
             main,QDir(QFileInfo(stripConfigPath).absolutePath())
                 .filePath("source-picker.ini"));
+    if(auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()))){
+        healthStats=std::make_unique<augment::HealthStats>(main,QDir(QFileInfo(stripConfigPath).absolutePath()).filePath("health-stats.ini"),sampleHealth);
+        setHealthResources(healthStats->enabled());
+    }
     mixerRetry=std::make_unique<augment::DockAttachRetry>([]{return setAudioMixerBackside(true);});
     transforms=std::make_unique<augment::ObsTransformStyle>(
         static_cast<QWidget*>(obs_frontend_get_main_window()),
@@ -648,6 +692,11 @@ static bool startCustomUi(){
         };
         services.setCompactSourcePicker=[](bool enabled){
             return sourcePicker&&sourcePicker->setEnabled(enabled);
+        };
+        services.healthStatsEnabled=[]{return healthStats&&healthStats->enabled();};
+        services.setHealthStats=[](bool enabled){
+            if(!healthStats||!healthStats->setEnabled(enabled))return false;
+            setHealthResources(enabled);return true;
         };
         nativeSettings=std::make_unique<augment::ObsSettingsPage>(
             *controller,*dockTitleIcons,std::move(services));

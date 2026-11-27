@@ -26,6 +26,8 @@ public:
         std::function<void(const QJsonObject&)> setRowStripes;
         std::function<bool()> compactSourcePickerEnabled;
         std::function<bool(bool)> setCompactSourcePicker;
+        std::function<bool()> healthStatsEnabled;
+        std::function<bool(bool)> setHealthStats;
     };
     explicit ObsSettingsPage(Controller &controller,DockTitleIcons &titles,
                              Services services={},QObject *parent=nullptr);

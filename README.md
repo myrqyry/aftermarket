@@ -365,3 +365,5 @@ The bundled libebur128 library and its queue header retain their original
 MIT and BSD-3-Clause terms; see the [third-party notices](third_party/libebur128/THIRD_PARTY_NOTICES.txt).
 OBS Studio, Qt, and separately installed companion plugins retain their own
 licenses. This license does not imply endorsement by their maintainers.
+
+Conditional performance alerts show only when OBS detects new frame loss, stream connection problems or sustained CPU/GPU/render pressure. The status-bar indicator hides after recovery and exposes detailed metrics on demand.

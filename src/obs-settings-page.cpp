@@ -206,6 +206,11 @@ void ObsSettingsPage::attach(QDialog *dialog){
     QObject::connect(entry->stripeStrength,&QSlider::valueChanged,page,
                      [stripeValue](int amount){stripeValue->setText(QString::number(amount)+"%");});
     listGroup.second->addLayout(stripeRow);
+    if(services_.healthStatsEnabled&&services_.setHealthStats){
+        auto healthGroup=section(appearance,"Performance alerts");
+        checkbox("health-stats","Show stats only when performance needs attention",healthGroup.second,healthGroup.first,services_.healthStatsEnabled());
+        describe(healthGroup,"Status bar alerts for new frame drops, stream reconnects, sustained CPU/GPU pressure or congestion. Hidden while healthy; hover or click for details.");
+    }
     appearance.second->addStretch(1);
 
     auto menus=makeTab("Menus");
@@ -519,6 +524,11 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
             if(services_.setCompactSourcePicker(b))return true;
             e="Unable to save the Add Source picker setting.";
             return false;
+        });
+    if(services_.setHealthStats)
+        addFlag("health-stats",[this](bool b,QString &e){
+            if(services_.setHealthStats(b))return true;
+            e="Unable to save the performance alerts setting.";return false;
         });
     addFlag("compact-menus",[c](bool b,QString &e){return c&&c->setCompactMenus(b,&e);});
     addFlag("motion",[c](bool b,QString &e){return c&&c->setMotionEnabled(b,&e);});

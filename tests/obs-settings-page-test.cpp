@@ -92,6 +92,9 @@ int main(int argc,char **argv){
     services.setCompactSourcePicker=[&](bool value){
         embeddedPickerEnabled=value;++pickerUpdates;return true;
     };
+    bool healthEnabled=true;int healthUpdates=0;
+    services.healthStatsEnabled=[&]{return healthEnabled;};
+    services.setHealthStats=[&](bool value){healthEnabled=value;++healthUpdates;return true;};
     auto bridge=std::make_unique<augment::ObsSettingsPage>(controller,titles,services);
 
     {
@@ -148,6 +151,8 @@ int main(int argc,char **argv){
         REQUIRE(stripeStrength->value()==100);
         auto *picker=dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker");
         REQUIRE(picker&&picker->isChecked());
+        auto*health=dialog->findChild<QCheckBox*>("aftermarket-setting-health-stats");
+        REQUIRE(health&&health->isChecked());
         REQUIRE(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
         auto *tooltip=dialog->findChild<QComboBox*>("aftermarket-setting-tooltip-width");
         REQUIRE(tooltip&&tooltip->currentData().toInt()==360);
@@ -195,6 +200,7 @@ int main(int argc,char **argv){
         REQUIRE(tooltip&&tooltip->currentData().toInt()==360);
         tooltip->setCurrentIndex(tooltip->findData(240));
         dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker")->setChecked(false);
+        dialog->findChild<QCheckBox*>("aftermarket-setting-health-stats")->setChecked(false);
         dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
         auto *titleGrad=dialog->findChild<QCheckBox*>("aftermarket-setting-title-gradients");
@@ -221,7 +227,7 @@ int main(int argc,char **argv){
         REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
         REQUIRE(controller.propertyColumns()==2&&columnUpdates==2&&controller.tooltipWidth()==240);
         REQUIRE(!controller.setPropertyColumns(4));
-        REQUIRE(stripEnabled&&stripCalls==1);
+        REQUIRE(stripEnabled&&stripCalls==1);REQUIRE(!healthEnabled&&healthUpdates==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
         REQUIRE(controller.gradientSettings().value("titlebars").toBool());
         REQUIRE(controller.gradientSettings().value("titlebarFill").toBool());
