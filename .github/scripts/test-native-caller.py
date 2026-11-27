@@ -27,9 +27,13 @@ class Test(unittest.TestCase):
                         binary.parent.mkdir(parents=True)
                     binary.write_bytes(b"module")
                     data.mkdir()
+                    (data/"LICENSE").write_bytes((ROOT/"LICENSE").read_bytes())
                     notice=data/"THIRD_PARTY_NOTICES.txt"
                     notice.write_bytes((ROOT/"third_party/libebur128/THIRD_PARTY_NOTICES.txt").read_bytes())
                     out=hook.stage(ROOT,installed,work/"package",target,version)
                     self.assertEqual(out.read_bytes(),b"module")
                     self.assertTrue(out.is_file())
+                    (data/"LICENSE").unlink()
+                    with self.assertRaisesRegex(ValueError,"Missing or changed asset: LICENSE"):
+                        hook.stage(ROOT,installed,work/"missing-license",target,version)
 if __name__=="__main__":unittest.main()

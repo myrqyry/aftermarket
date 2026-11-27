@@ -16,4 +16,4 @@ def stage(root, installed, payload, target, version):
     else:
         shutil.copytree(installed, payload/MODULE)
     expected = (root/"third_party/libebur128/THIRD_PARTY_NOTICES.txt").read_bytes()
-    return verify_payload(payload,MODULE,target,version,{"THIRD_PARTY_NOTICES.txt":expected},None)
+    return verify_payload(payload,MODULE,target,version,{"THIRD_PARTY_NOTICES.txt":expected,"LICENSE":(root/"LICENSE").read_bytes()},None)

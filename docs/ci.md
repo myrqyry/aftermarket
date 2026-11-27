@@ -108,11 +108,13 @@ The shared reusable workflow is pinned to candidate revision 238f06a,
 derived from the hosted-qualified EmuLens workflow. Linux OBS 32.2.0
 still requires all 46 CTests and the
 exact module/third-party notice extraction check, and now uses the
-common versioned archive and handoff gate. No source package is enabled:
-the repository does not currently carry a project-level license.
+common versioned archive and handoff gate. At the time of this pilot, source-package upload was disabled and the
+repository did not yet carry a project-level license.
 Windows, macOS and OBS33 require separate native qualification.
-Binary test artifacts are uploaded for download; project-level licensing
-remains to be clarified before a formal release.
+Binary test artifacts are uploaded for download. Aftermarket now uses
+GPL-3.0-or-later; use the exact source commit identified by the CI run
+for the corresponding source. All staged packages include the GPL text
+and the original libebur128 notices. Formal releases remain separate.
 Shared test artifacts are not releases. The older local verifier CLI
 remains supported.
 

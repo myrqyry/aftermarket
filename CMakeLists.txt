@@ -46,6 +46,7 @@ add_library(aftermarket MODULE src/plugin.cpp src/property-preset-footer.cpp src
 target_link_libraries(aftermarket PRIVATE augmentation mixer_loudness OBS::libobs OBS::obs-frontend-api)
 set_target_properties(aftermarket PROPERTIES PREFIX "")
 set(_notice "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libebur128/THIRD_PARTY_NOTICES.txt")
+set(_license "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 if(APPLE)
   set_target_properties(aftermarket PROPERTIES BUNDLE TRUE BUNDLE_EXTENSION plugin
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.myrqyry.aftermarket"
@@ -53,8 +54,8 @@ if(APPLE)
     MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
     MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PluginInfo.plist.in"
     INSTALL_RPATH "@executable_path/../Frameworks" INSTALL_RPATH_USE_LINK_PATH FALSE)
-  target_sources(aftermarket PRIVATE "${_notice}")
-  set_source_files_properties("${_notice}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+  target_sources(aftermarket PRIVATE "${_notice}" "${_license}")
+  set_source_files_properties("${_notice}" "${_license}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
   install(TARGETS aftermarket BUNDLE DESTINATION . LIBRARY DESTINATION .)
 else()
   set(_module_destination bin/64bit)
@@ -62,7 +63,7 @@ else()
     set(_module_destination .)
   endif()
   install(TARGETS aftermarket LIBRARY DESTINATION "${_module_destination}" RUNTIME DESTINATION "${_module_destination}")
-  install(FILES "${_notice}" DESTINATION data)
+  install(FILES "${_notice}" "${_license}" DESTINATION data)
 endif()
 include(CTest)
 if(BUILD_TESTING)

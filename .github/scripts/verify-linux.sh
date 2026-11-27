@@ -74,7 +74,8 @@ test -s "$binary"
 # or build outputs accidentally enter this preliminary plugin package.
 expected=$(printf '%s\n' "$module/$rel")
 if [[ "$module" == aftermarket ]]; then
-  expected=$(printf '%s\n' "$module/$rel" "$module/data/THIRD_PARTY_NOTICES.txt")
+  expected=$(printf '%s\n' "$module/$rel" "$module/data/LICENSE" "$module/data/THIRD_PARTY_NOTICES.txt")
+  cmp "$root/LICENSE" "$stage/$module/data/LICENSE"
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$stage/$module/data/THIRD_PARTY_NOTICES.txt"
 fi
 test "$(find "$stage" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$(printf '%s\n' "$expected" | sort)"
@@ -93,6 +94,7 @@ tar -xzf "$work/$archive_name" -C "$work/extracted"
 test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$(printf '%s\n' "$expected" | sort)"
 cmp "$binary" "$work/extracted/$module/$rel"
 if [[ "$module" == aftermarket ]]; then
+  cmp "$root/LICENSE" "$work/extracted/$module/data/LICENSE"
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$work/extracted/$module/data/THIRD_PARTY_NOTICES.txt"
 fi
 echo "Native tests and local package validation passed; not a release."
