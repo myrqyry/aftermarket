@@ -7,6 +7,8 @@ sdk="$(realpath "$1")"
 work="$(realpath -m "$2")"
 module="$3"
 minimum_tests="$4"
+archive_name="${ARCHIVE:-$module-linux-x86_64-obs32-test.tar.gz}"
+[[ "$archive_name" == "$module-linux-x86_64-obs32-test.tar.gz" || "$archive_name" == "$module-linux-x86_64-obs32.2.0-test.tar.gz" ]]
 mkdir -p "$work"
 build="$work/build"
 stage="$work/stage"
@@ -73,12 +75,12 @@ if readelf -d "$binary" | grep -E '(RPATH|RUNPATH)' ; then
 fi
 ldd "$binary" > "$work/dependencies.txt"
 if grep -F "not found" "$work/dependencies.txt"; then exit 1; fi
-tar -C "$stage" -czf "$work/$module-linux-x86_64-obs32-test.tar.gz" "$module"
-tar -tzf "$work/$module-linux-x86_64-obs32-test.tar.gz" > "$work/package-members.txt"
+tar -C "$stage" -czf "$work/$archive_name" "$module"
+tar -tzf "$work/$archive_name" > "$work/package-members.txt"
 grep -Fx "$module/bin/64bit/$module.so" "$work/package-members.txt"
-(cd "$work" && sha256sum "$module-linux-x86_64-obs32-test.tar.gz" > SHA256SUMS && sha256sum -c SHA256SUMS)
+(cd "$work" && sha256sum "$archive_name" > SHA256SUMS && sha256sum -c SHA256SUMS)
 mkdir "$work/extracted"
-tar -xzf "$work/$module-linux-x86_64-obs32-test.tar.gz" -C "$work/extracted"
+tar -xzf "$work/$archive_name" -C "$work/extracted"
 test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
 cmp "$binary" "$work/extracted/$module/bin/64bit/$module.so"
 if [[ "$module" == aftermarket ]]; then

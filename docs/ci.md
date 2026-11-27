@@ -101,3 +101,14 @@ The temporary archives are intentionally not release packages. Public
 redistribution requires the owner to establish licensing, provenance and
 platform qualification first. Never publish local logs, scenes, models,
 private development notes, or third-party executables by default.
+
+## Shared CI pilot
+
+The shared reusable workflow is pinned to the hosted-qualified EmuLens
+revision 70ce37b. Linux OBS 32.2.0 still requires all 46 CTests and the
+exact module/third-party notice extraction check, and now uses the
+common versioned archive and handoff gate. No source package is enabled:
+the repository does not currently carry a project-level license.
+Windows, macOS and OBS33 require separate native qualification.
+Shared test artifacts are not releases. The older local verifier CLI
+remains supported.
