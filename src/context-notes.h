@@ -3,6 +3,8 @@
 #include <QJsonObject>
 #include <QRect>
 #include <Qt>
+#include <QFileSystemWatcher>
+#include <QTimer>
 #include <functional>
 #include <memory>
 class QWidget;
@@ -19,6 +21,9 @@ public:
  void onChanged(std::function<void()> fn){changed_=std::move(fn);}
  bool put(const QString &key,const QString &expected,const QString &text);
 private:
+ QFileSystemWatcher watcher_;
+ QTimer debounce_;
+ void armWatch();
  QString path_;
  QJsonObject notes_;
  std::function<void()> changed_;

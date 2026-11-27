@@ -102,7 +102,23 @@ QString noteKey(const QString &kind,const QString &id,const QString &owner,qint6
  const auto key=QString::fromUtf8(QJsonDocument(QJsonArray{kind,id,owner,QString::number(item)}).toJson(QJsonDocument::Compact));
  return validKey(key)?key:QString{};
 }
-ContextNotes::ContextNotes(QString path):path_(std::move(path)){reload();}
+ContextNotes::ContextNotes(QString path):path_(std::move(path)){
+ debounce_.setSingleShot(true);debounce_.setInterval(60);
+ QObject::connect(&watcher_,&QFileSystemWatcher::fileChanged,&debounce_,[this]{debounce_.start();});
+ QObject::connect(&watcher_,&QFileSystemWatcher::directoryChanged,&debounce_,[this]{debounce_.start();});
+ QObject::connect(&debounce_,&QTimer::timeout,&watcher_,[this]{armWatch();reload();});
+ armWatch();reload();
+}
+void ContextNotes::armWatch(){
+ QStringList wanted;
+ if(QFileInfo::exists(path_))wanted.append(path_);
+ QDir dir=QFileInfo(path_).absoluteDir();
+ while(!dir.exists()&&dir.cdUp()){}
+ if(dir.exists())wanted.append(dir.absolutePath());
+ const auto current=watcher_.files()+watcher_.directories();
+ for(const auto &p:current)if(!wanted.contains(p))watcher_.removePath(p);
+ for(const auto &p:wanted)if(!current.contains(p))watcher_.addPath(p);
+}
 QString ContextNotes::get(const QString &key)const{return notes_.value(key).toString();}
 bool ContextNotes::read(QJsonObject &out)const{
  out={};QFile f(path_);if(!f.exists())return true;
@@ -147,7 +163,7 @@ void editContextNote(QWidget *parent,std::shared_ptr<ContextNotes> notes,const Q
  auto *layout=new QVBoxLayout(dialog);
  auto *title=new QLabel(name,dialog);title->setTextFormat(Qt::PlainText);title->setWordWrap(true);layout->addWidget(title);
  auto *editor=new QPlainTextEdit(dialog);editor->setObjectName("aftermarket-note-text");editor->setPlainText(existing);editor->setPlaceholderText("Write a private note…");layout->addWidget(editor);
- auto *feedback=new QLabel("Visible only in Aftermarket. Clear the text and save to remove.",dialog);feedback->setWordWrap(true);layout->addWidget(feedback);
+ auto *feedback=new QLabel("Private local note, shared with Unscene. Clear the text and save to remove.",dialog);feedback->setWordWrap(true);layout->addWidget(feedback);
  auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,dialog);layout->addWidget(buttons);
  QObject::connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
  QObject::connect(buttons,&QDialogButtonBox::accepted,dialog,[dialog,editor,feedback,notes,key,existing,valid,changed]{

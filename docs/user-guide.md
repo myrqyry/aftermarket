@@ -1512,3 +1512,5 @@ the latest completed run: two UI assertions failed at `58df432`. See
 Use **Tools → Aftermarket → Emergency restore** for reversible suspension of the plugin UI. Setting `"enabled": false` in rules.json disables rule-driven augmentation; it is not a complete plugin unload. To completely unload,
 close OBS and remove just `plugins/aftermarket/bin/64bit/aftermarket.so`
 from its user config directory. The rules file can be preserved.
+
+Private notes are shared with Unscene when installed. Edits in either plugin use the same local note file and the native Scenes/Sources badges refresh when it is replaced. Unscene also follows Aftermarket's alternating-row settings by default, with its own independent scene/source enable overrides.

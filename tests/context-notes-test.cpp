@@ -8,6 +8,8 @@
 #include <QHelpEvent>
 #include <QMouseEvent>
 #include <QToolTip>
+#include <QElapsedTimer>
+#include <QThread>
 #include <iostream>
 #define CHECK(x) do{if(!(x)){std::cerr<<"line "<<__LINE__<<": "<<#x<<"\n";return 1;}}while(0)
 int main(int argc,char **argv){
@@ -25,6 +27,12 @@ int main(int argc,char **argv){
  CHECK(reopened.get(source)=="Check white balance <b>literal</b>"&&reopened.get(filter)=="Filter only"&&reopened.get(item)=="Placement only");
  CHECK(!(QFileInfo(path).permissions()&(QFileDevice::ReadGroup|QFileDevice::ReadOther)));
  CHECK(!reopened.put(source,reopened.get(source),QString(5000,'x')));
+ const auto external=augment::noteKey("scene","external");
+ int notifications=0;notes.onChanged([&]{++notifications;});
+ CHECK(reopened.put(external,{},"Written by Unscene"));
+ QElapsedTimer elapsed;elapsed.start();
+ while(notes.get(external).isEmpty()&&elapsed.elapsed()<1500){app.processEvents();QThread::msleep(10);}
+ CHECK(notes.get(external)=="Written by Unscene"&&notifications>0);
  CHECK(reopened.put(source,reopened.get(source),{}));
  CHECK(reopened.get(source).isEmpty()&&reopened.get(filter)=="Filter only");
  QFile f(path);CHECK(f.open(QIODevice::WriteOnly|QIODevice::Truncate));f.write("broken");f.close();
