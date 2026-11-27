@@ -28,7 +28,13 @@ int main(int argc,char **argv) {
     REQUIRE(!uuid.isEmpty());
 
     obs_source_set_audio_mixers(source,1u | (1u << 3));
-    obs_source_set_monitoring_type(source,OBS_MONITORING_TYPE_MONITOR_ONLY);
+    const bool legacy=(obs_get_version() >> 24)<33;
+    REQUIRE(augment::ObsRouting::monitorOnlyAvailable()==legacy);
+#if LIBOBS_API_MAJOR_VER >= 33
+    obs_source_set_monitoring_enabled(source,true);
+#else
+    obs_source_set_monitoring_type(source,legacy?OBS_MONITORING_TYPE_MONITOR_ONLY:OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+#endif
     obs_source_set_muted(source,true);
     obs_source_set_enabled(source,false);
     auto list=augment::ObsRouting::list();
@@ -41,7 +47,7 @@ int main(int argc,char **argv) {
     REQUIRE(record.name=="Test patchbay microphone");
     REQUIRE(record.sourceType==sourceInfo.id);
     REQUIRE(record.tracks==(1u | (1u << 3)));
-    REQUIRE(record.monitor==OBS_MONITORING_TYPE_MONITOR_ONLY);
+    REQUIRE(record.monitor==(legacy?1:2));
     REQUIRE(record.muted);
     REQUIRE(!record.enabled);
     REQUIRE(record.audioActive==obs_source_audio_active(source));
@@ -50,7 +56,20 @@ int main(int argc,char **argv) {
     REQUIRE(augment::ObsRouting::setTrack(uuid,6,true));
     REQUIRE(obs_source_get_audio_mixers(source)==(1u | (1u << 3) | (1u << 5)));
     REQUIRE(augment::ObsRouting::setMonitoring(uuid,OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT));
+#if LIBOBS_API_MAJOR_VER >= 33
+    REQUIRE(obs_source_get_monitoring_enabled(source));
+#else
     REQUIRE(obs_source_get_monitoring_type(source)==OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT);
+#endif
+    const auto tracksBeforeMonitor=obs_source_get_audio_mixers(source);
+    REQUIRE(augment::ObsRouting::setMonitoring(uuid,1)==legacy);
+    REQUIRE(matches(augment::ObsRouting::list()).monitor==(legacy?1:2));
+    REQUIRE(obs_source_get_audio_mixers(source)==tracksBeforeMonitor);
+    REQUIRE(augment::ObsRouting::setMonitoring(uuid,0));
+    REQUIRE(matches(augment::ObsRouting::list()).monitor==0);
+    REQUIRE(obs_source_get_audio_mixers(source)==tracksBeforeMonitor);
+    REQUIRE(augment::ObsRouting::setMonitoring(uuid,2));
+    REQUIRE(matches(augment::ObsRouting::list()).monitor==2);
     obs_source_set_name(source,"Renamed patchbay microphone");
     record=matches(augment::ObsRouting::list());
     REQUIRE(record.id==uuid&&record.name=="Renamed patchbay microphone");

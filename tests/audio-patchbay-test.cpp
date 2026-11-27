@@ -430,6 +430,26 @@ int main(int argc,char **argv){
  sources.clear();bay.refresh();
  REQUIRE(bay.routeCount()==0&&bay.selectedId().isEmpty());
  REQUIRE(!menu->isEnabled());
+ // OBS33 has a binary monitor toggle. No unsupported mode or hidden
+ // change to output tracks may leak through the UI.
+ QVector<augment::RouteSource> modern={{"modern","OBS33 source",0x15,0}};
+ int modernWrites=0;
+ augment::AudioPatchbay modernBay([&]{return modern;},{},
+   [&](const QString &id,int mode){
+     if(id!="modern")return false;
+     ++modernWrites;modern[0].monitor=mode;return true;
+   },nullptr,{},{},false);
+ modernBay.resize(350,340);modernBay.show();app.processEvents();
+ REQUIRE(modernBay.selectSource("modern"));
+ auto *modernMenu=modernBay.findChild<QMenu*>("aftermarket-monitor-mode-menu");
+ REQUIRE(modernMenu&&modernMenu->actions().size()==2);
+ REQUIRE(modernMenu->actions()[0]->data().toInt()==0);
+ REQUIRE(modernMenu->actions()[1]->data().toInt()==2);
+ REQUIRE(!modernBay.setMonitoring(1)&&modernWrites==0);
+ modernMenu->actions()[1]->trigger();
+ REQUIRE(modern[0].monitor==2&&modern[0].tracks==0x15&&modernWrites==1);
+ REQUIRE(modernBay.toggleMonitorOutput());
+ REQUIRE(modern[0].monitor==0&&modern[0].tracks==0x15&&modernWrites==2);
  std::cout<<"compact AudioHub graph, headphones route, live dots and native editing verified\n";
  return 0;
 }

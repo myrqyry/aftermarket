@@ -520,7 +520,7 @@ protected:
                     case ActivityState::Unknown:signal="no fresh signal";break;
                 }
                 if(target==monitorTarget)
-                    setToolTip(QStringLiteral("Headphones · native OBS Monitor · right-click for Monitor Only and other modes · %1 connected %2 · %3 · not Track 7")
+                    setToolTip(QStringLiteral("Headphones · native OBS Monitor · right-click for monitoring options · %1 connected %2 · %3 · not Track 7")
                         .arg(incoming).arg(incoming==1?"source":"sources",signal));
                 else if(target>monitorTarget)
                     setToolTip(devices[target-monitorTarget-1].name+
@@ -568,9 +568,9 @@ protected:
     }
 };
 AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
-                             QWidget *parent,SetTrack s,SignalProvider levelProvider)
+                             QWidget *parent,SetTrack s,SignalProvider levelProvider,bool monitorOnly)
     :QWidget(parent),query(std::move(q)),toggle(std::move(t)),
-     monitor(std::move(m)),setTrack(std::move(s)),levels(std::move(levelProvider)){
+     monitor(std::move(m)),monitorOnlyAvailable(monitorOnly),setTrack(std::move(s)),levels(std::move(levelProvider)){
     setObjectName("aftermarket-audio-patchbay");
     setWindowTitle("Routing");
     auto *root=new QVBoxLayout(this);
@@ -608,7 +608,8 @@ AudioPatchbay::AudioPatchbay(Query q,ToggleTrack t,ChangeMonitoring m,
     auto *group=new QActionGroup(monitorMenu);
     group->setExclusive(true);
     for(int mode=0;mode<=2;++mode){
-        const QString label=mode==0?"Off":mode==1?"Monitor Only":"Monitor and Output";
+        if(mode==1&&!monitorOnlyAvailable)continue;
+        const QString label=mode==0?"Off":mode==1?"Monitor Only":monitorOnlyAvailable?"Monitor and Output":"Monitor On";
         auto *action=monitorMenu->addAction(label);
         action->setCheckable(true);
         action->setData(mode);
@@ -1001,7 +1002,7 @@ bool AudioPatchbay::toggleMonitorOutput(){
     return ok;
 }
 bool AudioPatchbay::setMonitoring(int mode){
-    if(selected.isEmpty()||mode<0||mode>2||!monitor)return false;
+    if(selected.isEmpty()||mode<0||mode>2||(mode==1&&!monitorOnlyAvailable)||!monitor)return false;
     const bool ok=monitor(selected,mode);
     refresh();
     notify(ok?"Updated native OBS monitoring":"Source unavailable; monitoring unchanged");

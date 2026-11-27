@@ -4,6 +4,7 @@
 #include "dock-header-button.h"
 #include "panels.h"
 #include <QMainWindow>
+#include <QLayout>
 #include <QDockWidget>
 #include <QMenu>
 #include <QSettings>
@@ -528,11 +529,15 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
        (dock->features()&QDockWidget::DockWidgetVerticalTitleBar)||!dock->widget()){
         conceal();return;
     }
-    const int titleHeight=dock->widget()->geometry().top();
-    if(titleHeight<16||titleHeight>48){conceal();return;}
+    int titleHeight=dock->widget()->geometry().top();
+    if(titleHeight<14||titleHeight>48){conceal();return;}
     // Expand the native title's text area by suppressing ONLY the two Qt
     // window buttons; a working Aftermarket overflow will provide both.
     suppressNativeButtons(dock);
+    if(dock->layout())dock->layout()->activate();
+    titleHeight=dock->widget()->geometry().top();
+    if(titleHeight<14||titleHeight>48){conceal();return;}
+    if(auto *button=dynamic_cast<DockHeaderButton*>(more))button->fitTitleHeight(titleHeight);
     QStyleOptionDockWidget option;
     option.initFrom(dock);
     option.title=originalTitle(dock);

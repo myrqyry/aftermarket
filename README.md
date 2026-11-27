@@ -306,33 +306,32 @@ Restart OBS. Existing themes and configuration are preserved by the installer. F
 The module and configuration directory are now named aftermarket. The Linux installer moves the legacy obs-ui-augment package outside OBS’s search path; existing settings migrate as a complete directory on the next launch. See the [upgrade guide](docs/user-guide.md#upgrading-from-obs-ui-augment).
 
 **Compatibility:** Runtime verification currently covers Linux/X11,
-OBS 32.2.0 and Qt 6.4.2. The native column layout adapter requires the
+OBS 32.2.0 and Qt 6.4.2. The native column layout adapter targets Qt
+6.4.2 and 6.10.2, requiring the
 matching Qt private development headers (qt6-base-private-dev on Debian/Ubuntu)
 and runtime; other versions retain compact native rows. Other platforms,
 DPI configurations, and OBS versions need additional verification.
 
 ## Build and verification
 
-The [Linux CI workflow](.github/workflows/ci.yml) targets Ubuntu 24.04 and
-a SHA-256-pinned OBS 32.2.0 SDK. It checks local README links, builds the
-module, runs the native Qt/libobs CTest suite under an isolated X display
-(CI baseline: at least 32 tests, no skips; current local suite: 44), stages the plugin, checks linked libraries
-and the exact package contents, and verifies the archive checksum.
-It does not install into a user's profile, publish release assets, or
-claim Windows, macOS, or OBS 33 support.
+The [shared CI workflow](.github/workflows/ci.yml) selects eight OBS
+32.2.0 and 33.0.3 build targets: Linux x86-64, Windows x64, macOS Intel
+and macOS Apple Silicon. Both Linux legs require all 46 native tests
+without skips. Windows and macOS build and inspect production packages;
+native interactive runtime qualification remains separate.
+Packages are downloadable CI artifacts, not automatic releases.
 
-| Target | Verification boundary |
-| --- | --- |
-| Linux x86_64 / OBS 32.2 / Qt 6.4.2 | Local native tests and isolated OBS GUI exercises |
-| Ubuntu 24.04 / pinned OBS 32.2 SDK | Historical local SDK/package qualification passed; latest hosted run failed two UI tests |
-| Windows, macOS, OBS 31/33 | Not qualified |
-
-The latest completed hosted run ([45740037866](https://github.com/myrqyry/aftermarket/actions/runs/45740037866), commit `58df432`) failed the command-center visibility and menu-anchor assertions (42/44 passed). The newer local build at `f111fbe` passed 44/44. These are different environments; hosted qualification remains open.
+At commit `77a6d4a`, [hosted run 45929248597](https://github.com/myrqyry/aftermarket/actions/runs/45929248597)
+produced seven successful native binary packages. Linux OBS33 compiled
+but failed four runtime regression tests. The follow-up addresses
+the OBS33 monitoring API change, compact native dock geometry and
+Qt 6.10.2 menu adapter. The complete local OBS32/Qt6.4.2 suite passed
+46/46; the new hosted OBS33 result remains to be verified.
 
 For a local build using matching development headers, use the commands
 above. The same CI validation driver can also run against an explicit
 installed SDK (see [CI guide](docs/ci.md)). The temporary module-only
-archive is for verification, not an authorized distributable release.
+archive is for verification and testing, not an automatic release.
 
 ## Recovery and documentation
 

@@ -26,6 +26,7 @@ public:
         setToolButtonStyle(Qt::ToolButtonIconOnly);
         setCheckable(glyph==DockHeaderGlyph::Flip||glyph==DockHeaderGlyph::Knobs);
     }
+    void fitTitleHeight(int available){setFixedHeight(qBound(1,available,18));}
     // The button stays in the native layout and tab chain. Only its
     // presentation is concealed; other More buttons are unaffected.
     void setDockHoverReveal(bool enabled){
