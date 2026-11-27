@@ -10,7 +10,9 @@ cp "$module" "$cfg/plugins/aftermarket/bin/64bit/aftermarket.so"
 printf '[General]\nFirstRun=true\n' >"$cfg/user.ini"
 pattern="${GRADIENT_PATTERN:-shimmer}"
 case "$pattern" in flow|reverse|bounce|breathe|shimmer|drift|aurora|tide|bloom|orbit|nebula|vortex|ripple) ;; *) echo "Unknown pattern" >&2; exit 1;; esac
-printf '{"enabled":true,"motion":true,"rules":[],"gradient":{"enabled":true,"sliders":false,"progress":false,"titlebars":true,"pattern":"%s","period":1200,"colors":["#31748f","#c4a7e7"]}}\n' "$pattern" >"$cfg/plugin_config/aftermarket/rules.json"
+scale="${GRADIENT_SCALE:-100}"
+[[ "$scale" =~ ^[0-9]{2,3}$ ]] && ((scale>=50&&scale<=400)) || exit 1
+printf '{"enabled":true,"motion":true,"rules":[],"gradient":{"enabled":true,"sliders":false,"progress":false,"titlebars":true,"pattern":"%s","period":1200,"scale":%s,"colors":["#31748f","#c4a7e7"]}}\n' "$pattern" "$scale" >"$cfg/plugin_config/aftermarket/rules.json"
 if [[ "${FULL_HEADER:-0}" == 1 ]]; then
  cp -a "$HOME/.config/obs-studio/themes" "$cfg/"
  printf '\n[Appearance]\nTheme=com.myrqyry.Colorway.FluffyDark\nFontScale=10\nDensity=-2\n' >>"$cfg/user.ini"

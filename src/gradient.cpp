@@ -92,6 +92,11 @@ bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
         if(!std::isfinite(d)||d<400||d>GradientSpec::maxPeriod||std::floor(d)!=d)return false;
         next.period=int(d);
     }
+    if(o.contains("scale")){
+        const auto d=o.value("scale").toDouble(-1);
+        if(!std::isfinite(d)||d<minScale||d>maxScale||std::floor(d)!=d)return false;
+        next.scale=int(d);
+    }
     if(o.contains("colors")) {
         auto v=o.value("colors");
         if(!v.isArray()||v.toArray().size()==1||v.toArray().size()>6)return false;
@@ -333,7 +338,7 @@ QGradientStops gradientPatternStops(QVector<QColor> colors,const QString &patter
 bool isSpatialGradient(const QString &pattern){
     return pattern=="orbit"||pattern=="nebula"||pattern=="vortex"||pattern=="ripple";
 }
-QImage gradientFieldImage(const QVector<QColor>& input,const QString &pattern,double phase){
+QImage gradientFieldImage(const QVector<QColor>& input,const QString &pattern,double phase,int scale){
     if(input.isEmpty()||!isSpatialGradient(pattern))return {};
     auto colors=input;
     if(colors.size()>2&&colors.first()==colors.last())colors.removeLast();
@@ -342,6 +347,7 @@ QImage gradientFieldImage(const QVector<QColor>& input,const QString &pattern,do
     phase=std::round(phase*1e12)/1e12;
     if(phase>=1.)phase=0.;
     const double t=tau*phase;
+    const double zoom=100./qBound(GradientSpec::minScale,scale,GradientSpec::maxScale);
     // Small normalized field, stretched smoothly by QPainter. Work is
     // independent of surface size and never samples video or audio frames.
     QImage image(96,48,QImage::Format_RGB32);
@@ -376,9 +382,9 @@ QImage gradientFieldImage(const QVector<QColor>& input,const QString &pattern,do
     const double cx=.5+.13*std::cos(t),cy=.5+.13*std::sin(t);
     for(int iy=0;iy<image.height();++iy){
         auto *line=reinterpret_cast<QRgb*>(image.scanLine(iy));
-        const double y=(iy+.5)/image.height();
+        const double y=.5+((iy+.5)/image.height()-.5)*zoom;
         for(int ix=0;ix<image.width();++ix){
-            const double x=(ix+.5)/image.width();
+            const double x=.5+((ix+.5)/image.width()-.5)*zoom;
             RGB c{};
             if(mesh){
                 double total=0;
@@ -405,7 +411,7 @@ QImage gradientFieldImage(const QVector<QColor>& input,const QString &pattern,do
     }
     return image;
 }
-QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern,double phase,const QRectF &rect){
+QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern,double phase,const QRectF &rect,int scale){
     if(rect.isEmpty()||colors.isEmpty())return {};
     // Shared bounded GUI-thread cache. Non-reactive surfaces can reuse
     // the same field; quantization is smaller than a 30 Hz animation step
@@ -413,11 +419,12 @@ QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern
     static thread_local QCache<QString,QImage> cache(64);
     const double normalized=std::isfinite(phase)?phase-std::floor(phase):0.;
     const int frame=qRound(normalized*4096)%4096;
-    QString key=pattern+":"+QString::number(frame);
+    scale=qBound(GradientSpec::minScale,scale,GradientSpec::maxScale);
+    QString key=pattern+":"+QString::number(frame)+":"+QString::number(scale);
     for(const auto&c:colors)key+=":"+QString::number(c.rgba(),16);
     auto *image=cache.object(key);
     if(!image){
-        cache.insert(key,new QImage(gradientFieldImage(colors,pattern,frame/4096.)));
+        cache.insert(key,new QImage(gradientFieldImage(colors,pattern,frame/4096.,scale)));
         image=cache.object(key);
     }
     if(!image||image->isNull())return {};
@@ -429,6 +436,33 @@ namespace {
 void setPatternStops(QGradient &g,const QVector<QColor>&colors,const QString &pattern,double phase){
     g.setStops(gradientPatternStops(colors,pattern,phase));
 }
+void setScaledRingStops(QConicalGradient &g,const QVector<QColor>&colors,const QString &pattern,double phase,int scale){
+    const auto stops=gradientPatternStops(colors,pattern,phase);
+    if(scale==100||stops.size()<2){g.setStops(stops);return;}
+    auto mix=[](QColor a,QColor b,double f){return QColor::fromRgbF(a.redF()+(b.redF()-a.redF())*f,a.greenF()+(b.greenF()-a.greenF())*f,a.blueF()+(b.blueF()-a.blueF())*f);};
+    auto sample=[&](double u){
+        u-=std::floor(u);
+        for(int i=1;i<stops.size();++i)if(u<=stops[i].first){
+            const auto &a=stops[i-1],&b=stops[i];
+            return mix(a.second,b.second,(u-a.first)/qMax(1e-9,b.first-a.first));
+        }
+        return stops.last().second;
+    };
+    const double cycles=100./scale;
+    const int lo=int(cycles),hi=lo+1;
+    const double blend=cycles-lo;
+    const double shift=patternOffset(pattern,phase);
+    // A very broad field on a closed ring tends toward a single color;
+    // sample the traveling color rather than freezing a constant hue.
+    const auto flat=sample(-shift);
+    QGradientStops result;result.reserve(65);
+    for(int i=0;i<64;++i){
+        const double x=double(i)/64;
+        result.append({x,mix(lo==0?flat:sample(x*lo),sample(x*hi),blend)});
+    }
+    result.append({1.,result.first().second});g.setStops(result);
+}
+
 }
 QRect gradientFill(const QWidget *w) {
     if(!w||!w->isEnabled())return {};
@@ -721,11 +755,11 @@ public:
         const QRectF arc=r.adjusted(integrated?10:2,integrated?10:2,integrated?-10:-2,integrated?-10:-2);
         QConicalGradient g(center,225+patternOffset(spec.pattern,phase)*360);
         if(spec.enabled&&spec.sliders) {
-            setPatternStops(g,colors,spec.pattern,phase);
+            setScaledRingStops(g,colors,spec.pattern,phase,spec.scale);
         } else {auto c=pal.color(group,QPalette::Highlight);g.setColorAt(0,c);g.setColorAt(1,c);}
         const auto face=r.adjusted(integrated?16:8,integrated?16:8,integrated?-16:-8,integrated?-16:-8);
         p.setRenderHint(QPainter::SmoothPixmapTransform);
-        const auto brush=spec.enabled&&spec.sliders&&isSpatialGradient(spec.pattern)?spatialGradientBrush(colors,spec.pattern,phase,arc.adjusted(-2,-2,2,2)):QBrush(g);
+        const auto brush=spec.enabled&&spec.sliders&&isSpatialGradient(spec.pattern)?spatialGradientBrush(colors,spec.pattern,phase,arc.adjusted(-2,-2,2,2),spec.scale):QBrush(g);
         paintRotaryFace(p,arc,face,pal,group,brush,225,-270,225,-270*f,225-270*f);
         if(s->hasFocus()) {
             p.setBrush(Qt::NoBrush);p.setPen(QPen(pal.color(group,QPalette::Highlight),1,Qt::DotLine));
@@ -806,7 +840,7 @@ public:
         if(knob){paintKnob(painter,colors);return;}
         // Pattern stops close the periodic palette, including the organic styles.
         const bool h=horizontal(parentWidget());
-        const qreal wavelength=qBound(48.,(h?parentWidget()->width():parentWidget()->height())*.8,200.);
+        const qreal wavelength=qBound(48.,(h?parentWidget()->width():parentWidget()->height())*.8,200.)*spec.scale/100.;
         const qreal offset=patternOffset(spec.pattern,phase)*wavelength;
         QLinearGradient gradient(h?QPointF(-offset,0):QPointF(0,-offset),
                                  h?QPointF(wavelength-offset,0):QPointF(0,wavelength-offset));
@@ -814,7 +848,7 @@ public:
         setPatternStops(gradient,colors,spec.pattern,phase);
         const bool spatial=isSpatialGradient(spec.pattern);
         if(auto *dock=qobject_cast<QDockWidget*>(parentWidget());dock&&spec.titlebarFill){
-            paintTitleBackground(painter,dock,spatial?spatialGradientBrush(colors,spec.pattern,phase,rect()):QBrush(gradient));return;
+            paintTitleBackground(painter,dock,spatial?spatialGradientBrush(colors,spec.pattern,phase,rect(),spec.scale):QBrush(gradient));return;
         }
         if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
             const auto track=sliderTrack(s);
@@ -834,7 +868,7 @@ public:
             const auto radius=qMin(track.groove.width(),track.groove.height())/2.;
             path.addRoundedRect(QRectF(track.groove),radius,radius);
             gradient.setStart(gradient.start()+pos());gradient.setFinalStop(gradient.finalStop()+pos());
-            painter.fillPath(path,spatial?spatialGradientBrush(colors,spec.pattern,phase,track.groove):QBrush(gradient));
+            painter.fillPath(path,spatial?spatialGradientBrush(colors,spec.pattern,phase,track.groove,spec.scale):QBrush(gradient));
             if(!thumbPage.edge.isNull()) {
                 painter.setClipPath(path,Qt::IntersectClip);
                 painter.drawImage(patch.topLeft(),thumbPage.edge);
@@ -845,7 +879,7 @@ public:
         QPainterPath path;
         const auto radius=qMin(width(),height())/2.;
         path.addRoundedRect(QRectF(rect()),radius,radius);
-        painter.fillPath(path,spatial?spatialGradientBrush(colors,spec.pattern,phase,qobject_cast<QDockWidget*>(parentWidget())?QRectF(rect()):QRectF(parentWidget()->rect().translated(-pos()))):QBrush(gradient));
+        painter.fillPath(path,spatial?spatialGradientBrush(colors,spec.pattern,phase,qobject_cast<QDockWidget*>(parentWidget())?QRectF(rect()):QRectF(parentWidget()->rect().translated(-pos())),spec.scale):QBrush(gradient));
     }
 };
 }
@@ -906,7 +940,7 @@ void GradientController::setAudioProvider(AudioProvider provider,AudioReset rese
 void GradientController::configure(const GradientSpec &spec,bool motion) {
     const auto &old=state->spec;
     if(old.enabled==spec.enabled&&old.sliders==spec.sliders&&old.progress==spec.progress&&
-       old.period==spec.period&&old.pattern==spec.pattern&&old.titlebars==spec.titlebars&&old.titlebarFill==spec.titlebarFill&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
+       old.period==spec.period&&old.scale==spec.scale&&old.pattern==spec.pattern&&old.titlebars==spec.titlebars&&old.titlebarFill==spec.titlebarFill&&old.colors==spec.colors&&old.audioReactive==spec.audioReactive&&old.meters==spec.meters&&old.knobs==spec.knobs&&old.knobMeters==spec.knobMeters&&old.knobSources==spec.knobSources&&state->motion==motion)return;
     state->spec=spec;state->motion=motion;
     if((!motion||!spec.enabled||!spec.audioReactive)&&!(spec.knobs&&spec.knobMeters))if(state->reset)state->reset();
     for(auto *w:state->meters.keys())if(!motion||!eligibleMeter(w,spec))removeMeter(w);

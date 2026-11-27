@@ -73,10 +73,13 @@ int main(int argc,char **argv) {
  s.setEnabled(true);s.setValue(40);
  REQUIRE(c.setMotionEnabled(false));
  const auto plainKnob=s.grab().toImage();
- for(const auto &pattern:QStringList{"orbit","nebula","vortex","ripple"}){
+ for(const auto &pattern:QStringList{"flow","orbit","nebula","vortex","ripple"}){
     REQUIRE(c.setGradientSettings({{"knobs",true},{"enabled",true},{"pattern",pattern},{"knobSources",QJsonArray{"Music"}},{"colors",QJsonArray{"#ff00ff","#00ffff","#ff8800"}}}));
     app.processEvents();
     REQUIRE(s.grab().toImage()!=plainKnob&&s.value()==40);
+    auto before=s.grab().toImage();auto scaled=c.gradientSettings();scaled["scale"]=300;
+    REQUIRE(c.setGradientSettings(scaled));app.processEvents();
+    REQUIRE(s.grab().toImage()!=before&&s.value()==40);
  }
  REQUIRE(!c.setGradientSettings({{"knobs",true},{"knobSources",QJsonArray{1}}}));
  REQUIRE(c.setGradientSettings({{"knobs",false}}));app.processEvents();

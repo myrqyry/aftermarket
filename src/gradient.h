@@ -20,13 +20,14 @@ struct GradientSpec {
     static QString patternDescription(const QString &);
     static constexpr int maxPeriod=60000;
     QStringList knobSources;
-    int period=1800;
+    static constexpr int minScale=50,maxScale=400;
+    int period=1800,scale=100;
     QVector<QColor> colors;
     static bool parse(const QJsonValue &,GradientSpec &);
 };
 bool isSpatialGradient(const QString &pattern);
-QImage gradientFieldImage(const QVector<QColor>& colors,const QString &pattern,double phase);
-QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern,double phase,const QRectF &rect);
+QImage gradientFieldImage(const QVector<QColor>& colors,const QString &pattern,double phase,int scale=100);
+QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern,double phase,const QRectF &rect,int scale=100);
 QGradientStops gradientPatternStops(QVector<QColor> colors,const QString &pattern,double phase);
 QRect gradientFill(const QWidget *);
 class GradientController final: public QObject {

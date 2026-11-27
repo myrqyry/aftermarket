@@ -383,11 +383,13 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     form->addRow("Colors",colors);
     colorRow->addStretch();colorRow->addWidget(pickColor);colorRow->addWidget(theme);
     auto *period=new QSpinBox(gradient);period->setObjectName("augment-gradient-period");period->setRange(400,GradientSpec::maxPeriod);period->setSingleStep(100);period->setSuffix(" ms");form->addRow("Loop duration",period);
+    auto *scale=new QSpinBox(gradient);scale->setObjectName("augment-gradient-scale");scale->setRange(GradientSpec::minScale,GradientSpec::maxScale);scale->setSingleStep(25);scale->setSuffix(" %");scale->setValue(100);scale->setToolTip("Larger color regions; 100% is the original size.");form->addRow("Gradient size",scale);
     paletteGroup->addLayout(form);
     auto *preview=new PalettePreview(paletteGroup->parentWidget());preview->setObjectName("augment-gradient-preview");
     paletteGroup->addWidget(preview);paletteGroup->addLayout(colorRow);
     QObject::connect(pattern,&QComboBox::currentIndexChanged,preview,[pattern,preview](int){preview->setPattern(pattern->currentData().toString());});
     preview->setPattern(pattern->currentData().toString());
+    QObject::connect(scale,&QSpinBox::valueChanged,preview,&PalettePreview::setScale);
     auto *colorHint=new QLabel(paletteGroup->parentWidget());colorHint->setWordWrap(true);paletteGroup->addWidget(colorHint);
     auto *selection=compactSection(gradient,gl,"Preview selection");
     auto *modernTransforms=check("Modern transform frame and handles","augment-modern-transform",selection,selection->parentWidget());
@@ -451,7 +453,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
         QJsonArray palette;const auto text=colors->text().trimmed();if(!text.isEmpty())for(const auto &c:text.split(','))palette.append(c.trimmed());
         next["enabled"]=enable->isChecked();next["sliders"]=sliders->isChecked();next["progress"]=progress->isChecked();next["titlebars"]=titlebars->isChecked();next["titlebarFill"]=titlebarFill->isChecked();next["pattern"]=pattern->currentData().toString();
         next["knobs"]=knobs->isChecked();next["knobSources"]=QJsonArray::fromStringList(all->isChecked()?QStringList{}:checkedNames());next["knobMeters"]=knobMeters->isChecked();
-        next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();
+        next["audioReactive"]=reactive->isChecked();next["meters"]=meters->isChecked();next["colors"]=palette;next["period"]=period->value();next["scale"]=scale->value();
         return next;
     };
     auto normalized=std::make_shared<QJsonObject>();
@@ -465,7 +467,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
         {const QSignalBlocker blocker(modernTransforms);modernTransforms->setChecked(controller.modernTransformFrame());}
         knobs->setChecked(spec.knobs);knobMeters->setChecked(spec.knobMeters);all->setChecked(spec.knobSources.isEmpty());populate(spec.knobSources);
         reactive->setChecked(spec.audioReactive);meters->setChecked(spec.meters);enable->setChecked(spec.enabled);sliders->setChecked(spec.sliders);progress->setChecked(spec.progress);titlebars->setChecked(spec.titlebars);titlebarFill->setChecked(spec.titlebarFill);pattern->setCurrentIndex(pattern->findData(spec.pattern));
-        QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());colors->setText(hex.join(", "));period->setValue(spec.period);
+        QStringList hex;for(const auto &c:spec.colors)hex.append(c.name());colors->setText(hex.join(", "));period->setValue(spec.period);scale->setValue(spec.scale);
         enablement();updatePreview();*normalized=draft();changed();
     };
     for(auto *box:{knobs,knobMeters,all,reactive,meters,enable,sliders,progress,titlebars,titlebarFill})
@@ -473,6 +475,7 @@ std::shared_ptr<SettingsPages> buildSettings(Controller &controller,QTabWidget *
     QObject::connect(sources,&QListWidget::itemChanged,footer,changed);
     QObject::connect(colors,&QLineEdit::textChanged,footer,changed);
     QObject::connect(period,&QSpinBox::valueChanged,footer,changed);
+    QObject::connect(scale,&QSpinBox::valueChanged,footer,changed);
     QObject::connect(pattern,&QComboBox::currentIndexChanged,footer,changed);
     QObject::connect(knobs,&QCheckBox::toggled,mixer,enablement);QObject::connect(all,&QCheckBox::toggled,mixer,enablement);QObject::connect(reactive,&QCheckBox::toggled,mixer,enablement);
     QObject::connect(refresh,&QPushButton::clicked,mixer,[=]{state->refreshSources();changed();});

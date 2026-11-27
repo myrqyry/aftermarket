@@ -52,7 +52,7 @@ struct ObsSettingsPage::Entry {
     QHash<QString,QPointer<QCheckBox>> flags;
     QHash<QString,bool> baseline;
     QPointer<QLineEdit> gradientColors,knobSources;
-    QPointer<QSpinBox> gradientPeriod;
+    QPointer<QSpinBox> gradientPeriod,gradientScale;
     QPointer<QSlider> stripeStrength;
     QJsonObject gradientBaseline,listRowsBaseline;
     QString existingMode;
@@ -284,6 +284,13 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->gradientPeriod->setSingleStep(100);
     entry->gradientPeriod->setValue(spec.period);
     mixerForm->addRow("Loop duration",entry->gradientPeriod);
+    entry->gradientScale=new QSpinBox(paletteGroup.first);
+    entry->gradientScale->setObjectName("aftermarket-setting-gradient-scale");
+    entry->gradientScale->setRange(GradientSpec::minScale,GradientSpec::maxScale);
+    entry->gradientScale->setSingleStep(25);entry->gradientScale->setSuffix(" %");
+    entry->gradientScale->setValue(spec.scale);
+    entry->gradientScale->setToolTip("Larger regions and gentler color variation. 100% restores the original size.");
+    mixerForm->addRow("Gradient size",entry->gradientScale);
     entry->gradientColors=new QLineEdit(paletteGroup.first);
     entry->gradientColors->setObjectName("aftermarket-setting-gradient-colors");
     entry->gradientColors->setPlaceholderText("Theme palette");
@@ -297,6 +304,8 @@ void ObsSettingsPage::attach(QDialog *dialog){
     paletteGroup.second->addWidget(preview);
     QObject::connect(entry->gradientPattern,&QComboBox::currentIndexChanged,preview,[entry,preview](int){preview->setPattern(entry->gradientPattern->currentData().toString());});
     preview->setPattern(entry->gradientPattern->currentData().toString());
+    QObject::connect(entry->gradientScale,&QSpinBox::valueChanged,preview,&PalettePreview::setScale);
+    preview->setScale(spec.scale);
     auto *actions=new QHBoxLayout;actions->setContentsMargins(0,0,0,0);actions->setSpacing(4);
     auto *pick=new QPushButton("Add color…",paletteGroup.first);
     pick->setObjectName("aftermarket-settings-add-color");
@@ -395,6 +404,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
         if(entry->gradientPattern&&entry->gradientPattern->currentData().toString()!=spec.pattern)changed=true;
         if(entry->gradientPeriod&&entry->gradientPeriod->value()!=spec.period)
             changed=true;
+        if(entry->gradientScale&&entry->gradientScale->value()!=spec.scale)changed=true;
         if(entry->gradientColors&&entry->gradientColors->text()!=originalColors.join(", "))
             changed=true;
         if(entry->knobSources&&entry->knobSources->text()!=spec.knobSources.join(", "))
@@ -431,6 +441,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
     QObject::connect(entry->gradientPattern,&QComboBox::currentIndexChanged,page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->gradientPeriod,qOverload<int>(&QSpinBox::valueChanged),
                      page,[updateDirty](int){updateDirty();});
+    QObject::connect(entry->gradientScale,&QSpinBox::valueChanged,page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->gradientColors,&QLineEdit::textChanged,
                      page,[updateDirty](const QString &){updateDirty();});
     QObject::connect(entry->knobSources,&QLineEdit::textChanged,
@@ -578,6 +589,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     if(entry->gradientPattern->currentData().toString()!=originalSpec.pattern)updatedGradient["pattern"]=entry->gradientPattern->currentData().toString();
     if(entry->gradientPeriod->value()!=originalSpec.period)
         updatedGradient["period"]=entry->gradientPeriod->value();
+    if(entry->gradientScale->value()!=originalSpec.scale)updatedGradient["scale"]=entry->gradientScale->value();
     const QStringList sources=entry->knobSources->text()
         .split(',',Qt::SkipEmptyParts);
     QStringList cleanSources;

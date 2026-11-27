@@ -46,6 +46,11 @@ int main(int argc,char **argv) {
         auto uniform=augment::gradientPatternStops({QColor("#336699"),QColor("#336699")},pattern,.37);
         for(auto stop:uniform)REQUIRE(stop.second==QColor("#336699"));
     }
+    augment::GradientSpec scaleSpec;
+    REQUIRE(augment::GradientSpec::parse(QJsonObject{},scaleSpec)&&scaleSpec.scale==100);
+    REQUIRE(augment::GradientSpec::parse(QJsonObject{{"scale",300}},scaleSpec)&&scaleSpec.scale==300);
+    for(auto invalid:{QJsonValue(49),QJsonValue(401),QJsonValue(100.5),QJsonValue("200")})
+        REQUIRE(!augment::GradientSpec::parse(QJsonObject{{"scale",invalid}},scaleSpec));
     for(const auto &pattern:QStringList{"orbit","nebula","vortex","ripple"}){
         REQUIRE(augment::GradientSpec::patterns().contains(pattern));
         REQUIRE(augment::isSpatialGradient(pattern));
@@ -55,6 +60,11 @@ int main(int argc,char **argv) {
         REQUIRE(a==augment::gradientFieldImage(palette,pattern,1.));
         REQUIRE(b==augment::gradientFieldImage(palette,pattern,1.31));
         auto near=augment::gradientFieldImage(palette,pattern,.9999);
+        auto broad=augment::gradientFieldImage(palette,pattern,.31,300);
+        REQUIRE(broad!=b&&broad==augment::gradientFieldImage(palette,pattern,1.31,300));
+        REQUIRE(augment::gradientFieldImage(palette,pattern,.31,50)!=broad);
+        REQUIRE(augment::gradientFieldImage(palette,pattern,.31,100)==b);
+        REQUIRE(augment::spatialGradientBrush(palette,pattern,.31,QRectF(0,0,100,40),300).textureImage()!=augment::spatialGradientBrush(palette,pattern,.31,QRectF(0,0,100,40),100).textureImage());
         bool variesX=false,variesY=false;
         for(int y=0;y<a.height();++y)for(int x=0;x<a.width();++x){
             const auto c=a.pixelColor(x,y),d=near.pixelColor(x,y);
@@ -180,6 +190,13 @@ int main(int argc,char **argv) {
     auto *stripe=dock->findChild<QWidget*>("aftermarket-title-gradient");
     REQUIRE(controller.setMotionEnabled(false));wait(60);
     auto still=stripe->grab().toImage();wait(150);REQUIRE(still==stripe->grab().toImage());
+    for(const auto &pattern:QStringList{"flow","nebula"}){
+        spec["pattern"]=pattern;spec["scale"]=100;REQUIRE(controller.setGradientSettings(spec));wait(60);
+        auto narrow=stripe->grab().toImage();
+        spec["scale"]=300;REQUIRE(controller.setGradientSettings(spec));wait(60);
+        REQUIRE(narrow!=stripe->grab().toImage());auto broad=stripe->grab().toImage();wait(100);
+        REQUIRE(broad==stripe->grab().toImage());
+    }
     dock->setFloating(true);wait(60);REQUIRE(!stripe->isVisible());
     dock->setFloating(false);wait(60);REQUIRE(stripe->isVisible());
     spec["titlebars"]=false;REQUIRE(controller.setGradientSettings(spec));wait(40);
