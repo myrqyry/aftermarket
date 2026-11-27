@@ -113,3 +113,15 @@ Windows, macOS and OBS33 require separate native qualification.
 Binary test artifacts are uploaded for download; project-level licensing remains to be clarified before a formal release.
 Shared test artifacts are not releases. The older local verifier CLI
 remains supported.
+
+## Full matrix extension
+
+The shared workflow now selects all eight native OBS32.2.0/33.0.3
+targets using pin e9eb704. Linux retains 46 CTests and actual
+archive/extraction checks, with the modern module-root layout on OBS33.
+Windows/macOS compile the complete production Qt and libebur128 module;
+the native tests that depend on Linux installer/UI behavior are not
+claimed as native acceptance yet. All six native packaging fixture
+combinations passed, including the notices. The Mac bundles are signed
+ad hoc for test use, not notarized. Downloadable test binaries remain
+enabled; no releases or source archive are automatically published.
