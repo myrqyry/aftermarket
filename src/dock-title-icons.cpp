@@ -499,6 +499,9 @@ bool DockTitleIcons::eventFilter(QObject *watched,QEvent *event){
             case QEvent::StyleChange:
             case QEvent::PaletteChange:
             case QEvent::FontChange:
+                // Geometry and theme changes can make the full title fit
+                // again even when the decorated windowTitle is unchanged.
+                scheduleRefresh();break;
             case QEvent::WindowTitleChange:
                 if(!adjustingTitle_&&
                    (!displayedTitles_.contains(dock)||
@@ -566,18 +569,27 @@ void DockTitleIcons::place(QDockWidget *dock,QWidget *icon){
         button->setDockHoverReveal(true);
         button->setHeaderHovered(headerHovered_.value(dock));
     }
-    const int moreSpace=more?more->width()+4:0;
-    const int fullRoom=text.width()-titleWidth-moreSpace;
-    const int size=glyphSizeForRoom(fullRoom);
-
+    // The menu needs its real width plus a single clearance gap.
+    // Select decoration using measured padding (spaces are font-dependent),
+    // not a nominal pixel estimate that can force an otherwise fitting name
+    // to elide. Prefer the complete title over either size of icon.
+    const auto *menuButton=specialized?mixerMore:more;
+    constexpr int clearance=3;
+    const int moreSpace=menuButton?menuButton->width()+clearance:0;
+    const int available=qMax(0,text.width()-moreSpace);
     QString spacer;
-    if(size){
-        const int required=size==14?titleTextInset():14;
-        while(metrics.horizontalAdvance(spacer)<required)
-            spacer+=QLatin1Char(' ');
+    int size=0;
+    for(const int candidate:{14,10}){
+        QString padding;
+        const int required=candidate==14?titleTextInset():14;
+        while(metrics.horizontalAdvance(padding)<required)
+            padding+=QLatin1Char(' ');
+        if(titleWidth+metrics.horizontalAdvance(padding)<=available){
+            size=candidate;spacer=padding;break;
+        }
     }
     const int actual=metrics.horizontalAdvance(spacer);
-    const int maxLabelWidth=qMax(0,text.width()-actual-moreSpace-4);
+    const int maxLabelWidth=qMax(0,available-actual);
     const QString renderedTitle=titleWidth<=maxLabelWidth?title:
         metrics.elidedText(title,ellipsisMode_,maxLabelWidth);
     if(renderedTitle.isEmpty()){conceal();return;}

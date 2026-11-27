@@ -445,6 +445,32 @@ int main(int argc,char **argv){
    dock->setWindowTitle("Renamed controls");icons.refresh();app.processEvents();
    REQUIRE(glyph->grab().toImage()==img);
  }
+ // A child dock can resize without the main window resizing or a title
+ // rename. The full name must return as soon as its own width permits.
+ {
+   QMainWindow window;window.resize(900,400);
+   auto *dock=new QDockWidget("A longer dock title that should become fully readable",&window);
+   dock->setObjectName("resizeElisionDock");dock->setWidget(new QLabel("Content",dock));
+   window.show();dock->setGeometry(0,0,180,240);dock->show();app.processEvents();
+   augment::DockTitleIcons titles(&window);titles.refresh();app.processEvents();
+   const auto original=titles.originalTitle(dock);
+   REQUIRE(dock->windowTitle().contains(QChar(0x2026)));
+   dock->resize(750,240);app.processEvents();app.processEvents();
+   REQUIRE(dock->windowTitle().trimmed()==original);
+   REQUIRE(dock->toggleViewAction()->text()==original);
+   dock->resize(180,240);app.processEvents();app.processEvents();
+   REQUIRE(dock->windowTitle().contains(QChar(0x2026)));
+   // Fit the full name and overflow with 3px of clearance; optional
+   // decorations must yield before cutting off even one character.
+   QStyleOptionDockWidget opt;opt.initFrom(dock);opt.title=original;
+   opt.closable=false;opt.floatable=false;opt.movable=true;
+   const int region=dock->style()->subElementRect(QStyle::SE_DockWidgetTitleBarText,&opt,dock).width();
+   const int need=QFontMetrics(dock->font()).horizontalAdvance(original)+titles.moreButton(dock)->width()+3;
+   dock->resize(dock->width()+need-region,240);titles.refresh();app.processEvents();
+   REQUIRE(dock->windowTitle().trimmed()==original);
+   REQUIRE(titles.moreButton(dock)->isVisible());
+   REQUIRE(!titles.glyph(dock)->isVisible());
+ }
  std::cout<<"native OBS dock title icons verified\n";
  return 0;
 }
