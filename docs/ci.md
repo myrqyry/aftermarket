@@ -104,11 +104,12 @@ private development notes, or third-party executables by default.
 
 ## Shared CI pilot
 
-The shared reusable workflow is pinned to the hosted-qualified EmuLens
-revision 70ce37b. Linux OBS 32.2.0 still requires all 46 CTests and the
+The shared reusable workflow is pinned to candidate revision 238f06a,
+derived from the hosted-qualified EmuLens workflow. Linux OBS 32.2.0 still requires all 46 CTests and the
 exact module/third-party notice extraction check, and now uses the
 common versioned archive and handoff gate. No source package is enabled:
 the repository does not currently carry a project-level license.
 Windows, macOS and OBS33 require separate native qualification.
+Both artifact uploads are disabled pending licensing clarification.
 Shared test artifacts are not releases. The older local verifier CLI
 remains supported.

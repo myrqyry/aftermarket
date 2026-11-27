@@ -15,10 +15,11 @@ concurrency:
 
 jobs:
   build:
-    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@70ce37b1015df80478f8ed559f5c88bf4007233f
+    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@238f06a01f1469a21fe6991df7f94ef149472be1
     with:
       module: aftermarket
       profile: linux-obs32
       driver: caller
       minimum-tests: 46
       source-package: false
+      upload-artifacts: false
