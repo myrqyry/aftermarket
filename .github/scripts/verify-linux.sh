@@ -63,7 +63,8 @@ test -s "$binary"
 # or build outputs accidentally enter this preliminary plugin package.
 expected=$(printf '%s\n' "$module/bin/64bit/$module.so")
 if [[ "$module" == aftermarket ]]; then
-  expected=$(printf '%s\n' "$module/bin/64bit/$module.so" "$module/data/THIRD_PARTY_NOTICES.txt")
+  expected=$(printf '%s\n' "$module/bin/64bit/$module.so" "$module/data/LICENSE" "$module/data/THIRD_PARTY_NOTICES.txt")
+  cmp "$root/LICENSE" "$stage/$module/data/LICENSE"
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$stage/$module/data/THIRD_PARTY_NOTICES.txt"
 fi
 test "$(find "$stage" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
@@ -82,6 +83,7 @@ tar -xzf "$work/$module-linux-x86_64-obs32-test.tar.gz" -C "$work/extracted"
 test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
 cmp "$binary" "$work/extracted/$module/bin/64bit/$module.so"
 if [[ "$module" == aftermarket ]]; then
+  cmp "$root/LICENSE" "$work/extracted/$module/data/LICENSE"
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$work/extracted/$module/data/THIRD_PARTY_NOTICES.txt"
 fi
 echo "Native tests and local package validation passed; not a release."

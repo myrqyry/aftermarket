@@ -15,6 +15,7 @@ printf 'new module\n' > "$build/aftermarket.so"
 printf 'settings\n' > "$cfg/plugin_config/obs-ui-augment/rules.json"
 bash "$root/scripts/install.sh" "$build"
 cmp "$build/aftermarket.so" "$new"
+cmp "$root/LICENSE" "$cfg/plugins/aftermarket/data/LICENSE"
 cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$cfg/plugins/aftermarket/data/THIRD_PARTY_NOTICES.txt"
 test ! -e "$old"
 test "$(cat "$cfg/plugin_config/obs-ui-augment/rules.json")" = settings
@@ -23,6 +24,7 @@ find "$XDG_DATA_HOME/aftermarket/rollback" -name obs-ui-augment.so -exec grep -F
 # Reinstall is idempotent, and does not need a legacy installation.
 bash "$root/scripts/install.sh" "$build"
 cmp "$build/aftermarket.so" "$new"
+cmp "$root/LICENSE" "$cfg/plugins/aftermarket/data/LICENSE"
 cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$cfg/plugins/aftermarket/data/THIRD_PARTY_NOTICES.txt"
 # Missing new binary cannot remove the working installation.
 mv "$build/aftermarket.so" "$build/hold"

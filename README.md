@@ -348,3 +348,19 @@ when ready.
 Screenshots are captured from real, isolated OBS sessions with native themes
 and Colorway. The rotary mixer, contextual notes and responsive section detail were refreshed on November 25, 2026. Other captures illustrate their verified feature state and may predate subsequent UI refinements. The project is independent of OBS Studio and does not replace its
 theme system or streaming compositor.
+
+
+## License
+
+Copyright © 2026 myrqyry.
+
+Aftermarket's original software is licensed under the [GNU General Public
+License, version 3 or later](LICENSE) (GPL-3.0-or-later). You may use,
+modify, and redistribute it under those terms. When distributing binaries,
+provide the corresponding source as required by the GPL. The canonical
+source repository is https://github.com/myrqyry/aftermarket.
+
+The bundled libebur128 library and its queue header retain their original
+MIT and BSD-3-Clause terms; see the [third-party notices](third_party/libebur128/THIRD_PARTY_NOTICES.txt).
+OBS Studio, Qt, and separately installed companion plugins retain their own
+licenses. This license does not imply endorsement by their maintainers.

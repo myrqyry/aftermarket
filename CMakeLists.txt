@@ -32,7 +32,7 @@ add_library(aftermarket MODULE src/plugin.cpp src/property-preset-footer.cpp src
 target_link_libraries(aftermarket PRIVATE augmentation mixer_loudness OBS::libobs OBS::obs-frontend-api)
 set_target_properties(aftermarket PROPERTIES PREFIX "")
 install(TARGETS aftermarket LIBRARY DESTINATION bin/64bit)
-install(FILES third_party/libebur128/THIRD_PARTY_NOTICES.txt DESTINATION data)
+install(FILES LICENSE third_party/libebur128/THIRD_PARTY_NOTICES.txt DESTINATION data)
 include(CTest)
 if(BUILD_TESTING)
   add_executable(mixer-loudness-test tests/mixer-loudness-test.cpp)
