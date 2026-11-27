@@ -110,6 +110,6 @@ exact module/third-party notice extraction check, and now uses the
 common versioned archive and handoff gate. No source package is enabled:
 the repository does not currently carry a project-level license.
 Windows, macOS and OBS33 require separate native qualification.
-Both artifact uploads are disabled pending licensing clarification.
+Binary test artifacts are uploaded for download; project-level licensing remains to be clarified before a formal release.
 Shared test artifacts are not releases. The older local verifier CLI
 remains supported.
