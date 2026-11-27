@@ -26,10 +26,14 @@ int main(int argc,char **argv) {
  QWidget frame(&a);frame.setObjectName("volMeterFrame");frame.setGeometry(0,0,100,180);
  QSlider s(Qt::Vertical,&frame),other(Qt::Vertical,&b);s.setRange(0,100);s.setValue(40);s.setGeometry(0,0,20,160);other.setGeometry(0,0,20,160);
  a.resize(100,180);b.resize(100,180);a.show();b.show();app.processEvents();
- auto min=s.minimumSize();auto original=s.grab().toImage();
+ s.setMaximumHeight(20);auto min=s.minimumSize(),max=s.maximumSize();auto original=s.grab().toImage();
  REQUIRE(c.setGradientSettings({{"knobs",true},{"knobSources",QJsonArray{"Music"}}}));app.processEvents();
  REQUIRE(s.property("_obsUiAugmentKnob").toBool());REQUIRE(!other.property("_obsUiAugmentKnob").toBool());
- REQUIRE(s.minimumWidth()>=40 && s.value()==40);
+ REQUIRE(s.minimumWidth()>=44&&s.minimumHeight()>=44&&s.maximumHeight()>=44&&s.value()==40);
+ // Native theme repolish can reintroduce a short slider constraint.
+ s.setMinimumHeight(12);s.setMaximumHeight(16);app.processEvents();s.grab();app.processEvents();
+ REQUIRE(s.minimumHeight()>=44&&s.maximumHeight()>=44);
+ min.setHeight(12);max.setHeight(16);
  auto point=QPointF(s.rect().center());
  auto send=[&](QEvent::Type type,QPointF p,Qt::MouseButton button,Qt::MouseButtons buttons){
   QMouseEvent e(type,p,s.mapToGlobal(p.toPoint()),button,buttons,Qt::NoModifier);
@@ -83,7 +87,7 @@ int main(int argc,char **argv) {
  }
  REQUIRE(!c.setGradientSettings({{"knobs",true},{"knobSources",QJsonArray{1}}}));
  REQUIRE(c.setGradientSettings({{"knobs",false}}));app.processEvents();
- REQUIRE(!s.property("_obsUiAugmentKnob").toBool()&&s.minimumSize()==min&&s.value()==40);
+ REQUIRE(!s.property("_obsUiAugmentKnob").toBool()&&s.minimumSize()==min&&s.maximumSize()==max&&s.value()==40);
  std::cout<<"selected knob, native drag/value signals, external update, restore passed\n";
 }
 #include "knob-test.moc"

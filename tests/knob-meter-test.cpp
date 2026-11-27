@@ -69,9 +69,9 @@ int main(int argc,char **argv) {
  // OBS changes orientation and repolishes the native slider when switching layouts.
  s->setOrientation(Qt::Horizontal);
  s->setStyleSheet("QSlider:horizontal { min-height: 14px; }");
- s->setMinimumHeight(14);wait(120);
- REQUIRE(s->minimumHeight()>=68&&m->isHidden());
- s->setStyleSheet("");s->setOrientation(Qt::Vertical);s->setMinimumSize(initialMin);wait(100);
+ s->setMinimumHeight(14);s->setMaximumWidth(38);wait(120);
+ REQUIRE(s->minimumHeight()>=68&&s->minimumWidth()>=68&&s->maximumWidth()>=68&&m->isHidden());
+ s->setStyleSheet("");s->setOrientation(Qt::Vertical);s->setMinimumSize(initialMin);s->setMaximumWidth(initialMax.width());wait(100);
  reading.reset();wait(100);
  REQUIRE(!m->isHidden()&&!s->property("_obsUiAugmentIntegratedMeter").toBool());
  reading=augment::MeterReading{-12,false};wait(100);REQUIRE(m->isHidden());

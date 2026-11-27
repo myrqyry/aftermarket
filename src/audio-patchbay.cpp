@@ -74,7 +74,7 @@ QColor activeOutlineColor(const QPalette &theme){
 class AudioPatchbay::Canvas final : public QWidget {
     static constexpr int firstY=43;
     static constexpr int monitorTarget=7;
-    static constexpr int minStep=18;
+    static constexpr int minStep=30; // 28px circle plus clearance; scroll instead of flattening
     static constexpr int maxStep=32;
     static constexpr int sourceLeft=5;
     static constexpr int sourceWidth=124;
@@ -126,7 +126,7 @@ class AudioPatchbay::Canvas final : public QWidget {
         if(t>monitorTarget)
             return QRect(width()-targetRight-92,firstY+(t-2)*rowStep()-nodeHeight()/2,92,nodeHeight());
         return QRect(width()-targetRight-targetWidth,
-                     firstY+(t-1)*rowStep()-nodeHeight()/2,targetWidth,nodeHeight());
+                     firstY+(t-1)*rowStep()-targetWidth/2,targetWidth,targetWidth);
     }
     int sourceAt(QPoint pt) const {
         for(int i=0;i<routes.size();++i)
@@ -137,7 +137,7 @@ class AudioPatchbay::Canvas final : public QWidget {
         for(int t=1;t<=targetCount();++t){
             const auto r=trackRect(t);
             if(t>monitorTarget){if(r.contains(pt))return t;continue;}
-            const QPointF delta=QPointF(pt)-QPointF(r.center());
+            const QPointF delta=QPointF(pt)-QRectF(r).center();
             const qreal radius=r.width()/2.0;
             if(delta.x()*delta.x()+delta.y()*delta.y()<=radius*radius)return t;
         }
@@ -146,7 +146,7 @@ class AudioPatchbay::Canvas final : public QWidget {
     QPainterPath cable(int fromY,int target) const {
         const auto rect=trackRect(target);
         const qreal endX=rect.left();
-        const int toY=rect.center().y();
+        const qreal toY=QRectF(rect).center().y();
         const qreal mid=portX+(endX-portX)/2.0;
         QPainterPath result(QPointF(portX,fromY));
         result.cubicTo(mid,fromY,mid,toY,endX,toY);
@@ -211,6 +211,7 @@ public:
     explicit Canvas(QWidget *parent=nullptr):QWidget(parent){
         setObjectName("aftermarket-route-canvas");
         setMinimumWidth(240);
+        setMinimumHeight(58+6*minStep);
         setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Preferred);
         setFocusPolicy(Qt::StrongFocus);
         setMouseTracking(true);

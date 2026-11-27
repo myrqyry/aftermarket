@@ -56,9 +56,8 @@ protected:
         QPainter p(this);p.setRenderHint(QPainter::Antialiasing);
         const auto pal=palette();
         const auto group=isEnabled()?QPalette::Active:QPalette::Disabled;
-        const double side=qMin(width(),height())-4.;
-        if(side<8)return;
-        const QRectF outer((width()-side)/2.,(height()-side)/2.,side,side);
+        const auto outer=rotarySquare(QRectF(rect()),compactDialSize,2.);
+        if(!outer.isValid())return;
         const auto ring=outer.adjusted(4.2,4.2,-4.2,-4.2);
         const auto face=outer.adjusted(7,7,-7,-7);
         const auto accent=pal.color(group,QPalette::Highlight);
@@ -321,6 +320,11 @@ struct FrontAudioControls::State {
         bool rotaryEdges=false;
         QPointer<QGridLayout> rotaryGrid;
         int rotaryButtonsStretch=0;
+        struct ButtonBounds {
+            QPointer<QAbstractButton> button;
+            QSize originalMin,originalMax,applied;
+        };
+        QList<ButtonBounds> circularButtons;
 
     };
     QObject *owner=nullptr;
@@ -1057,8 +1061,62 @@ struct FrontAudioControls::State {
         syncStatus(r);
         return true;
     }
+    static bool mixerCircle(QAbstractButton *button){
+        const auto classes=button->property("class").toString().split(' ',Qt::SkipEmptyParts);
+        return button->inherits("MuteCheckBox")||button->inherits("MonitorCheckBox")||
+            classes.contains("indicator-mute")||classes.contains("indicator-monitor")||
+            classes.contains("indicator-monitoring")||classes.contains("indicator-headphone")||
+            button->toolTip()=="Mute"||button->toolTip()=="Enable Monitoring"||
+            button->toolTip()=="Disable Monitoring";
+    }
+    void syncCircularButtons(Row &r){
+        if(!r.volume)return;
+        for(auto *button:r.volume->findChildren<QAbstractButton*>(QString(),Qt::FindDirectChildrenOnly)){
+            auto it=std::find_if(r.circularButtons.begin(),r.circularButtons.end(),
+                [button](const Row::ButtonBounds &b){return b.button==button;});
+            if(it==r.circularButtons.end()){
+                if(!mixerCircle(button))continue;
+                r.circularButtons.append({button,button->minimumSize(),button->maximumSize(),QSize()});
+                it=std::prev(r.circularButtons.end());
+            }
+            const auto lo=button->minimumSize(),hi=button->maximumSize();
+            if(it->applied.isValid()){
+                if(lo.width()!=it->applied.width())it->originalMin.setWidth(lo.width());
+                if(lo.height()!=it->applied.height())it->originalMin.setHeight(lo.height());
+                if(hi.width()!=it->applied.width())it->originalMax.setWidth(hi.width());
+                if(hi.height()!=it->applied.height())it->originalMax.setHeight(hi.height());
+            }
+            // Use the larger native dimension, including the style's
+            // natural size for unfixed axes. Never squeeze an icon to fit.
+            const auto hint=button->sizeHint().expandedTo(button->minimumSizeHint());
+            auto dimension=[](int low,int high,int natural){
+                return low==high?low:qBound(low,natural,high);
+            };
+            const int side=qMax(1,qMax(dimension(it->originalMin.width(),it->originalMax.width(),hint.width()),
+                dimension(it->originalMin.height(),it->originalMax.height(),hint.height())));
+            const QSize square(side,side);
+            if(lo!=square||hi!=square){
+                button->setMaximumSize(hi.expandedTo(square));button->setFixedSize(square);
+                button->updateGeometry();
+            }
+            it->applied=square;
+        }
+    }
+    void restoreCircularButtons(Row &r){
+        for(auto &b:r.circularButtons)if(b.button){
+            auto *w=b.button.data();auto lo=w->minimumSize(),hi=w->maximumSize();
+            if(lo.width()==b.applied.width())lo.setWidth(b.originalMin.width());
+            if(lo.height()==b.applied.height())lo.setHeight(b.originalMin.height());
+            if(hi.width()==b.applied.width())hi.setWidth(b.originalMax.width());
+            if(hi.height()==b.applied.height())hi.setHeight(b.originalMax.height());
+            w->setMaximumSize(w->maximumSize().expandedTo(hi).expandedTo(lo));
+            w->setMinimumSize(lo);w->setMaximumSize(hi.expandedTo(lo));w->updateGeometry();
+        }
+        r.circularButtons.clear();
+    }
     void remove(Row &r){
         restoreRotary(r);
+        restoreCircularButtons(r);
         syncTitleRows(r,false);
         if(r.nameText)r.nameText->removeEventFilter(owner);
         if(r.nameHandle){
@@ -1144,6 +1202,7 @@ struct FrontAudioControls::State {
     }
     void syncLayout(Row &r){
         if(!r.controls)return;
+        syncCircularButtons(r);
         const bool compact=syncColumn(r)||syncRotary(r);
         if(compact){
             if(r.panLabel)r.panLabel->hide();

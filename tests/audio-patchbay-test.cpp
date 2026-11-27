@@ -15,6 +15,8 @@
 #include <QCoreApplication>
 #include <QStyle>
 #include <QPalette>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <iostream>
 #define REQUIRE(x) do{if(!(x)){std::cerr<<"FAIL "<<__LINE__<<" "<<#x<<"\n";return 1;}}while(false)
 
@@ -107,7 +109,7 @@ int main(int argc,char **argv){
  REQUIRE(!bay.findChild<QWidget*>("aftermarket-route-status"));
  REQUIRE(!bay.findChild<QWidget*>("aftermarket-track-1"));
  REQUIRE(!bay.findChild<QWidget*>("aftermarket-monitor-output"));
- REQUIRE(canvas->minimumHeight()<=170);
+ REQUIRE(canvas->minimumHeight()>=238);
  REQUIRE(bay.routeCount()==3);
  REQUIRE(bay.selectedId()=="voice");
  REQUIRE(menu->actions()[2]->isChecked());
@@ -450,6 +452,24 @@ int main(int argc,char **argv){
  REQUIRE(modern[0].monitor==2&&modern[0].tracks==0x15&&modernWrites==1);
  REQUIRE(modernBay.toggleMonitorOutput());
  REQUIRE(modern[0].monitor==0&&modern[0].tracks==0x15&&modernWrites==2);
+ // A short/narrow dock must scroll rather than flatten the track nodes.
+ augment::AudioPatchbay shortBay([]{return QVector<augment::RouteSource>{};},{},{});
+ shortBay.resize(200,125);shortBay.show();app.processEvents();
+ auto *shortCanvas=shortBay.findChild<QWidget*>("aftermarket-route-canvas");
+ auto *shortScroll=shortBay.findChild<QScrollArea*>();
+ REQUIRE(shortCanvas&&shortScroll&&shortScroll->verticalScrollBar()->maximum()>0);
+ REQUIRE(shortCanvas->height()>=238&&shortCanvas->width()>=240);
+ auto contrast=shortCanvas->palette();contrast.setColor(QPalette::Button,QColor("#345678"));shortCanvas->setPalette(contrast);app.processEvents();
+ const auto round=shortCanvas->grab().toImage();
+ const int cx=shortCanvas->width()-27,cy=43+5*30;
+ // Test actual painted edges, not just the intended geometry.
+ auto bg=round.pixelColor(cx-20,cy);
+ int spanX=0,spanY=0;
+ for(int i=-15;i<=15;++i){
+  if(round.pixelColor(cx+i,cy)!=bg)++spanX;
+  if(round.pixelColor(cx,cy+i)!=bg)++spanY;
+ }
+ REQUIRE(spanX>=27&&spanY>=27&&qAbs(spanX-spanY)<=1);
  std::cout<<"compact AudioHub graph, headphones route, live dots and native editing verified\n";
  return 0;
 }

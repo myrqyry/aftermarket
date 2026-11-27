@@ -19,6 +19,12 @@ inline QConicalGradient rotaryThemeGradient(const QPointF &center,const QPalette
     for(int i=0;i<colors.size();++i)gradient.setColorAt(double(i)/(colors.size()-1),colors.at(i));
     return gradient;
 }
+// Use a centered square in logical pixels, regardless of host aspect ratio.
+inline QRectF rotarySquare(const QRectF &available,qreal maximum,qreal inset){
+    const qreal side=qMin(maximum,qMin(available.width(),available.height()))-2*inset;
+    if(side<8)return {};
+    return QRectF(available.center()-QPointF(side/2.,side/2.),QSizeF(side,side));
+}
 inline double rotaryDragDistance(const QPointF &delta){return delta.x()-delta.y();}
 
 // Shared gain, balance and encoder visual vocabulary. Geometry is relative

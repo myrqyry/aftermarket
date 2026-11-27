@@ -529,6 +529,7 @@ int main(int argc,char **argv){
  auto *precise=channel->findChild<QSpinBox*>("aftermarket-offset-ms");
  auto *pairGrid=channel->findChild<QGridLayout*>("aftermarket-rotary-pairs");
  REQUIRE(center&&center->itemAt(0)->widget()==frame&&pairGrid&&pairGrid->itemAtPosition(1,1)->widget()==db);
+ REQUIRE(mute->width()==mute->height()&&monitor->width()==monitor->height()&&mute->width()>=22);
  REQUIRE(pairGrid->indexOf(adjust)>=0&&panRight->isVisible()&&syncRight->isVisible()&&!precise->isVisible());
  REQUIRE(panRight->mapTo(channel,QPoint()).x()>gain->mapTo(channel,QPoint()).x());
  REQUIRE(panRight->mapTo(channel,QPoint()).y()<syncRight->mapTo(channel,QPoint()).y());
@@ -561,6 +562,7 @@ int main(int argc,char **argv){
  gain->setProperty("_obsUiAugmentKnob",true);rotaryUi.refresh();app.processEvents();
  REQUIRE(channel->findChild<QBoxLayout*>("aftermarket-rotary-center"));
  rotaryUi.detach();app.processEvents();
+ REQUIRE(mute->minimumSize()==QSize(18,22)&&mute->maximumSize()==QSize(18,22));
  REQUIRE(statusRow->indexOf(db)>=0&&bodyRow->indexOf(frame)>=0&&status->maximumWidth()>20&&gain->value()==51&&header->stretch(0)==0);
  // Native side-by-side channels have a 110px cap, a vertical gain
  // slider and separate centered status/name/dB/button layout rows.
@@ -575,13 +577,14 @@ int main(int argc,char **argv){
  auto *stripFrame=new QFrame(strip);stripFrame->setObjectName("volMeterFrame");auto *fl=new QHBoxLayout(stripFrame);
  auto *stripGain=new QSlider(Qt::Vertical,stripFrame);stripGain->setProperty("_obsUiAugmentKnob",true);stripGain->setProperty("_obsUiAugmentIntegratedMeter",true);
  stripGain->setFixedSize(68,76);stripGain->setValue(63);fl->addWidget(stripGain);stripRoot->addWidget(stripFrame,1);
- auto *br=new QHBoxLayout;auto *sm=new QPushButton(strip),*sn=new QPushButton(strip);br->setSpacing(2);sm->setFixedSize(18,22);sn->setFixedSize(18,22);br->addWidget(sm);br->addWidget(sn);stripRoot->addLayout(br);
+ auto *br=new QHBoxLayout;auto *sm=new QPushButton(strip),*sn=new QPushButton(strip);br->setSpacing(2);sm->setToolTip("Mute");sn->setToolTip("Enable Monitoring");sm->setFixedSize(18,22);sn->setFixedSize(18,22);br->addWidget(sm);br->addWidget(sn);stripRoot->addLayout(br);
  columnMixer.resize(360,500);columnMixer.show();app.processEvents();
  augment::FrontAudioControls columnUi(tmp.filePath("columnMixer.json"),[&]{return current;},{},{});
  REQUIRE(columnUi.attach(&columnMixer));REQUIRE(columnUi.setKnobs(true));columnUi.refresh();app.processEvents();
  auto *columnPan=strip->findChild<QDial*>("aftermarket-pan-dial");
  auto *columnSync=strip->findChild<QDial*>("aftermarket-offset-dial");
  auto *columnSpin=strip->findChild<QSpinBox*>("aftermarket-offset-ms");
+ REQUIRE(sm->width()==sm->height()&&sn->width()==sn->height()&&sm->width()>=22);
  REQUIRE(columnPan&&columnSync&&columnSpin&&columnPan->isVisible()&&columnSync->isVisible()&&!columnSpin->isVisible());
  // Side-by-side channels use buttons ABOVE and dials BELOW the gain.
  const auto middle=stripGain->mapTo(strip,stripGain->rect().center());
@@ -619,6 +622,7 @@ int main(int argc,char **argv){
  REQUIRE(columnSync->isVisible()&&!columnSpin->isVisible());
  columnUi.setKnobs(false);app.processEvents();REQUIRE(columnSpin->isVisible());
  columnUi.detach();app.processEvents();
+ REQUIRE(sm->minimumSize()==QSize(18,22)&&sm->maximumSize()==QSize(18,22));
  REQUIRE(stripRoot->count()==5&&dr->indexOf(stripDb)==0&&stripStatus->maximumWidth()>18&&stripGain->value()==63&&br->spacing()==2);
  // Responsive grid keeps the real horizontal mixer container and channel
  // widgets, and restores the original native box on narrow/disabled views.

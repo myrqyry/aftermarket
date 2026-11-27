@@ -84,6 +84,10 @@ static void probe(){
    QList<QAbstractButton*> buttons;
    for(auto *b:w->findChildren<QAbstractButton*>(QString(),Qt::FindDirectChildrenOnly))
     if(b->toolTip()=="Mute"||b->toolTip()=="Enable Monitoring")buttons.append(b);
+   for(auto *button:buttons){
+     blog(LOG_INFO,"GRIDDETAIL circle %s %dx%d",qPrintable(button->toolTip()),button->width(),button->height());
+     position&=button->width()==button->height();
+   }
    const auto dbPos=db->mapTo(w,db->rect().center());
    const auto panPos=pan->mapTo(w,pan->rect().center()),syncPos=offset->mapTo(w,offset->rect().center());
    position&=gain&&pan->isVisible()&&offset->isVisible()&&!spin->isVisible()&&

@@ -502,7 +502,8 @@ public:
     float energy=0;
     qint64 lastFrame=-1;
     bool knob=false,dragging=false;
-    QSize originalMinimum,appliedMinimum;
+    QSize originalMinimum,originalMaximum,appliedMinimum,appliedMaximum;
+    bool adjustingBounds=false;
     QPointF start;
     int startValue=0;
     int paintedPosition=0,paintedMin=0,paintedMax=0;
@@ -528,18 +529,41 @@ public:
     }
     QPointer<QWidget> nativeMeter;
     bool integrated=false;
-    QSize meterMin,meterMax,appliedMeterMin,appliedMeterMax;
     float peakDb=-60,holdDb=-60;
     qint64 holdUntil=0,clipUntil=0,previousMeterFrame=-1;
     bool meterMuted=false;
+    // The native fader may be constrained to a short track by OBS/QSS.
+    // Own only the constraints needed for the rotary presentation, and
+    // preserve new native bounds written while it is active.
+    void syncKnobBounds(bool restoring=false) {
+        auto *s=qobject_cast<QSlider*>(parentWidget());
+        if(!s||!knob||adjustingBounds)return;
+        const auto currentMin=s->minimumSize(),currentMax=s->maximumSize();
+        if(currentMin.width()!=appliedMinimum.width())originalMinimum.setWidth(currentMin.width());
+        if(currentMin.height()!=appliedMinimum.height())originalMinimum.setHeight(currentMin.height());
+        if(currentMax.width()!=appliedMaximum.width())originalMaximum.setWidth(currentMax.width());
+        if(currentMax.height()!=appliedMaximum.height())originalMaximum.setHeight(currentMax.height());
+        const int floor=integrated?68:44;
+        const QSize desiredMin=restoring?originalMinimum:originalMinimum.expandedTo(QSize(floor,floor));
+        QSize desiredMax=originalMaximum;
+        if(integrated&&!restoring)desiredMax.setHeight(qMin(76,desiredMax.height()));
+        desiredMax=desiredMax.expandedTo(desiredMin);
+        if(currentMin==desiredMin&&currentMax==desiredMax){appliedMinimum=currentMin;appliedMaximum=currentMax;return;}
+        adjustingBounds=true;
+        // Qt may clamp an opposing bound when either constraint changes.
+        // First relax maxima, then set minima, then tighten maxima.
+        s->setMaximumSize(currentMax.expandedTo(desiredMax).expandedTo(desiredMin));
+        s->setMinimumSize(desiredMin);
+        s->setMaximumSize(desiredMax);
+        appliedMinimum=s->minimumSize();appliedMaximum=s->maximumSize();
+        adjustingBounds=false;s->updateGeometry();
+    }
     void restoreMeter() {
         if(!integrated)return;
         integrated=false;
-        if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
+        if(auto *s=qobject_cast<QSlider*>(parentWidget())){
             s->setProperty("_obsUiAugmentIntegratedMeter",QVariant());
-            if(s->maximumSize()==appliedMeterMax)s->setMaximumSize(meterMax);
-            if(s->minimumSize()==appliedMeterMin)s->setMinimumSize(meterMin);
-            s->updateGeometry();
+            syncKnobBounds();
         }
         if(nativeMeter){nativeMeter->show();nativeMeter.clear();}
         update();
@@ -555,44 +579,14 @@ public:
             for(auto *widget:frame->findChildren<QWidget*>(QString(),Qt::FindDirectChildrenOnly))
                 if(widget->inherits("VolumeMeter")&&!widget->isHidden()){nativeMeter=widget;break;}
             if(!nativeMeter)return;
-            meterMin=s->minimumSize();meterMax=s->maximumSize();
             integrated=true;
             s->setProperty("_obsUiAugmentIntegratedMeter",true);
-            const QSize requested(qMin(68,meterMax.width()),qMin(68,meterMax.height()));
-            s->setMinimumSize(meterMin.expandedTo(requested));
-            s->setMaximumHeight(qMax(s->minimumHeight(),qMin(76,meterMax.height())));
-            appliedMeterMin=s->minimumSize();appliedMeterMax=s->maximumSize();
+            syncKnobBounds();
             nativeMeter->hide();s->updateGeometry();
             peakDb=holdDb=-60;holdUntil=clipUntil=0;previousMeterFrame=-1;
             update();
         }
-        // OBS reuses and repolishes its slider when the mixer orientation or
-        // theme changes. Qt can reapply the native short-slider minimum after
-        // integration. Preserve that new native constraint for eventual restore,
-        // then reassert the rotary presentation's minimum on only those axes.
-        const auto currentMin=s->minimumSize(),currentMax=s->maximumSize();
-        if(currentMax!=appliedMeterMax)meterMax=currentMax;
-        if(currentMin!=appliedMeterMin) {
-            if(currentMin.width()!=appliedMeterMin.width()) {
-                originalMinimum.setWidth(currentMin.width());
-                appliedMinimum.setWidth(qMin(qMax(44,currentMin.width()),currentMax.width()));
-                meterMin.setWidth(appliedMinimum.width());
-            }
-            if(currentMin.height()!=appliedMeterMin.height()) {
-                originalMinimum.setHeight(currentMin.height());
-                appliedMinimum.setHeight(qMin(qMax(44,currentMin.height()),currentMax.height()));
-                meterMin.setHeight(appliedMinimum.height());
-            }
-        }
-        const QSize requested(qMin(68,meterMax.width()),qMin(68,meterMax.height()));
-        const QSize desired=meterMin.expandedTo(requested).boundedTo(meterMax);
-        const int desiredMax=qMax(desired.height(),qMin(76,meterMax.height()));
-        if(s->minimumSize()!=desired||s->maximumHeight()!=desiredMax) {
-            s->setMinimumSize(desired);
-            s->setMaximumHeight(desiredMax);
-            appliedMeterMin=s->minimumSize();appliedMeterMax=s->maximumSize();
-            s->updateGeometry();
-        }
+        syncKnobBounds();
         const float target=reading->muted||!std::isfinite(reading->peakDb)?-60.f:std::clamp(reading->peakDb,-60.f,0.f);
         const double dt=previousMeterFrame<0?0.:std::clamp((now-previousMeterFrame)/1000.,0.,.25);
         previousMeterFrame=now;
@@ -618,27 +612,20 @@ public:
         auto *s=qobject_cast<QSlider*>(parentWidget());
         if(!s)return;
         if(enabled) {
-            originalMinimum=s->minimumSize();appliedMinimum=originalMinimum.expandedTo(QSize(
-                qMin(44,s->maximumWidth()),qMin(44,s->maximumHeight())));
+            originalMinimum=appliedMinimum=s->minimumSize();
+            originalMaximum=appliedMaximum=s->maximumSize();
             knob=true;
             s->setProperty("_obsUiAugmentKnob",true);
-            s->setMinimumSize(appliedMinimum);
-            appliedMinimum=s->minimumSize();
+            syncKnobBounds();
         } else {
-            restoreMeter();finishDrag();knob=false;
+            restoreMeter();finishDrag();
+            syncKnobBounds(true);knob=false;
             s->setProperty("_obsUiAugmentKnob",QVariant());
-            // Do not undo newer constraints written by a theme/layout owner.
-            QSize current=s->minimumSize();
-            if(current.width()==appliedMinimum.width())current.setWidth(originalMinimum.width());
-            if(current.height()==appliedMinimum.height())current.setHeight(originalMinimum.height());
-            s->setMinimumSize(current);
         }
         s->updateGeometry();s->update();update();
     }
     QRectF knobRect() const {
-        const qreal side=qMin(integrated?68:48,qMin(width(),height()))-6;
-        if(side<8)return {};
-        return QRectF((width()-side)/2.,(height()-side)/2.,side,side);
+        return rotarySquare(QRectF(rect()),integrated?68:48,3.);
     }
     bool gainTarget(QSlider *s)const{
         return s&&s->parentWidget()&&s->parentWidget()->objectName()=="volMeterFrame";
@@ -987,6 +974,7 @@ void GradientController::sync(QWidget *w,bool frame) {
     auto l=state->layers.value(w);
     if(!l)return;
     if(!state->meterProvider||!l->knob||!state->spec.knobMeters)l->restoreMeter();
+    if(l->knob)l->syncKnobBounds();
     auto fill=l->knob?w->rect():gradientFill(w);
     const bool fullTitle=state->spec.titlebarFill&&qobject_cast<QDockWidget*>(w);
     if(fullTitle&&w->isEnabled())fill=titleBackground(qobject_cast<QDockWidget*>(w));
