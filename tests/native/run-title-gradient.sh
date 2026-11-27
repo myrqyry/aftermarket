@@ -8,7 +8,9 @@ cfg="$root/home/.config/obs-studio"
 mkdir -p "$cfg/plugins/aftermarket/bin/64bit" "$cfg/plugins/title-gradient-probe/bin/64bit" "$cfg/plugin_config/aftermarket"
 cp "$module" "$cfg/plugins/aftermarket/bin/64bit/aftermarket.so"
 printf '[General]\nFirstRun=true\n' >"$cfg/user.ini"
-printf '{"enabled":true,"motion":true,"rules":[],"gradient":{"enabled":true,"sliders":false,"progress":false,"titlebars":true,"pattern":"shimmer","period":1200,"colors":["#31748f","#c4a7e7"]}}\n' >"$cfg/plugin_config/aftermarket/rules.json"
+pattern="${GRADIENT_PATTERN:-shimmer}"
+case "$pattern" in flow|reverse|bounce|breathe|shimmer|drift|aurora|tide|bloom) ;; *) echo "Unknown pattern" >&2; exit 1;; esac
+printf '{"enabled":true,"motion":true,"rules":[],"gradient":{"enabled":true,"sliders":false,"progress":false,"titlebars":true,"pattern":"%s","period":1200,"colors":["#31748f","#c4a7e7"]}}\n' "$pattern" >"$cfg/plugin_config/aftermarket/rules.json"
 if [[ "${FULL_HEADER:-0}" == 1 ]]; then
  cp -a "$HOME/.config/obs-studio/themes" "$cfg/"
  printf '\n[Appearance]\nTheme=com.myrqyry.Colorway.FluffyDark\nFontScale=10\nDensity=-2\n' >>"$cfg/user.ini"

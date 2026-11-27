@@ -24,14 +24,30 @@
 #include <QtMath>
 #include <cmath>
 namespace augment {
-QStringList GradientSpec::patterns(){return {"flow","reverse","bounce","breathe","shimmer","static"};}
+QStringList GradientSpec::patterns(){return {"flow","reverse","bounce","breathe","shimmer","drift","aurora","tide","bloom","static"};}
 QString GradientSpec::patternLabel(const QString &id){
     if(id=="reverse")return "Reverse flow";
     if(id=="bounce")return "Ping-pong";
     if(id=="breathe")return "Breathing";
     if(id=="shimmer")return "Shimmer";
+    if(id=="drift")return "Drift — soft flow";
+    if(id=="aurora")return "Aurora — liquid ribbons";
+    if(id=="tide")return "Tide — gentle sway";
+    if(id=="bloom")return "Bloom — spreading color";
     if(id=="static")return "Static";
     return "Flow";
+}
+QString GradientSpec::patternDescription(const QString &id){
+    if(id=="drift")return "Slowly accelerating and decelerating color bands with soft blends.";
+    if(id=="aurora")return "Overlapping traveling waves stretch and compress the color bands.";
+    if(id=="tide")return "Colors sway back and forth, gently expanding and contracting.";
+    if(id=="bloom")return "Broad color blooms expand, dissolve and return in a seamless cycle.";
+    if(id=="reverse")return "Continuous reverse travel.";
+    if(id=="bounce")return "Back-and-forth travel.";
+    if(id=="breathe")return "Stationary colors with a brightness pulse.";
+    if(id=="shimmer")return "A narrow traveling highlight.";
+    if(id=="static")return "Stationary gradient.";
+    return "Continuous forward travel.";
 }
 bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     GradientSpec next;
@@ -63,7 +79,7 @@ bool GradientSpec::parse(const QJsonValue &value,GradientSpec &out) {
     }
     if(o.contains("period")) {
         auto d=o.value("period").toDouble(-1);
-        if(!std::isfinite(d)||d<400||d>12000||std::floor(d)!=d)return false;
+        if(!std::isfinite(d)||d<400||d>GradientSpec::maxPeriod||std::floor(d)!=d)return false;
         next.period=int(d);
     }
     if(o.contains("colors")) {
@@ -235,10 +251,62 @@ QRect titleBackground(const QDockWidget *dock){
 double patternOffset(const QString &pattern,double phase){
     if(pattern=="reverse")return -phase;
     if(pattern=="bounce")return .5-.5*std::cos(phase*2*M_PI);
-    if(pattern=="breathe"||pattern=="static")return 0;
+    if(pattern=="breathe"||pattern=="static"||pattern=="drift"||pattern=="aurora"||pattern=="tide"||pattern=="bloom")return 0;
     return phase;
 }
-void setPatternStops(QGradient &g,QVector<QColor> colors,const QString &pattern,double phase){
+// Keep the legacy gradients identical. Organic styles instead deform a
+// continuous cyclic palette. All harmonics are integer multiples of a
+// full period, so both time and spatial boundaries join without a jump.
+}
+QGradientStops gradientPatternStops(QVector<QColor> colors,const QString &pattern,double phase){
+    if(colors.isEmpty())return {};
+    if(colors.size()==1)colors.append(colors.first());
+    phase=std::isfinite(phase)?phase-std::floor(phase):0.;
+    // Quantize only sub-picosecond floating point wrap error.
+    phase=std::round(phase*1e12)/1e12;
+    if(phase>=1.)phase=0.;
+    QGradientStops stops;
+    const bool organic=pattern=="drift"||pattern=="aurora"||pattern=="tide"||pattern=="bloom";
+    if(organic){
+        if(colors.size()>2&&colors.first()==colors.last())colors.removeLast();
+        constexpr double tau=6.28318530717958647692;
+        constexpr int segments=48;
+        const double t=tau*phase;
+        auto sample=[&](double x){
+            x-=std::floor(x);
+            const double u=x*colors.size();
+            const int i=qMin(int(u),int(colors.size())-1);
+            double f=u-i;
+            f=f*f*(3.-2.*f);
+            const auto a=colors[i],b=colors[(i+1)%colors.size()];
+            return QColor::fromRgbF(a.redF()+(b.redF()-a.redF())*f,
+                                    a.greenF()+(b.greenF()-a.greenF())*f,
+                                    a.blueF()+(b.blueF()-a.blueF())*f,
+                                    a.alphaF()+(b.alphaF()-a.alphaF())*f);
+        };
+        stops.reserve(segments+1);
+        for(int i=0;i<segments;++i){
+            const double x=double(i)/segments;
+            const double angle=tau*x;
+            double u=x;
+            if(pattern=="drift")u+=phase+.075*std::sin(t)+.04*std::sin(angle-t);
+            else if(pattern=="aurora")u+=phase+.11*std::sin(angle-t)+.035*std::sin(2*angle+2*t);
+            else if(pattern=="tide")u+=.26*std::sin(t)+.085*std::sin(angle)*std::cos(t);
+            else u+=.16*std::sin(t)+.13*std::sin(angle-t);
+            auto color=sample(u);
+            if(pattern=="bloom"){
+                const auto second=sample(u+.5);
+                const double wave=.5+.5*std::cos(angle-t);
+                const double blend=.48*wave*wave;
+                color=QColor::fromRgbF(color.redF()+(second.redF()-color.redF())*blend,
+                                      color.greenF()+(second.greenF()-color.greenF())*blend,
+                                      color.blueF()+(second.blueF()-color.blueF())*blend);
+            }
+            stops.append({x,color});
+        }
+        stops.append({1.,stops.first().second});
+        return stops;
+    }
     if(pattern=="breathe"){
         const double pulse=.5-.5*std::cos(phase*2*M_PI);
         for(auto &c:colors)c=c.lighter(100+qRound(pulse*35));
@@ -246,13 +314,15 @@ void setPatternStops(QGradient &g,QVector<QColor> colors,const QString &pattern,
     if(pattern=="shimmer"){
         const auto base=colors.first();
         const auto glint=colors.at(1).lighter(135);
-        g.setColorAt(0,base);g.setColorAt(.36,base);
-        g.setColorAt(.5,glint);g.setColorAt(.64,base);g.setColorAt(1,base);
-        return;
+        return {{0,base},{.36,base},{.5,glint},{.64,base},{1,base}};
     }
     if(colors.first()!=colors.last())colors.append(colors.first());
-    // A completely uniform palette is valid (including a pair of equal colors).
-    for(int i=0;i<colors.size();++i)g.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+    for(int i=0;i<colors.size();++i)stops.append({double(i)/(colors.size()-1),colors.at(i)});
+    return stops;
+}
+namespace {
+void setPatternStops(QGradient &g,const QVector<QColor>&colors,const QString &pattern,double phase){
+    g.setStops(gradientPatternStops(colors,pattern,phase));
 }
 }
 QRect gradientFill(const QWidget *w) {
@@ -627,8 +697,7 @@ public:
         }
         if(energy>0)for(auto &color:colors)color=color.lighter(100+int(energy*25));
         if(knob){paintKnob(painter,colors);return;}
-        // A periodic gradient with identical endpoints has no seam when its phase wraps.
-        if(colors.first()!=colors.last())colors.append(colors.first());
+        // Pattern stops close the periodic palette, including the organic styles.
         const bool h=horizontal(parentWidget());
         const qreal wavelength=qBound(48.,(h?parentWidget()->width():parentWidget()->height())*.8,200.);
         const qreal offset=patternOffset(spec.pattern,phase)*wavelength;

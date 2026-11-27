@@ -25,6 +25,28 @@ static int colored(const QImage &im,QRect rect) {
 }
 int main(int argc,char **argv) {
     QApplication app(argc,argv);app.setStyle("Fusion");
+    const QVector<QColor> palette{QColor("#31748f"),QColor("#c4a7e7"),QColor("#ebbcba")};
+    for(const QString &pattern:QStringList{"drift","aurora","tide","bloom"}){
+        REQUIRE(augment::GradientSpec::patterns().contains(pattern));
+        augment::GradientSpec parsed;
+        REQUIRE(augment::GradientSpec::parse(QJsonObject{{"pattern",pattern},{"period",60000}},parsed));
+        REQUIRE(parsed.pattern==pattern&&parsed.period==60000);
+        const auto a=augment::gradientPatternStops(palette,pattern,0.);
+        const auto b=augment::gradientPatternStops(palette,pattern,.31);
+        REQUIRE(a.size()>=25&&a.size()<=65&&a!=b);
+        REQUIRE(a.first().first==0.&&a.last().first==1.);
+        REQUIRE(a.first().second==a.last().second&&b.first().second==b.last().second);
+        REQUIRE(a==augment::gradientPatternStops(palette,pattern,1.));
+        REQUIRE(b==augment::gradientPatternStops(palette,pattern,1.31));
+        const auto near=augment::gradientPatternStops(palette,pattern,.9999);
+        for(int i=0;i<a.size();++i){
+            auto c=a[i].second,d=near[i].second;
+            REQUIRE(qAbs(c.red()-d.red())<=2&&qAbs(c.green()-d.green())<=2&&qAbs(c.blue()-d.blue())<=2);
+        }
+        auto uniform=augment::gradientPatternStops({QColor("#336699"),QColor("#336699")},pattern,.37);
+        for(auto stop:uniform)REQUIRE(stop.second==QColor("#336699"));
+    }
+    augment::GradientSpec parsed;REQUIRE(!augment::GradientSpec::parse(QJsonObject{{"period",60001}},parsed));
     QTemporaryDir tmp;auto path=tmp.filePath("rules.json");
     QFile f(path);REQUIRE(f.open(QIODevice::WriteOnly));f.write(R"({"enabled":true,"motion":true,"rules":[]})");f.close();
     augment::Controller controller(path);
@@ -106,7 +128,7 @@ int main(int argc,char **argv) {
     REQUIRE(controller.setMotionEnabled(true));
     spec["titlebars"]=true;spec["sliders"]=true;spec["progress"]=true;
     spec["colors"]=QJsonArray{"#ff00ff","#4820c0","#ff00ff"};
-    for(auto pattern:{"flow","reverse","bounce","breathe","shimmer","static"}){
+    for(const auto &pattern:augment::GradientSpec::patterns()){
         spec["pattern"]=pattern;
         REQUIRE(controller.setGradientSettings(spec));wait(60);
         auto *stripe=dock->findChild<QWidget*>("aftermarket-title-gradient");
@@ -114,7 +136,7 @@ int main(int argc,char **argv) {
         REQUIRE(stripe->geometry().bottom()<native->geometry().top());
         REQUIRE(stripe->testAttribute(Qt::WA_TransparentForMouseEvents)&&stripe->focusPolicy()==Qt::NoFocus);
         const auto a=stripe->grab().toImage(),b=progress->grab().toImage();
-        const bool animated=QString(pattern)!="static";
+        const bool animated=pattern!="static";
         bool stripeChanged=false,progressChanged=false;
         // Bounce/breathe can revisit the same pixels at symmetric phases.
         // Sample several points rather than requiring two arbitrary phases
@@ -126,7 +148,7 @@ int main(int argc,char **argv) {
             if(animated&&stripeChanged&&progressChanged)break;
         }
         if(stripeChanged!=animated||progressChanged!=animated)
-            std::cerr<<"Pattern "<<pattern<<" title changed="<<stripeChanged<<" progress changed="<<progressChanged<<'\n';
+            std::cerr<<"Pattern "<<pattern.toStdString()<<" title changed="<<stripeChanged<<" progress changed="<<progressChanged<<'\n';
         REQUIRE(stripeChanged==animated);
         REQUIRE(progressChanged==animated);
         REQUIRE(dock->windowTitle()==title&&dock->widget()==native&&dock->titleBarWidget()==nullptr);

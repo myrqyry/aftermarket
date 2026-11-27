@@ -275,9 +275,11 @@ void ObsSettingsPage::attach(QDialog *dialog){
     for(const auto &id:GradientSpec::patterns())entry->gradientPattern->addItem(GradientSpec::patternLabel(id),id);
     entry->gradientPattern->setCurrentIndex(entry->gradientPattern->findData(spec.pattern));
     mixerForm->addRow("Animation",entry->gradientPattern);
+    auto describePattern=[entry]{entry->gradientPattern->setToolTip(GradientSpec::patternDescription(entry->gradientPattern->currentData().toString()));};
+    QObject::connect(entry->gradientPattern,&QComboBox::currentIndexChanged,page,[describePattern](int){describePattern();});describePattern();
     entry->gradientPeriod=new QSpinBox(paletteGroup.first);
     entry->gradientPeriod->setObjectName("aftermarket-setting-gradient-period");
-    entry->gradientPeriod->setRange(400,12000);
+    entry->gradientPeriod->setRange(400,GradientSpec::maxPeriod);
     entry->gradientPeriod->setSuffix(" ms");
     entry->gradientPeriod->setSingleStep(100);
     entry->gradientPeriod->setValue(spec.period);
@@ -293,6 +295,8 @@ void ObsSettingsPage::attach(QDialog *dialog){
     paletteGroup.second->addLayout(mixerForm);
     auto *preview=new PalettePreview(paletteGroup.first);
     paletteGroup.second->addWidget(preview);
+    QObject::connect(entry->gradientPattern,&QComboBox::currentIndexChanged,preview,[entry,preview](int){preview->setPattern(entry->gradientPattern->currentData().toString());});
+    preview->setPattern(entry->gradientPattern->currentData().toString());
     auto *actions=new QHBoxLayout;actions->setContentsMargins(0,0,0,0);actions->setSpacing(4);
     auto *pick=new QPushButton("Add color…",paletteGroup.first);
     pick->setObjectName("aftermarket-settings-add-color");

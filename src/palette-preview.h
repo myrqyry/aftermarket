@@ -16,6 +16,7 @@ public:
         setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
         setMinimumHeight(22);setMaximumHeight(28);
     }
+    void setPattern(const QString &pattern){pattern_=pattern;update();}
     void setColors(const QString &text){
         QJsonArray array;
         if(!text.trimmed().isEmpty())
@@ -36,12 +37,12 @@ protected:
             p.drawText(rect,Qt::AlignCenter,"Invalid palette");return;
         }
         auto colors=colors_.isEmpty()?rotaryThemeColors(palette()):colors_;
-        if(colors.first()!=colors.last())colors.append(colors.first());
         QLinearGradient brush(rect.topLeft(),rect.topRight());
-        for(int i=0;i<colors.size();++i)brush.setColorAt(double(i)/(colors.size()-1),colors.at(i));
+        brush.setStops(gradientPatternStops(colors,pattern_,.2));
         p.setBrush(brush);p.drawRoundedRect(rect,5,5);
     }
 private:
+    QString pattern_="flow";
     bool valid_=true;
     QVector<QColor> colors_;
 };

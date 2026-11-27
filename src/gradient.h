@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QColor>
+#include <QGradient>
 #include <QRect>
 #include <QVector>
 #include <QJsonObject>
@@ -14,11 +15,14 @@ struct GradientSpec {
     QString pattern="flow";
     static QStringList patterns();
     static QString patternLabel(const QString &);
+    static QString patternDescription(const QString &);
+    static constexpr int maxPeriod=60000;
     QStringList knobSources;
     int period=1800;
     QVector<QColor> colors;
     static bool parse(const QJsonValue &,GradientSpec &);
 };
+QGradientStops gradientPatternStops(QVector<QColor> colors,const QString &pattern,double phase);
 QRect gradientFill(const QWidget *);
 class GradientController final: public QObject {
 public:

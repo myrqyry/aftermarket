@@ -1,3 +1,4 @@
+#include <QSpinBox>
 #include "obs-settings-page.h"
 #include "augment.h"
 #include "dock-title-icons.h"
@@ -201,7 +202,9 @@ int main(int argc,char **argv){
         REQUIRE(titleGrad&&pattern&&pattern->currentData().toString()=="flow");
         auto *headerFill=dialog->findChild<QCheckBox*>("aftermarket-setting-titlebar-fill");
         REQUIRE(headerFill&&!headerFill->isChecked());headerFill->setChecked(true);
-        titleGrad->setChecked(true);pattern->setCurrentIndex(pattern->findData("shimmer"));
+        titleGrad->setChecked(true);pattern->setCurrentIndex(pattern->findData("aurora"));
+        REQUIRE(pattern->currentData().toString()=="aurora");
+        auto *period=dialog->findChild<QSpinBox*>("aftermarket-setting-gradient-period");REQUIRE(period&&period->maximum()==60000);period->setValue(24000);
         REQUIRE(!controller.mixerBacksideEnabled()&&titles.ellipsisMode()==Qt::ElideRight);
         REQUIRE(controller.listRowSettings().value("scenes").toBool()==false);
         REQUIRE(!controller.collapsiblePropertyGroups()&&!stripEnabled);
@@ -220,7 +223,7 @@ int main(int argc,char **argv){
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
         REQUIRE(controller.gradientSettings().value("titlebars").toBool());
         REQUIRE(controller.gradientSettings().value("titlebarFill").toBool());
-        REQUIRE(controller.gradientSettings().value("pattern").toString()=="shimmer");
+        REQUIRE(controller.gradientSettings().value("pattern").toString()=="aurora"&&controller.gradientSettings().value("period").toInt()==24000);
         REQUIRE(titles.ellipsisMode()==Qt::ElideMiddle);
         REQUIRE(QSettings(dir.filePath("dock-title-settings.ini"),QSettings::IniFormat)
                     .value("title/ellipsis").toString()=="middle");
@@ -240,7 +243,7 @@ int main(int argc,char **argv){
         REQUIRE(dialog->findChild<QSlider*>("aftermarket-setting-stripe-strength")->value()==175);
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->isChecked());
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-title-gradients")->isChecked());
-        REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-gradient-pattern")->currentData().toString()=="shimmer");
+        REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-gradient-pattern")->currentData().toString()=="aurora");
         REQUIRE(dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->isChecked());
         // Do not shift / override the original OBS native settings categories.
         for(int i=0;i<9;++i)REQUIRE(nav->item(i)->text()!="Aftermarket");

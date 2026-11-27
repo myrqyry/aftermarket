@@ -13,12 +13,13 @@ static QPointer<QDockWidget> dock;
 static QPointer<QWidget> body;
 static QImage before;
 static QString title;
+static QString pattern(){auto p=qEnvironmentVariable("GRADIENT_PATTERN");return p.isEmpty()?QStringLiteral("shimmer"):p;}
 static bool full(){return qEnvironmentVariableIntValue("FULL_HEADER")==1;}
 static void check(const char *name,bool pass){blog(pass?LOG_INFO:LOG_ERROR,"GRADIENTCHECK %s=%d",name,pass);}
 static QWidget *accent(){return dock?dock->findChild<QWidget*>("aftermarket-title-gradient",Qt::FindDirectChildrenOnly):nullptr;}
 static bool settings(bool motion,bool titlebars){
  QSaveFile f(QString::fromUtf8(qgetenv("PRESET_ROOT"))+"/home/.config/obs-studio/plugin_config/aftermarket/rules.json");
- const auto json=QString("{\"enabled\":true,\"motion\":%1,\"rules\":[],\"gradient\":{\"enabled\":true,\"sliders\":false,\"progress\":false,\"titlebars\":%2,\"titlebarFill\":%3,\"pattern\":\"shimmer\",\"period\":1200,\"colors\":[\"#31748f\",\"#c4a7e7\"]}}").arg(motion?"true":"false",titlebars&&!full()?"true":"false",titlebars&&full()?"true":"false").toUtf8();
+ const auto json=QString("{\"enabled\":true,\"motion\":%1,\"rules\":[],\"gradient\":{\"enabled\":true,\"sliders\":false,\"progress\":false,\"titlebars\":%2,\"titlebarFill\":%3,\"pattern\":\"%4\",\"period\":1200,\"colors\":[\"#31748f\",\"#c4a7e7\"]}}").arg(motion?"true":"false",titlebars&&!full()?"true":"false",titlebars&&full()?"true":"false",pattern()).toUtf8();
  return f.open(QIODevice::WriteOnly)&&f.write(json)==json.size()&&f.commit();
 }
 static void probe(){
