@@ -92,7 +92,9 @@ int main(int argc,char **argv){
     services.setCompactSourcePicker=[&](bool value){
         embeddedPickerEnabled=value;++pickerUpdates;return true;
     };
-    bool healthEnabled=true;int healthUpdates=0;
+    bool healthEnabled=true;int healthUpdates=0,healthPlacement=0;
+    services.healthPlacement=[&]{return healthPlacement;};
+    services.setHealthPlacement=[&](int value){healthPlacement=value;return true;};
     services.healthStatsEnabled=[&]{return healthEnabled;};
     services.setHealthStats=[&](bool value){healthEnabled=value;++healthUpdates;return true;};
     auto bridge=std::make_unique<augment::ObsSettingsPage>(controller,titles,services);
@@ -153,6 +155,7 @@ int main(int argc,char **argv){
         REQUIRE(picker&&picker->isChecked());
         auto*health=dialog->findChild<QCheckBox*>("aftermarket-setting-health-stats");
         REQUIRE(health&&health->isChecked());
+        auto*placement=dialog->findChild<QComboBox*>("aftermarket-setting-health-placement");REQUIRE(placement&&placement->currentData().toInt()==0);
         REQUIRE(!dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Apply)->isEnabled());
         auto *tooltip=dialog->findChild<QComboBox*>("aftermarket-setting-tooltip-width");
         REQUIRE(tooltip&&tooltip->currentData().toInt()==360);
@@ -201,6 +204,7 @@ int main(int argc,char **argv){
         tooltip->setCurrentIndex(tooltip->findData(240));
         dialog->findChild<QCheckBox*>("aftermarket-setting-source-picker")->setChecked(false);
         dialog->findChild<QCheckBox*>("aftermarket-setting-health-stats")->setChecked(false);
+        dialog->findChild<QComboBox*>("aftermarket-setting-health-placement")->setCurrentIndex(1);REQUIRE(healthPlacement==0);
         dialog->findChild<QCheckBox*>("aftermarket-setting-action-strip")->setChecked(true);
         dialog->findChild<QCheckBox*>("aftermarket-setting-knobs")->setChecked(true);
         auto *titleGrad=dialog->findChild<QCheckBox*>("aftermarket-setting-title-gradients");
@@ -227,7 +231,7 @@ int main(int argc,char **argv){
         REQUIRE(controller.collapsiblePropertyGroups()&&sectionUpdates==1);
         REQUIRE(controller.propertyColumns()==2&&columnUpdates==2&&controller.tooltipWidth()==240);
         REQUIRE(!controller.setPropertyColumns(4));
-        REQUIRE(stripEnabled&&stripCalls==1);REQUIRE(!healthEnabled&&healthUpdates==1);
+        REQUIRE(stripEnabled&&stripCalls==1);REQUIRE(!healthEnabled&&healthUpdates==1&&healthPlacement==1);
         REQUIRE(controller.gradientSettings().value("knobs").toBool());
         REQUIRE(controller.gradientSettings().value("titlebars").toBool());
         REQUIRE(controller.gradientSettings().value("titlebarFill").toBool());
@@ -243,6 +247,7 @@ int main(int argc,char **argv){
         bridge->scan();
         auto *nav=dialog->findChild<QListWidget*>("listWidget");
         nav->setCurrentRow(9);
+        REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-health-placement")->currentData().toInt()==1);
         REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-property-columns")->currentData().toInt()==2);
         REQUIRE(dialog->findChild<QComboBox*>("aftermarket-setting-tooltip-width")->currentData().toInt()==240);
         REQUIRE(dialog->findChild<QComboBox*>("augment-global-ellipsis")

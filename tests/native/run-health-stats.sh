@@ -18,5 +18,5 @@ set -e
 echo "OBS_EXIT=$rc"
 grep -E 'HEALTHCHECK|HEALTHDETAIL' "$root/obs.log" || true
 [[ "$rc" == 0 ]]
-[[ $(grep -c 'HEALTHCHECK .*=[1]$' "$root/obs.log") == 5 ]]
+[[ $(grep -c 'HEALTHCHECK .*=[1]$' "$root/obs.log") == 8 ]]
 ! grep -q 'HEALTHCHECK .*=[0]$' "$root/obs.log"

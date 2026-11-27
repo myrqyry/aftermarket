@@ -28,6 +28,8 @@ public:
         std::function<bool(bool)> setCompactSourcePicker;
         std::function<bool()> healthStatsEnabled;
         std::function<bool(bool)> setHealthStats;
+        std::function<int()> healthPlacement;
+        std::function<bool(int)> setHealthPlacement;
     };
     explicit ObsSettingsPage(Controller &controller,DockTitleIcons &titles,
                              Services services={},QObject *parent=nullptr);

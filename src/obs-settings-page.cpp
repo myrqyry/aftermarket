@@ -46,8 +46,8 @@ struct ObsSettingsPage::Entry {
     QPointer<QStackedWidget> pages;
     QPointer<QWidget> page;
     QPointer<QLabel> message;
-    QPointer<QComboBox> ellipsis,propertyColumns,gradientPattern,tooltipWidth;
-    int columnsBaseline=0,tooltipBaseline=360;
+    QPointer<QComboBox> ellipsis,propertyColumns,gradientPattern,tooltipWidth,healthPlacement;
+    int columnsBaseline=0,tooltipBaseline=360,healthPlacementBaseline=0;
     QPointer<QPushButton> applyButton;
     QHash<QString,QPointer<QCheckBox>> flags;
     QHash<QString,bool> baseline;
@@ -209,7 +209,19 @@ void ObsSettingsPage::attach(QDialog *dialog){
     if(services_.healthStatsEnabled&&services_.setHealthStats){
         auto healthGroup=section(appearance,"Performance alerts");
         checkbox("health-stats","Show stats only when performance needs attention",healthGroup.second,healthGroup.first,services_.healthStatsEnabled());
-        describe(healthGroup,"Status bar alerts for new frame drops, stream reconnects, sustained CPU/GPU pressure or congestion. Hidden while healthy; hover or click for details.");
+        if(services_.healthPlacement&&services_.setHealthPlacement){
+            auto*form=formLayout();
+            entry->healthPlacement=new QComboBox(healthGroup.first);
+            entry->healthPlacement->setObjectName("aftermarket-setting-health-placement");
+            entry->healthPlacement->addItem("Status bar (bottom)",0);
+            entry->healthPlacement->addItem("File / menu bar (top)",1);
+            entry->healthPlacement->addItem("Both",2);
+            entry->healthPlacementBaseline=services_.healthPlacement();
+            entry->healthPlacement->setCurrentIndex(entry->healthPlacement->findData(entry->healthPlacementBaseline));
+            form->addRow("Alert placement",entry->healthPlacement);healthGroup.second->addLayout(form);
+            entry->healthPlacement->setToolTip("Top placement uses the Settings corner. Native system menu bars fall back to the status bar.");
+        }
+        describe(healthGroup,"Conditional alerts for new frame drops, stream reconnects, sustained CPU/GPU pressure or congestion. Hidden while healthy; hover or click for details.");
     }
     appearance.second->addStretch(1);
 
@@ -362,6 +374,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
     entry->propertyColumns->addItem("1 column (native)",1);
     entry->propertyColumns->addItem("Up to 2 columns",2);
     entry->propertyColumns->addItem("Up to 3 columns",3);
+    if(entry->healthPlacement)entry->healthPlacementBaseline=entry->healthPlacement->currentData().toInt();
     entry->columnsBaseline=controller_->propertyColumns();
     entry->propertyColumns->setCurrentIndex(entry->propertyColumns->findData(entry->columnsBaseline));
     propertyForm->addRow("Source / filter settings",entry->propertyColumns);
@@ -414,6 +427,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
             changed=true;
         if(entry->knobSources&&entry->knobSources->text()!=spec.knobSources.join(", "))
             changed=true;
+        if(entry->healthPlacement&&entry->healthPlacement->currentData().toInt()!=entry->healthPlacementBaseline)changed=true;
         if(entry->tooltipWidth&&entry->tooltipWidth->currentData().toInt()!=entry->tooltipBaseline)changed=true;
         if(entry->propertyColumns&&entry->propertyColumns->currentData().toInt()!=entry->columnsBaseline)
             changed=true;
@@ -434,6 +448,7 @@ void ObsSettingsPage::attach(QDialog *dialog){
             // Do not disable native Apply: OBS may have OTHER unsaved fields.
         }
     };
+    if(entry->healthPlacement)QObject::connect(entry->healthPlacement,&QComboBox::currentIndexChanged,page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->tooltipWidth,&QComboBox::currentIndexChanged,page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->propertyColumns,qOverload<int>(&QComboBox::currentIndexChanged),page,[updateDirty](int){updateDirty();});
     QObject::connect(entry->ellipsis,qOverload<int>(&QComboBox::currentIndexChanged),
@@ -530,6 +545,16 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
             if(services_.setHealthStats(b))return true;
             e="Unable to save the performance alerts setting.";return false;
         });
+    if(entry->healthPlacement&&services_.setHealthPlacement){
+        const int old=entry->healthPlacementBaseline,next=entry->healthPlacement->currentData().toInt();
+        if(old!=next){
+            auto write=[this](int value,QString &e){
+                if(services_.setHealthPlacement(value))return true;
+                e="Unable to save the performance alert placement.";return false;
+            };
+            changes.append({[write,next](QString&e){return write(next,e);},[write,old]{QString ignored;write(old,ignored);}});
+        }
+    }
     addFlag("compact-menus",[c](bool b,QString &e){return c&&c->setCompactMenus(b,&e);});
     addFlag("motion",[c](bool b,QString &e){return c&&c->setMotionEnabled(b,&e);});
     addFlag("selections",[c](bool b,QString &e){return c&&c->setShowSubmenuSelections(b,&e);});
@@ -652,6 +677,7 @@ bool ObsSettingsPage::commit(const std::shared_ptr<Entry> &entry){
     // Current state is the new baseline for repeated Apply clicks.
     for(auto it=entry->flags.cbegin();it!=entry->flags.cend();++it)
         if(it.value())entry->baseline[it.key()]=it.value()->isChecked();
+    if(entry->healthPlacement)entry->healthPlacementBaseline=entry->healthPlacement->currentData().toInt();
     entry->columnsBaseline=controller_->propertyColumns();
     entry->tooltipBaseline=controller_->tooltipWidth();
     entry->gradientBaseline=controller_->gradientSettings();

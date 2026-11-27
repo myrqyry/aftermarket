@@ -27,6 +27,7 @@ private:
     QHash<QString,State> states_;
     std::optional<HealthSample> previous_;
 };
+enum class HealthPlacement {StatusBar=0,MenuBar=1,Both=2};
 class HealthStats final:public QObject {
 public:
     using Provider=std::function<HealthSample()>;
@@ -34,9 +35,18 @@ public:
     ~HealthStats() override;
     bool enabled()const{return enabled_;}
     bool setEnabled(bool);
+    HealthPlacement placement()const{return placement_;}
+    bool setPlacement(HealthPlacement);
     void poll();
 private:
-    QPointer<QToolButton> button_;
+    QPointer<QMainWindow> main_;
+    QPointer<QToolButton> button_,menuButton_;
+    QToolButton *makeButton(const QString&);
+    void placeButtons();
+    void syncVisibility();
+    void refreshMenuGeometry();
+    bool alert_=false;
+    HealthPlacement placement_=HealthPlacement::StatusBar;
     QTimer timer_;
     QString settingsPath_;
     Provider provider_;

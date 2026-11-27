@@ -693,6 +693,8 @@ static bool startCustomUi(){
         services.setCompactSourcePicker=[](bool enabled){
             return sourcePicker&&sourcePicker->setEnabled(enabled);
         };
+        services.healthPlacement=[]{return healthStats?int(healthStats->placement()):0;};
+        services.setHealthPlacement=[](int value){return healthStats&&healthStats->setPlacement(static_cast<augment::HealthPlacement>(value));};
         services.healthStatsEnabled=[]{return healthStats&&healthStats->enabled();};
         services.setHealthStats=[](bool enabled){
             if(!healthStats||!healthStats->setEnabled(enabled))return false;

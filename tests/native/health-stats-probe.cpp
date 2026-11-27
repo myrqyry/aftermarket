@@ -3,6 +3,8 @@
 #include <QApplication>
 #include <QMainWindow>
 #include <QStatusBar>
+#include <QMenuBar>
+#include <QComboBox>
 #include <QToolButton>
 #include <QTimer>
 #include <QDialog>
@@ -32,11 +34,24 @@ static void probe(){
   for(auto *w:QApplication::topLevelWidgets())if(w->inherits("OBSBasicSettings")&&w->isVisible())dialog=qobject_cast<QDialog*>(w);
   auto *toggle=dialog?dialog->findChild<QCheckBox*>("aftermarket-setting-health-stats"):nullptr;
   check("settings",toggle&&toggle->isChecked());
+  auto*placement=dialog?dialog->findChild<QComboBox*>("aftermarket-setting-health-placement"):nullptr;
+  auto*buttons=dialog?dialog->findChild<QDialogButtonBox*>():nullptr;
+  auto apply=[&]{if(buttons&&buttons->button(QDialogButtonBox::Apply))buttons->button(QDialogButtonBox::Apply)->click();};
+  if(placement&&button){
+   placement->setCurrentIndex(placement->findData(1));apply();qApp->processEvents();
+   auto*host=main->menuBar()->findChild<QWidget*>("aftermarket-menu-settings-host");
+   check("top_placement",host&&button->parentWidget()==host);
+   auto*gear=host?host->findChild<QToolButton*>("aftermarket-menu-settings"):nullptr;
+   check("gear_preserved",gear&&gear->defaultAction()==main->findChild<QAction*>("action_Settings"));
+   main->menuBar()->grab().save(qEnvironmentVariable("PRESET_ROOT")+"/menu-alert.png");
+   placement->setCurrentIndex(placement->findData(2));apply();qApp->processEvents();
+   auto*top=host?host->findChild<QToolButton*>("aftermarket-health-stats-menu"):nullptr;
+   check("both_placement",top&&button->parentWidget()==main->statusBar()&&top->isHidden()==button->isHidden());
+  }else{check("top_placement",false);check("gear_preserved",false);check("both_placement",false);}
   if(toggle){
    toggle->setChecked(false);
-   auto*buttons=dialog->findChild<QDialogButtonBox*>();
    if(buttons&&buttons->button(QDialogButtonBox::Apply))buttons->button(QDialogButtonBox::Apply)->click();
-   check("disable",button&&button->isHidden()&&!toggle->isChecked());
+   check("disable",button&&button->isHidden()&&!toggle->isChecked()&&main->findChild<QToolButton*>("aftermarket-health-stats-menu")->isHidden());
   }else check("disable",false);
   if(dialog)dialog->reject();
   QTimer::singleShot(250,qApp,[main]{main->close();});
