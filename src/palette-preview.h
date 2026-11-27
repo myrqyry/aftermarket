@@ -28,7 +28,7 @@ public:
     }
 protected:
     void paintEvent(QPaintEvent*)override{
-        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);
+        QPainter p(this);p.setRenderHint(QPainter::Antialiasing);p.setRenderHint(QPainter::SmoothPixmapTransform);
         const auto rect=QRectF(this->rect()).adjusted(.5,.5,-.5,-.5);
         p.setPen(palette().color(QPalette::Mid));
         if(!valid_){
@@ -39,7 +39,7 @@ protected:
         auto colors=colors_.isEmpty()?rotaryThemeColors(palette()):colors_;
         QLinearGradient brush(rect.topLeft(),rect.topRight());
         brush.setStops(gradientPatternStops(colors,pattern_,.2));
-        p.setBrush(brush);p.drawRoundedRect(rect,5,5);
+        p.setBrush(isSpatialGradient(pattern_)?spatialGradientBrush(colors,pattern_,.2,rect):QBrush(brush));p.drawRoundedRect(rect,5,5);
     }
 private:
     QString pattern_="flow";

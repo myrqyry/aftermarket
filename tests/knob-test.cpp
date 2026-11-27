@@ -71,6 +71,13 @@ int main(int argc,char **argv) {
  resetAction->trigger();nativeMenu.hide();REQUIRE(s.value()==s.maximum());
  s.setDisabled(true);app.processEvents();REQUIRE(s.property("_obsUiAugmentKnob").toBool());
  s.setEnabled(true);s.setValue(40);
+ REQUIRE(c.setMotionEnabled(false));
+ const auto plainKnob=s.grab().toImage();
+ for(const auto &pattern:QStringList{"orbit","nebula","vortex","ripple"}){
+    REQUIRE(c.setGradientSettings({{"knobs",true},{"enabled",true},{"pattern",pattern},{"knobSources",QJsonArray{"Music"}},{"colors",QJsonArray{"#ff00ff","#00ffff","#ff8800"}}}));
+    app.processEvents();
+    REQUIRE(s.grab().toImage()!=plainKnob&&s.value()==40);
+ }
  REQUIRE(!c.setGradientSettings({{"knobs",true},{"knobSources",QJsonArray{1}}}));
  REQUIRE(c.setGradientSettings({{"knobs",false}}));app.processEvents();
  REQUIRE(!s.property("_obsUiAugmentKnob").toBool()&&s.minimumSize()==min&&s.value()==40);

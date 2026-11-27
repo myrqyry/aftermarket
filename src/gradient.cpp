@@ -23,8 +23,10 @@
 #include <QCursor>
 #include <QtMath>
 #include <cmath>
+#include <QCache>
+#include <algorithm>
 namespace augment {
-QStringList GradientSpec::patterns(){return {"flow","reverse","bounce","breathe","shimmer","drift","aurora","tide","bloom","static"};}
+QStringList GradientSpec::patterns(){return {"flow","reverse","bounce","breathe","shimmer","drift","aurora","tide","bloom","orbit","nebula","vortex","ripple","static"};}
 QString GradientSpec::patternLabel(const QString &id){
     if(id=="reverse")return "Reverse flow";
     if(id=="bounce")return "Ping-pong";
@@ -34,6 +36,10 @@ QString GradientSpec::patternLabel(const QString &id){
     if(id=="aurora")return "Aurora — liquid ribbons";
     if(id=="tide")return "Tide — gentle sway";
     if(id=="bloom")return "Bloom — spreading color";
+    if(id=="orbit")return "Orbit — radial lights";
+    if(id=="nebula")return "Nebula — fluid mesh";
+    if(id=="vortex")return "Vortex — swirling colors";
+    if(id=="ripple")return "Ripple — radial waves";
     if(id=="static")return "Static";
     return "Flow";
 }
@@ -42,6 +48,10 @@ QString GradientSpec::patternDescription(const QString &id){
     if(id=="aurora")return "Overlapping traveling waves stretch and compress the color bands.";
     if(id=="tide")return "Colors sway back and forth, gently expanding and contracting.";
     if(id=="bloom")return "Broad color blooms expand, dissolve and return in a seamless cycle.";
+    if(id=="orbit")return "Soft radial pools orbit a moving center.";
+    if(id=="nebula")return "Multiple independent color clouds merge in a two-dimensional field.";
+    if(id=="vortex")return "A rotating spiral twists and blends colors around its center.";
+    if(id=="ripple")return "Circular waves expand from a gently moving origin.";
     if(id=="reverse")return "Continuous reverse travel.";
     if(id=="bounce")return "Back-and-forth travel.";
     if(id=="breathe")return "Stationary colors with a brightness pulse.";
@@ -319,6 +329,101 @@ QGradientStops gradientPatternStops(QVector<QColor> colors,const QString &patter
     if(colors.first()!=colors.last())colors.append(colors.first());
     for(int i=0;i<colors.size();++i)stops.append({double(i)/(colors.size()-1),colors.at(i)});
     return stops;
+}
+bool isSpatialGradient(const QString &pattern){
+    return pattern=="orbit"||pattern=="nebula"||pattern=="vortex"||pattern=="ripple";
+}
+QImage gradientFieldImage(const QVector<QColor>& input,const QString &pattern,double phase){
+    if(input.isEmpty()||!isSpatialGradient(pattern))return {};
+    auto colors=input;
+    if(colors.size()>2&&colors.first()==colors.last())colors.removeLast();
+    constexpr double tau=6.28318530717958647692;
+    phase=std::isfinite(phase)?phase-std::floor(phase):0.;
+    phase=std::round(phase*1e12)/1e12;
+    if(phase>=1.)phase=0.;
+    const double t=tau*phase;
+    // Small normalized field, stretched smoothly by QPainter. Work is
+    // independent of surface size and never samples video or audio frames.
+    QImage image(96,48,QImage::Format_RGB32);
+    if(std::all_of(colors.cbegin(),colors.cend(),[&](const QColor&c){return c==colors.first();})){
+        image.fill(colors.first());return image;
+    }
+    struct RGB{double r,g,b;};
+    QVector<RGB> rgb;rgb.reserve(colors.size());
+    for(const auto&c:colors)rgb.append({double(c.red()),double(c.green()),double(c.blue())});
+    auto mix=[](RGB a,RGB b,double f){return RGB{a.r+(b.r-a.r)*f,a.g+(b.g-a.g)*f,a.b+(b.b-a.b)*f};};
+    auto sample=[&](double u){
+        u-=std::floor(u);u*=rgb.size();
+        const int i=qMin(int(u),int(rgb.size())-1);
+        double f=u-i;f=f*f*(3.-2.*f);
+        return mix(rgb[i],rgb[(i+1)%rgb.size()],f);
+    };
+    const auto pixel=[](RGB c){return qRgb(qBound(0,qRound(c.r),255),qBound(0,qRound(c.g),255),qBound(0,qRound(c.b),255));};
+    const bool mesh=pattern=="orbit"||pattern=="nebula";
+    const bool orbit=pattern=="orbit";
+    struct Pool{double x,y,scale;RGB color;};
+    QVector<Pool> pools;
+    if(mesh){
+        for(int i=0;i<rgb.size();++i){
+            const double a=tau*i/rgb.size();
+            const double theta=t+a;
+            const double x=orbit?.5+.31*std::cos(theta):.5+.33*std::cos(a+t)+.09*std::sin(2*t+a);
+            const double y=orbit?.5+.31*std::sin(theta):.5+.30*std::sin(a-2*t)+.07*std::cos(t+2*a);
+            const double radius=(orbit?.23:.29)+.055*std::sin(t+a);
+            pools.append({x,y,1./(radius*radius),rgb[i]});
+        }
+    }
+    const double cx=.5+.13*std::cos(t),cy=.5+.13*std::sin(t);
+    for(int iy=0;iy<image.height();++iy){
+        auto *line=reinterpret_cast<QRgb*>(image.scanLine(iy));
+        const double y=(iy+.5)/image.height();
+        for(int ix=0;ix<image.width();++ix){
+            const double x=(ix+.5)/image.width();
+            RGB c{};
+            if(mesh){
+                double total=0;
+                for(const auto&p:pools){
+                    const double dx=x-p.x,dy=y-p.y;
+                    const double z=1.+(dx*dx+dy*dy)*p.scale;
+                    const double w=1./(z*z*z);
+                    c.r+=p.color.r*w;c.g+=p.color.g*w;c.b+=p.color.b*w;total+=w;
+                }
+                c={c.r/total,c.g/total,c.b/total};
+            }else{
+                const double dx=x-cx,dy=y-cy,r=std::hypot(dx,dy);
+                if(pattern=="vortex"){
+                    const double angle=std::atan2(dy,dx)/tau;
+                    const double fade=qMin(1.,r/.18);
+                    c=mix(sample(phase),sample(angle+1.1*r-phase),fade*fade*(3.-2.*fade));
+                }else{
+                    const double wave=.5-.5*std::cos(tau*(1.7*r-phase));
+                    c=sample(.12+.72*wave+.15*std::sin(t));
+                }
+            }
+            line[ix]=pixel(c);
+        }
+    }
+    return image;
+}
+QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern,double phase,const QRectF &rect){
+    if(rect.isEmpty()||colors.isEmpty())return {};
+    // Shared bounded GUI-thread cache. Non-reactive surfaces can reuse
+    // the same field; quantization is smaller than a 30 Hz animation step
+    // even at the longest supported period.
+    static thread_local QCache<QString,QImage> cache(64);
+    const double normalized=std::isfinite(phase)?phase-std::floor(phase):0.;
+    const int frame=qRound(normalized*4096)%4096;
+    QString key=pattern+":"+QString::number(frame);
+    for(const auto&c:colors)key+=":"+QString::number(c.rgba(),16);
+    auto *image=cache.object(key);
+    if(!image){
+        cache.insert(key,new QImage(gradientFieldImage(colors,pattern,frame/4096.)));
+        image=cache.object(key);
+    }
+    if(!image||image->isNull())return {};
+    QBrush brush(*image);
+    QTransform transform;transform.translate(rect.x(),rect.y());transform.scale(rect.width()/image->width(),rect.height()/image->height());
+    brush.setTransform(transform);return brush;
 }
 namespace {
 void setPatternStops(QGradient &g,const QVector<QColor>&colors,const QString &pattern,double phase){
@@ -619,7 +724,9 @@ public:
             setPatternStops(g,colors,spec.pattern,phase);
         } else {auto c=pal.color(group,QPalette::Highlight);g.setColorAt(0,c);g.setColorAt(1,c);}
         const auto face=r.adjusted(integrated?16:8,integrated?16:8,integrated?-16:-8,integrated?-16:-8);
-        paintRotaryFace(p,arc,face,pal,group,QBrush(g),225,-270,225,-270*f,225-270*f);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        const auto brush=spec.enabled&&spec.sliders&&isSpatialGradient(spec.pattern)?spatialGradientBrush(colors,spec.pattern,phase,arc.adjusted(-2,-2,2,2)):QBrush(g);
+        paintRotaryFace(p,arc,face,pal,group,brush,225,-270,225,-270*f,225-270*f);
         if(s->hasFocus()) {
             p.setBrush(Qt::NoBrush);p.setPen(QPen(pal.color(group,QPalette::Highlight),1,Qt::DotLine));
             p.drawEllipse(r.adjusted(-2,-2,2,2));
@@ -642,7 +749,7 @@ public:
     qreal titleMaskDpr=0;
     Qt::LayoutDirection titleMaskDirection=Qt::LeftToRight;
     QStyle::State titleMaskState;
-    void paintTitleBackground(QPainter &p,QDockWidget *dock,const QLinearGradient &gradient){
+    void paintTitleBackground(QPainter &p,QDockWidget *dock,const QBrush &gradient){
         const qreal dpr=devicePixelRatioF();
         const QSize physical(qCeil(width()*dpr),qCeil(height()*dpr));
         if(physical.isEmpty()||physical.width()>8192||physical.height()>192)return;
@@ -684,13 +791,13 @@ public:
         // Keep native text pixels untouched, including antialiased edges.
         // A restrained translucent wash keeps the active theme readable.
         QImage tint(physical,QImage::Format_ARGB32_Premultiplied);tint.setDevicePixelRatio(dpr);tint.fill(Qt::transparent);
-        {QPainter layer(&tint);layer.setOpacity(.22);layer.fillRect(rect(),gradient);
+        {QPainter layer(&tint);layer.setRenderHint(QPainter::SmoothPixmapTransform);layer.setOpacity(.22);layer.fillRect(rect(),gradient);
          layer.setOpacity(1);layer.setCompositionMode(QPainter::CompositionMode_DestinationIn);layer.drawImage(QPoint(0,0),titleMask);}
         p.drawImage(QPoint(0,0),tint);
     }
     void paintEvent(QPaintEvent *) override {
         if(!parentWidget())return;
-        QPainter painter(this);painter.setRenderHint(QPainter::Antialiasing);
+        QPainter painter(this);painter.setRenderHint(QPainter::Antialiasing);painter.setRenderHint(QPainter::SmoothPixmapTransform);
         QVector<QColor> colors=spec.colors;
         if(colors.isEmpty()) {
             colors=rotaryThemeColors(parentWidget()->palette());
@@ -705,8 +812,9 @@ public:
                                  h?QPointF(wavelength-offset,0):QPointF(0,wavelength-offset));
         gradient.setSpread(QGradient::RepeatSpread);
         setPatternStops(gradient,colors,spec.pattern,phase);
+        const bool spatial=isSpatialGradient(spec.pattern);
         if(auto *dock=qobject_cast<QDockWidget*>(parentWidget());dock&&spec.titlebarFill){
-            paintTitleBackground(painter,dock,gradient);return;
+            paintTitleBackground(painter,dock,spatial?spatialGradientBrush(colors,spec.pattern,phase,rect()):QBrush(gradient));return;
         }
         if(auto *s=qobject_cast<QSlider*>(parentWidget())) {
             const auto track=sliderTrack(s);
@@ -726,7 +834,7 @@ public:
             const auto radius=qMin(track.groove.width(),track.groove.height())/2.;
             path.addRoundedRect(QRectF(track.groove),radius,radius);
             gradient.setStart(gradient.start()+pos());gradient.setFinalStop(gradient.finalStop()+pos());
-            painter.fillPath(path,gradient);
+            painter.fillPath(path,spatial?spatialGradientBrush(colors,spec.pattern,phase,track.groove):QBrush(gradient));
             if(!thumbPage.edge.isNull()) {
                 painter.setClipPath(path,Qt::IntersectClip);
                 painter.drawImage(patch.topLeft(),thumbPage.edge);
@@ -737,7 +845,7 @@ public:
         QPainterPath path;
         const auto radius=qMin(width(),height())/2.;
         path.addRoundedRect(QRectF(rect()),radius,radius);
-        painter.fillPath(path,gradient);
+        painter.fillPath(path,spatial?spatialGradientBrush(colors,spec.pattern,phase,qobject_cast<QDockWidget*>(parentWidget())?QRectF(rect()):QRectF(parentWidget()->rect().translated(-pos()))):QBrush(gradient));
     }
 };
 }
@@ -866,7 +974,9 @@ void GradientController::sync(QWidget *w,bool frame) {
     float energy=l->energy;
     if(!state->motion||!state->spec.enabled||state->spec.pattern=="static") {phase=0;energy=0;l->lastFrame=-1;}
     else if(frame||newlyVisible) {
-        const auto now=state->elapsed.elapsed();
+        // All non-reactive layers sample the same clock tick, enabling
+        // reuse of their spatial fields even across a large dock layout.
+        const auto now=frame?state->lastFrame:state->elapsed.elapsed();
         const double dt=l->lastFrame<0||newlyVisible?0.:std::clamp(double(now-l->lastFrame)/1000.,0.,.25);
         l->lastFrame=now;
         const bool reactive=state->spec.audioReactive&&state->provider&&mixerWidget(w)&&qobject_cast<QSlider*>(w);

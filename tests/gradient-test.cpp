@@ -46,6 +46,27 @@ int main(int argc,char **argv) {
         auto uniform=augment::gradientPatternStops({QColor("#336699"),QColor("#336699")},pattern,.37);
         for(auto stop:uniform)REQUIRE(stop.second==QColor("#336699"));
     }
+    for(const auto &pattern:QStringList{"orbit","nebula","vortex","ripple"}){
+        REQUIRE(augment::GradientSpec::patterns().contains(pattern));
+        REQUIRE(augment::isSpatialGradient(pattern));
+        auto a=augment::gradientFieldImage(palette,pattern,0.);
+        auto b=augment::gradientFieldImage(palette,pattern,.31);
+        REQUIRE(!a.isNull()&&a.size()==b.size()&&a.width()<=128&&a.height()<=64&&a!=b);
+        REQUIRE(a==augment::gradientFieldImage(palette,pattern,1.));
+        REQUIRE(b==augment::gradientFieldImage(palette,pattern,1.31));
+        auto near=augment::gradientFieldImage(palette,pattern,.9999);
+        bool variesX=false,variesY=false;
+        for(int y=0;y<a.height();++y)for(int x=0;x<a.width();++x){
+            const auto c=a.pixelColor(x,y),d=near.pixelColor(x,y);
+            REQUIRE(c.alpha()==255);
+            REQUIRE(qAbs(c.red()-d.red())<=3&&qAbs(c.green()-d.green())<=3&&qAbs(c.blue()-d.blue())<=3);
+            if(x) variesX|=a.pixel(x,y)!=a.pixel(x-1,y);
+            if(y) variesY|=a.pixel(x,y)!=a.pixel(x,y-1);
+        }
+        REQUIRE(variesX&&variesY);
+        auto uniform=augment::gradientFieldImage({QColor("#336699"),QColor("#336699")},pattern,.37);
+        for(int y=0;y<uniform.height();++y)for(int x=0;x<uniform.width();++x)REQUIRE(uniform.pixelColor(x,y)==QColor("#336699"));
+    }
     augment::GradientSpec parsed;REQUIRE(!augment::GradientSpec::parse(QJsonObject{{"period",60001}},parsed));
     QTemporaryDir tmp;auto path=tmp.filePath("rules.json");
     QFile f(path);REQUIRE(f.open(QIODevice::WriteOnly));f.write(R"({"enabled":true,"motion":true,"rules":[]})");f.close();
@@ -184,6 +205,10 @@ int main(int argc,char **argv) {
     REQUIRE(dock->widget()==native&&dock->windowTitle()==title&&!dock->titleBarWidget());
     dock->setFloating(true);wait(60);REQUIRE(!header->isVisible());
     dock->setFloating(false);wait(60);REQUIRE(header->isVisible());
+    spec["pattern"]="nebula";REQUIRE(controller.setGradientSettings(spec));wait(60);
+    const auto spatial=dock->grab().toImage();REQUIRE(spatial!=decorated);
+    for(int y=1;y<native->geometry().top()-2;++y)for(int x=0;x<100;++x)
+        if(plain.pixelColor(x,y)!=QColor("#282828"))REQUIRE(plain.pixelColor(x,y)==spatial.pixelColor(x,y));
     spec["titlebarFill"]=false;REQUIRE(controller.setGradientSettings(spec));wait(40);
     REQUIRE(!dock->findChild<QWidget*>("aftermarket-title-gradient"));
     REQUIRE(controller.setGradientSettings(QJsonObject{{"enabled",false}}));wait(40);

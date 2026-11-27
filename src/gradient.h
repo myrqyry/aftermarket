@@ -2,6 +2,8 @@
 #include <QObject>
 #include <QColor>
 #include <QGradient>
+#include <QBrush>
+#include <QImage>
 #include <QRect>
 #include <QVector>
 #include <QJsonObject>
@@ -22,6 +24,9 @@ struct GradientSpec {
     QVector<QColor> colors;
     static bool parse(const QJsonValue &,GradientSpec &);
 };
+bool isSpatialGradient(const QString &pattern);
+QImage gradientFieldImage(const QVector<QColor>& colors,const QString &pattern,double phase);
+QBrush spatialGradientBrush(const QVector<QColor>& colors,const QString &pattern,double phase,const QRectF &rect);
 QGradientStops gradientPatternStops(QVector<QColor> colors,const QString &pattern,double phase);
 QRect gradientFill(const QWidget *);
 class GradientController final: public QObject {
