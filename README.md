@@ -74,7 +74,9 @@ commands. Routine preferences remain in OBS Settings. The Workspace uses compact
 ### Docks and layouts
 
 Native dock titles get theme-aware icons and compact three-dot menus for
-supported collapse, float, and close operations. Roll up a dock without
+supported collapse, float, close, and per-dock dimension settings. Set a width
+and height or lock either axis independently, respecting the content minimum.
+Roll up a dock without
 destroying its contents. Restore the original preview or make it a movable
 native dock, including responsive Studio Mode.
 

@@ -3,6 +3,7 @@
 #include "app-text-elision.h"
 #include "dock-header-button.h"
 #include "panels.h"
+#include "dock-dimensions.h"
 #include <QMainWindow>
 #include <QLayout>
 #include <QDockWidget>
@@ -156,9 +157,11 @@ DockTitleIcons::DockTitleIcons(QMainWindow *window,Panels *panels,
     if(window_)window_->installEventFilter(this);
     applicationElision_=std::make_unique<AppTextElision>(window_,this);
     applicationElision_->setMode(ellipsisMode_);
+    dimensions_=std::make_unique<DockDimensions>(window_,panels_,settingsPath_);
     refresh();
 }
 DockTitleIcons::~DockTitleIcons(){
+    dimensions_.reset();
     if(window_)window_->removeEventFilter(this);
     for(auto it=icons_.begin();it!=icons_.end();++it){
         if(auto *dock=it.key()){
@@ -263,6 +266,7 @@ void DockTitleIcons::appendDockWindowActions(QMenu *menu,QDockWidget *dock){
             owner->scheduleRefresh();
         });
     });
+    if(dimensions_)dimensions_->appendActions(menu,dock);
 }
 QWidget *DockTitleIcons::glyph(QDockWidget *dock)const{
     return icons_.value(dock);
@@ -294,6 +298,7 @@ void DockTitleIcons::refresh(){
     const PluginThemeIcons pluginIcons;
     for(auto *dock:docks){
         if(!dock)continue;
+        if(dimensions_)dimensions_->observe(dock);
         // These third-party docks use dynamic IDs. Match their verified
         // native Qt content types, never the user-editable dock title.
         QString contentClass;

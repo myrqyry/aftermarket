@@ -143,8 +143,10 @@ int main(int argc,char **argv){
       auto *first=more->menu()->actions().first();
       REQUIRE(first->text()=="Collapse");
       REQUIRE(first->isEnabled()==panels.canCollapse(dock));
-      REQUIRE(more->menu()->actions().size()==4);
+      REQUIRE(more->menu()->actions().size()==7);
       REQUIRE(more->menu()->actions()[2]->text()=="Pop out");
+      REQUIRE(more->menu()->findChild<QAction*>("aftermarket-dock-dimensions-action"));
+      REQUIRE(more->menu()->findChild<QAction*>("aftermarket-dock-unlock-dimensions"));
       REQUIRE(more->menu()->actions()[3]->isEnabled()==(dock!=docks[0].dock));
       more->menu()->hide();app.processEvents();
       REQUIRE(glyph->geometry().bottom()<dock->widget()->geometry().top());
@@ -294,7 +296,7 @@ int main(int argc,char **argv){
    auto *more=icons.moreButton(custom);
    more->menu()->popup(more->mapToGlobal(QPoint(0,more->height())));
    app.processEvents();
-   REQUIRE(more->menu()->actions().size()==4); // local Collapse, Pop out, Close
+   REQUIRE(more->menu()->actions().size()==7); // local Collapse, Pop out, Close
    REQUIRE(more->menu()->actions().first()->text()=="Collapse");
    more->menu()->hide();app.processEvents();
    REQUIRE(icons.setEllipsisMode(Qt::ElideMiddle));
@@ -370,7 +372,7 @@ int main(int argc,char **argv){
    // narrow for the menu button on this synthetic stacked layout.
    QMenu restrictedMenu;
    icons.appendDockWindowActions(&restrictedMenu,restricted);
-   REQUIRE(restrictedMenu.actions().size()==2);
+   REQUIRE(restrictedMenu.actions().size()==5);
    REQUIRE(!restrictedMenu.actions()[0]->isEnabled());
    REQUIRE(!restrictedMenu.actions()[1]->isEnabled());
    REQUIRE(restricted->features()==QDockWidget::DockWidgetMovable);
@@ -382,7 +384,7 @@ int main(int argc,char **argv){
    icons.refresh();app.processEvents();
    QMenu closeMenu;
    icons.appendDockWindowActions(&closeMenu,closable);
-   REQUIRE(closeMenu.actions().size()==2);
+   REQUIRE(closeMenu.actions().size()==5);
    REQUIRE(closeMenu.actions()[1]->isEnabled());
    closeMenu.actions()[1]->trigger();app.processEvents();
    REQUIRE(!closable->isVisible());

@@ -569,9 +569,11 @@ void Panels::startHeightMotion(QDockWidget *dock,int start,int finish,
 }
 bool Panels::motionAllowed() const{return state->motionEnabled&&state->motionEnabled();}
 bool Panels::collapsed(QDockWidget *dock)const {return state->entries.contains(dock);}
+bool Panels::dimensionsAvailable(QDockWidget *dock)const {return dock&&!collapsed(dock)&&!state->pendingExpansion.contains(dock);}
 bool Panels::canCollapse(QDockWidget *dock)const {
     if(!dock)return false;
     if(collapsed(dock)||state->pendingExpansion.contains(dock))return true;
+    if(dock->property("aftermarket-dimensions-locked").toBool())return false;
     auto *main=owner(dock);
     return main&&dock->isVisible()&&!dock->isFloating()&&dock->widget()&&
         dock->widget()->isVisible()&&!(dock->features()&QDockWidget::DockWidgetVerticalTitleBar)&&

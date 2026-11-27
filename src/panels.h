@@ -15,6 +15,7 @@ public:
     bool motionAllowed() const;
     bool canCollapse(QDockWidget *) const;
     bool collapsed(QDockWidget *) const;
+    bool dimensionsAvailable(QDockWidget *) const;
     bool toggle(QDockWidget *);
     // One shared native action for title menus and the mixer overflow.
     QAction *addCollapseAction(QMenu *menu,QDockWidget *dock);

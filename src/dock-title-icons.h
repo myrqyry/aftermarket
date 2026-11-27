@@ -16,6 +16,7 @@ class QAction;
 
 namespace augment {
 class Panels;
+class DockDimensions;
 class AppTextElision;
 // Passive, reversible decoration of *native* OBS dock title bars.
 // Does not replace the titleBarWidget, title text, native buttons, or hit areas.
@@ -49,6 +50,7 @@ private:
     QPointer<QMainWindow> window_;
     QPointer<Panels> panels_;
     std::unique_ptr<AppTextElision> applicationElision_;
+    std::unique_ptr<DockDimensions> dimensions_;
     QString settingsPath_;
     Qt::TextElideMode ellipsisMode_=Qt::ElideRight;
     QHash<QDockWidget*,QPointer<QWidget>> icons_;
