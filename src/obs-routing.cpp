@@ -180,6 +180,9 @@ bool ObsRouting::setDeviceParameter(const QString &uuid,const QString &device,De
     obs_source_release(source);
     return ok;
 }
+bool ObsRouting::monitorOnlyAvailable(){
+    return (obs_get_version() >> 24) < 33;
+}
 QVector<RouteSource> ObsRouting::list(){
     QVector<RouteSource> result;
     obs_enum_sources([](void *data,obs_source_t *source) {
@@ -189,7 +192,11 @@ QVector<RouteSource> ObsRouting::list(){
         auto *routes=static_cast<QVector<RouteSource>*>(data);
         routes->append({QString::fromUtf8(uuid),QString::fromUtf8(name),
             obs_source_get_audio_mixers(source),
+#if LIBOBS_API_MAJOR_VER >= 33
+            obs_source_get_monitoring_enabled(source)?2:0,
+#else
             static_cast<int>(obs_source_get_monitoring_type(source)),
+#endif
             obs_source_muted(source),
             obs_source_enabled(source),
             obs_source_audio_active(source),
@@ -228,12 +235,18 @@ bool ObsRouting::setTrack(const QString &uuid,int track,bool connected){
     return true;
 }
 bool ObsRouting::setMonitoring(const QString &uuid,int mode){
-    if(mode<OBS_MONITORING_TYPE_NONE||mode>OBS_MONITORING_TYPE_MONITOR_AND_OUTPUT)return false;
+    if(mode<0||mode>2||(mode==1&&!monitorOnlyAvailable()))return false;
     auto *source=sourceById(uuid);
     if(!source)return false;
     if(!isAudioSource(source)){obs_source_release(source);return false;}
+#if LIBOBS_API_MAJOR_VER >= 33
+    obs_source_set_monitoring_enabled(source,mode!=0);
+    const bool applied=obs_source_get_monitoring_enabled(source)==(mode!=0);
+#else
     obs_source_set_monitoring_type(source,static_cast<obs_monitoring_type>(mode));
+    const bool applied=static_cast<int>(obs_source_get_monitoring_type(source))==mode;
+#endif
     obs_source_release(source);
-    return true;
+    return applied;
 }
 }

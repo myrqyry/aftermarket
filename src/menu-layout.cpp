@@ -10,7 +10,7 @@
 #include <QMenuBar>
 #include <QtMath>
 #include <algorithm>
-#ifdef AFTERMARKET_QT642_COLUMNS
+#ifdef AFTERMARKET_NATIVE_MENU_COLUMNS
 #include <QtWidgets/private/qmenu_p.h>
 #endif
 namespace augment {
@@ -87,7 +87,7 @@ void MenuLayout::prepare(bool enabled,const QSet<QAction*> &explicitOverflow,con
     // Qt has not assigned its native popup geometry at aboutToShow.
     // Record the pointer now, but resolve the actual monitor and anchor
     // once the native popup appears. Do not let hover move either later.
-#ifdef AFTERMARKET_QT642_COLUMNS
+#ifdef AFTERMARKET_NATIVE_MENU_COLUMNS
     if(qstrcmp(qVersion(),QT_VERSION_STR)==0){
         openingAnchor=QCursor::pos();
         anchoredToInvocation=QGuiApplication::screenAt(openingAnchor)!=nullptr;
@@ -135,7 +135,7 @@ void MenuLayout::trackCustom(QAction *action) {
     custom.append(action);
 }
 void MenuLayout::present() {
-#ifdef AFTERMARKET_QT642_COLUMNS
+#ifdef AFTERMARKET_NATIVE_MENU_COLUMNS
     // QMenu has no public column-height setter. Update its actual native
     // geometry cache, so paint, actionAt, mouse/keyboard and submenu paths
     // all read identical rectangles. Never use this on a different Qt ABI.
@@ -290,7 +290,7 @@ void MenuLayout::present() {
 void MenuLayout::restore() {
     if(!prepared)return;
     prepared=false;
-#ifdef AFTERMARKET_QT642_COLUMNS
+#ifdef AFTERMARKET_NATIVE_MENU_COLUMNS
     if(columnsApplied&&qstrcmp(qVersion(),QT_VERSION_STR)==0)QMenuPrivate::get(menu)->itemsDirty=true;
 #endif
     columnsApplied=false;arrangedGeometry={};

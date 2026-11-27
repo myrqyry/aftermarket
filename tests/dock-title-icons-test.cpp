@@ -51,6 +51,12 @@ int main(int argc,char **argv){
  REQUIRE(augment::DockTitleIcons::glyphSizeForRoom(14)==10);
  REQUIRE(augment::DockTitleIcons::glyphSizeForRoom(10)==0);
  REQUIRE(augment::DockTitleIcons::titleTextInset()==20);
+ augment::DockHeaderButton compact(augment::DockHeaderGlyph::More);
+ compact.fitTitleHeight(16);
+ REQUIRE(compact.height()==16&&compact.width()==20);
+ compact.fitTitleHeight(24);
+ REQUIRE(compact.height()==18&&compact.width()==20);
+
  QMainWindow main;main.setCentralWidget(new QLabel("Preview",&main));
  struct Dock {QDockWidget *dock;QString title;QWidget *nativeTitle;};
  QList<Dock> docks;

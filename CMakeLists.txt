@@ -31,11 +31,16 @@ add_library(augmentation STATIC src/config-identity.cpp src/context-notes.cpp sr
 set_target_properties(augmentation PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(augmentation PUBLIC src)
 target_link_libraries(augmentation PUBLIC Qt6::Widgets Qt6::Svg)
-# The native column adapter is intentionally limited to the inspected Qt
-# private layout ABI. Other builds retain density and explicit overflow.
-if(Qt6_VERSION VERSION_EQUAL "6.4.2" AND TARGET Qt6::WidgetsPrivate)
-  target_link_libraries(augmentation PRIVATE Qt6::WidgetsPrivate)
-  target_compile_definitions(augmentation PRIVATE AFTERMARKET_QT642_COLUMNS=1)
+# Use matching private headers for inspected Qt versions only.
+# Never execute the column adapter if the loaded Qt version differs.
+if(Qt6_VERSION VERSION_EQUAL "6.4.2" OR Qt6_VERSION VERSION_EQUAL "6.10.2")
+  if(NOT TARGET Qt6::WidgetsPrivate)
+    find_package(Qt6WidgetsPrivate CONFIG QUIET)
+  endif()
+  if(TARGET Qt6::WidgetsPrivate)
+    target_link_libraries(augmentation PRIVATE Qt6::WidgetsPrivate)
+    target_compile_definitions(augmentation PRIVATE AFTERMARKET_NATIVE_MENU_COLUMNS=1)
+  endif()
 endif()
 add_library(aftermarket MODULE src/plugin.cpp src/property-preset-footer.cpp src/filter-chain-presets.cpp src/obs-audio.cpp src/obs-transform.cpp src/obs-routing.cpp src/native-action-bridge.cpp src/command-center.cpp src/inspector-edits.cpp src/source-inspector-dock.cpp src/native-notes.cpp src/quick-find.cpp src/quick-find-obs.cpp src/source-dock-pin.cpp src/source-performance.cpp src/native-audio-settings.cpp src/obs-signal-levels.cpp src/obs-mixer-loudness.cpp)
 target_link_libraries(aftermarket PRIVATE augmentation mixer_loudness OBS::libobs OBS::obs-frontend-api)

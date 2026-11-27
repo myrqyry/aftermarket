@@ -61,7 +61,7 @@ public:
     using SetTrack=std::function<bool(const QString &,int,bool)>;
     using SignalProvider=std::function<QHash<QString,SignalReading>(const QVector<RouteSource>&)>;
     AudioPatchbay(Query query,ToggleTrack toggle,ChangeMonitoring monitor,
-                  QWidget *parent=nullptr,SetTrack setTrack={},SignalProvider levels={});
+                  QWidget *parent=nullptr,SetTrack setTrack={},SignalProvider levels={},bool monitorOnlyAvailable=true);
     using SourceOrderProvider=std::function<QStringList()>;
     void setSourceOrderProvider(SourceOrderProvider provider);
     using DeviceQuery=std::function<QVector<DeviceDestination>()>;
@@ -101,6 +101,7 @@ private:
     Query query;
     ToggleTrack toggle;
     ChangeMonitoring monitor;
+    const bool monitorOnlyAvailable;
     SetTrack setTrack;
     SignalProvider levels;
     SourceOrderProvider sourceOrder;
