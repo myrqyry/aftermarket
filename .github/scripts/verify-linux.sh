@@ -7,6 +7,16 @@ sdk="$(realpath "$1")"
 work="$(realpath -m "$2")"
 module="$3"
 minimum_tests="$4"
+archive_name="${ARCHIVE:-$module-linux-x86_64-obs32-test.tar.gz}"
+case "${OBS_VERSION:-32.2.0}" in
+  32.2.0)
+    [[ "$archive_name" == "$module-linux-x86_64-obs32-test.tar.gz" || "$archive_name" == "$module-linux-x86_64-obs32.2.0-test.tar.gz" ]]
+    layout=legacy; rel="bin/64bit/$module.so" ;;
+  33.0.3)
+    [[ "$module" == aftermarket && "$archive_name" == "$module-linux-x86_64-obs33.0.3-test.tar.gz" ]]
+    layout=modern; rel="$module.so" ;;
+  *) echo "Unsupported OBS version" >&2; exit 1 ;;
+esac
 mkdir -p "$work"
 build="$work/build"
 stage="$work/stage"
@@ -14,6 +24,7 @@ test ! -e "$stage"
 test -s "$sdk/lib/cmake/libobs/libobsConfig.cmake"
 test -s "$sdk/lib/cmake/obs-frontend-api/obs-frontend-apiConfig.cmake"
 args=()
+if [[ "$module" == aftermarket ]]; then args+=("-DAFTERMARKET_PACKAGE_LAYOUT=$layout"); fi
 if [[ "$module" == obs-streaming-media ]]; then
   # OBS 32.2.0 records this obs-websocket gitlink. Source archives omit
   # submodule contents; fetch and verify the exact public API header.
@@ -57,30 +68,30 @@ assert all(c.find("skipped") is None and c.find("failure") is None and
 print(f"Verified {len(cases)} test results")
 PY
 cmake --install "$build" --prefix "$stage/$module"
-binary="$stage/$module/bin/64bit/$module.so"
+binary="$stage/$module/$rel"
 test -s "$binary"
 # Exact payload allowlist: no configuration, source, bundled runtimes,
 # or build outputs accidentally enter this preliminary plugin package.
-expected=$(printf '%s\n' "$module/bin/64bit/$module.so")
+expected=$(printf '%s\n' "$module/$rel")
 if [[ "$module" == aftermarket ]]; then
-  expected=$(printf '%s\n' "$module/bin/64bit/$module.so" "$module/data/THIRD_PARTY_NOTICES.txt")
+  expected=$(printf '%s\n' "$module/$rel" "$module/data/THIRD_PARTY_NOTICES.txt")
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$stage/$module/data/THIRD_PARTY_NOTICES.txt"
 fi
-test "$(find "$stage" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
+test "$(find "$stage" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$(printf '%s\n' "$expected" | sort)"
 if readelf -d "$binary" | grep -E '(RPATH|RUNPATH)' ; then
   echo "Unexpected embedded runtime search path" >&2
   exit 1
 fi
 ldd "$binary" > "$work/dependencies.txt"
 if grep -F "not found" "$work/dependencies.txt"; then exit 1; fi
-tar -C "$stage" -czf "$work/$module-linux-x86_64-obs32-test.tar.gz" "$module"
-tar -tzf "$work/$module-linux-x86_64-obs32-test.tar.gz" > "$work/package-members.txt"
-grep -Fx "$module/bin/64bit/$module.so" "$work/package-members.txt"
-(cd "$work" && sha256sum "$module-linux-x86_64-obs32-test.tar.gz" > SHA256SUMS && sha256sum -c SHA256SUMS)
+tar -C "$stage" -czf "$work/$archive_name" "$module"
+tar -tzf "$work/$archive_name" > "$work/package-members.txt"
+grep -Fx "$module/$rel" "$work/package-members.txt"
+(cd "$work" && sha256sum "$archive_name" > SHA256SUMS && sha256sum -c SHA256SUMS)
 mkdir "$work/extracted"
-tar -xzf "$work/$module-linux-x86_64-obs32-test.tar.gz" -C "$work/extracted"
-test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$expected"
-cmp "$binary" "$work/extracted/$module/bin/64bit/$module.so"
+tar -xzf "$work/$archive_name" -C "$work/extracted"
+test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$(printf '%s\n' "$expected" | sort)"
+cmp "$binary" "$work/extracted/$module/$rel"
 if [[ "$module" == aftermarket ]]; then
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$work/extracted/$module/data/THIRD_PARTY_NOTICES.txt"
 fi

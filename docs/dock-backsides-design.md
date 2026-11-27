@@ -107,8 +107,10 @@ leave it in the native dialog rather than fabricate a workaround.
 - Clicking or dragging a source-to-track link toggles only that track's bit using
   `obs_source_set_audio_mixers`; unrelated bits must be preserved. Expose a plain
   checked-state/keyboard alternative to drag-only patching.
-- Show monitoring as a **single three-way choice**: Off, Monitor Only, Monitor and Output,
-  mapped to `obs_source_get/set_monitoring_type`. Do not depict it as arbitrary independent
+- Show monitoring as a **single native choice**. OBS32 uses Off, Monitor Only,
+  Monitor and Output via `obs_source_get/set_monitoring_type`; OBS33 uses Off/On
+  via `obs_source_get/set_monitoring_enabled`. Reject the removed Monitor Only
+  state on OBS33 without changing the source track mask. Do not depict it as arbitrary independent
   routing cables or imply Monitoring Only is sent to an output track.
 - Track labels are 1–6, not 'Stream' or 'Record' unless explicitly derived from actual
   output settings; the patchbay does not modify output settings or choose stream track.

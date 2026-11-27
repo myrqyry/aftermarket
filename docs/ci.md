@@ -101,3 +101,51 @@ The temporary archives are intentionally not release packages. Public
 redistribution requires the owner to establish licensing, provenance and
 platform qualification first. Never publish local logs, scenes, models,
 private development notes, or third-party executables by default.
+
+## Shared CI pilot
+
+The shared reusable workflow is pinned to candidate revision 238f06a,
+derived from the hosted-qualified EmuLens workflow. Linux OBS 32.2.0
+still requires all 46 CTests and the
+exact module/third-party notice extraction check, and now uses the
+common versioned archive and handoff gate. No source package is enabled:
+the repository does not currently carry a project-level license.
+Windows, macOS and OBS33 require separate native qualification.
+Binary test artifacts are uploaded for download; project-level licensing
+remains to be clarified before a formal release.
+Shared test artifacts are not releases. The older local verifier CLI
+remains supported.
+
+## Full matrix extension
+
+The shared workflow now selects all eight native OBS32.2.0/33.0.3
+targets using pin e9eb704. Linux retains 46 CTests and actual
+archive/extraction checks, with the modern module-root layout on OBS33.
+Windows/macOS compile the complete production Qt and libebur128 module;
+the native tests that depend on Linux installer/UI behavior are not
+claimed as native acceptance yet. All six native packaging fixture
+combinations passed, including the notices. The Mac bundles are signed
+ad hoc for test use, not notarized. Downloadable test binaries remain
+enabled; no releases or source archive are automatically published.
+
+
+## OBS33 regression follow-up
+
+Hosted run 45929248597 (77a6d4a) produced seven binary artifacts.
+All six Windows/macOS targets and Linux OBS32 passed. Linux OBS33
+compiled, then failed four of 46 cases (dock-title-icons, dock-faces,
+obs-routing, menu-augmentation). The follow-up preserves every case:
+
+- OBS33 removes the Monitor Only state. Use the native boolean API
+  when compiling against OBS33; preserve OBS32's three-state API.
+  Reject Monitor Only on OBS33 rather than mutating audio track masks.
+- Fit our title controls inside actual native header geometry, including
+  compact 14–17 pixel titles, and re-read geometry after native buttons
+  are suppressed.
+- Enable the existing private menu-column adapter with matching headers
+  for Qt 6.10.2 as well as 6.4.2. Exact runtime version checks remain.
+
+Red compile checks for new monitoring and header-fit interfaces,
+five focused tests, and the complete 46/46 local OBS32/Qt6.4.2 test
+suite passed after the fix. OBS33 and Qt6.10.2 still require hosted
+qualification; no native runtime acceptance is claimed for other hosts.

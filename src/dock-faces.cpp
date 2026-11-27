@@ -392,7 +392,7 @@ void DockFaces::positionTitleButtons(QDockWidget *dock){
         hide();return;
     }
     const int titleHeight=dock->widget()->geometry().top();
-    if(titleHeight<16||titleHeight>48){hide();return;}
+    if(titleHeight<14||titleHeight>48){hide();return;}
     QStyleOptionDockWidget option;
     option.initFrom(dock);
     option.title=dock->windowTitle();
@@ -416,11 +416,12 @@ void DockFaces::positionTitleButtons(QDockWidget *dock){
     const bool showTabs=tabbed&&tabsWidth>0&&usable>=used+tabsWidth;
     if(showTabs)used+=tabsWidth;
     int x=text.right()-used+1;
-    const int y=qMax(0,(titleHeight-18)/2);
     auto place=[&](QWidget *widget,bool visible){
         if(!widget)return;
         if(!visible){widget->hide();return;}
-        widget->move(x,y);
+        if(auto *button=dynamic_cast<DockHeaderButton*>(widget))button->fitTitleHeight(titleHeight);
+        if(widget->height()>titleHeight){widget->hide();return;}
+        widget->move(x,qMax(0,(titleHeight-widget->height())/2));
         widget->show();
         widget->raise();
         x+=widget->width()+spacing;

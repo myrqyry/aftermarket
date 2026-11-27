@@ -9,6 +9,7 @@ struct ObsRouting {
     static bool setDeviceSend(const QString &uuid,const QString &device,bool connected);
     static bool toggleTrack(const QString &uuid,int track);
     static bool setTrack(const QString &uuid,int track,bool connected);
+    static bool monitorOnlyAvailable();
     static bool setMonitoring(const QString &uuid,int mode);
 };
 }
