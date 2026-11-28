@@ -16,7 +16,7 @@ layout, and presentation.
 
 > **Development preview.** Linux/X11, OBS 32.2.0 and Qt 6.4.2 are the
 > locally exercised runtime target. No public binary release is established.
-> [Build checks](https://github.com/myrqyry/aftermarket/actions) · [Install locally](#install-locally-linux)
+> [Verified test packages](https://github.com/myrqyry/aftermarket/actions/runs/46111128261) · [Install locally](#install-locally-linux)
 
 ## Audio and routing
 
@@ -330,9 +330,9 @@ license and bundled libebur128 notices. Download the package matching your
 OBS version and platform. Restart-helper runtime behavior has been verified
 on Linux; Windows/macOS native execution remains unverified.
 
-The [Actions history](https://github.com/myrqyry/aftermarket/actions)
-records exact-candidate hosted results. The local combined feature
-checkpoint passed all 49 CTests. See the [CI guide](docs/ci.md) for package
+All eight platform/SDK jobs passed at source checkpoint `329df2e` in the [verified Actions run](https://github.com/myrqyry/aftermarket/actions/runs/46111128261) (OBS 32.2.0 and 33.0.3; Linux x86_64, Windows x64, macOS Intel and Apple Silicon). The run produced eight downloadable test packages. Choose the package matching your installed OBS and architecture; CI artifacts are not tagged releases and may expire.
+
+A separate clean local OBS 33.0.3 build using FFmpeg 8.1.3 passed 49/49 CTests and the modern package gate; OBS 32.2.0 also passed 49/49 locally. These checks do not establish full OBS33 frontend runtime acceptance. See the [CI guide](docs/ci.md) for package
 verification, SDK setup and historical qualification details.
 
 ## Recovery and documentation
