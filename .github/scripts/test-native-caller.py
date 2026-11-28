@@ -5,7 +5,6 @@ import plistlib
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch, call
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,os.environ["OBS_CI_SCRIPTS"])
 spec=importlib.util.spec_from_file_location("hook",Path(__file__).with_name("ci-native.py"))
@@ -14,18 +13,21 @@ class Test(unittest.TestCase):
     def test_restart_helper_signing_order(self):
         helper=Path("aftermarket.plugin/Contents/MacOS/aftermarket-restart-helper")
         for target in ("macos-arm64", "macos-x86_64"):
-            with self.subTest(target=target), patch.object(hook.sdk, "run") as run:
-                hook.sign_restart_helper(helper,target)
-                self.assertEqual(run.call_args_list, [
-                    call(*hook.sdk.mac_arch_command(helper,target)),
-                    call("otool", "-L", helper),
-                    call("codesign", "--force", "--sign", "-", helper),
-                    call("codesign", "--verify", "--strict", helper)])
-                run.reset_mock()
-                run.side_effect=RuntimeError("architecture failed")
+            with self.subTest(target=target):
+                commands=[]
+                hook.sign_restart_helper(helper,target,run=lambda *args: commands.append(args))
+                self.assertEqual(commands, [
+                    tuple(hook.sdk.mac_arch_command(helper,target)),
+                    ("otool", "-L", helper),
+                    ("codesign", "--force", "--sign", "-", helper),
+                    ("codesign", "--verify", "--strict", helper)])
+                commands.clear()
+                def reject(*args):
+                    commands.append(args)
+                    raise RuntimeError("architecture failed")
                 with self.assertRaisesRegex(RuntimeError,"architecture failed"):
-                    hook.sign_restart_helper(helper,target)
-                self.assertEqual(run.call_count,1)
+                    hook.sign_restart_helper(helper,target,run=reject)
+                self.assertEqual(len(commands),1)
 
     def test_package_layouts(self):
         for target in ("windows-x64","macos-arm64","macos-x86_64"):
@@ -50,12 +52,11 @@ class Test(unittest.TestCase):
                     (data/"LICENSE").write_bytes((ROOT/"LICENSE").read_bytes())
                     notice=data/"THIRD_PARTY_NOTICES.txt"
                     notice.write_bytes((ROOT/"third_party/libebur128/THIRD_PARTY_NOTICES.txt").read_bytes())
-                    with patch.object(hook, "sign_restart_helper") as sign:
-                        out=hook.stage(ROOT,installed,work/"package",target,version)
-                        if target.startswith("macos-"):
-                            sign.assert_called_once_with(out.with_name(helper.name), target)
-                        else:
-                            sign.assert_not_called()
+                    signing=[]
+                    out=hook.stage(ROOT,installed,work/"package",target,version,
+                                   sign_helper=lambda *args: signing.append(args))
+                    self.assertEqual(signing, [(out.with_name(helper.name), target)]
+                                     if target.startswith("macos-") else [])
                     self.assertEqual(out.read_bytes(),b"module")
                     self.assertTrue(out.is_file())
                     packaged=out.with_name(helper.name)

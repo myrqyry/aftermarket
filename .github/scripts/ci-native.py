@@ -12,16 +12,16 @@ def configure(root, work, target, version):
     return ["-DBUILD_TESTING=OFF",
             "-DAFTERMARKET_PACKAGE_LAYOUT=" + ("legacy" if version=="32.2.0" else "modern")]
 
-def sign_restart_helper(helper, target):
+def sign_restart_helper(helper, target, *, run=sdk.run):
     # Intel executables are not automatically ad-hoc signed like arm64.
     # Sign the explicit nested executable before the shared driver signs
     # the enclosing plugin, never use blanket codesign --deep signing.
-    sdk.run(*sdk.mac_arch_command(helper, target))
-    sdk.run("otool", "-L", helper)
-    sdk.run("codesign", "--force", "--sign", "-", helper)
-    sdk.run("codesign", "--verify", "--strict", helper)
+    run(*sdk.mac_arch_command(helper, target))
+    run("otool", "-L", helper)
+    run("codesign", "--force", "--sign", "-", helper)
+    run("codesign", "--verify", "--strict", helper)
 
-def stage(root, installed, payload, target, version):
+def stage(root, installed, payload, target, version, *, sign_helper=sign_restart_helper):
     binary, data, notice = layout(payload, MODULE, target, version)
     # The shared verifier checks the exact original module/assets allowlist.
     # Validate the known auxiliary executable separately.
@@ -47,5 +47,5 @@ def stage(root, installed, payload, target, version):
     if helper.read_bytes() != source_helper.read_bytes():
         raise ValueError("Restart helper changed during staging")
     if mac:
-        sign_restart_helper(helper, target)
+        sign_helper(helper, target)
     return verified
