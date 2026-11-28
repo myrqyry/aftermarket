@@ -348,6 +348,7 @@ static bool configureSourcePerformance(const augment::QuickFindEntry &hit){
     return true;
 }
 static QList<augment::QuickFindEntry> notesCatalog(){
+    augment::refreshQuickFindWatch();
     auto result=augment::collectObsQuickFind();
     if(contextNotes){
         contextNotes->reload();
@@ -364,6 +365,18 @@ static bool openEntryNote(const augment::QuickFindEntry &entry){
         []{if(sourceInspector)sourceInspector->refresh();if(nativeNotes)nativeNotes->schedule();});
     return true;
 }
+using UnsceneReveal=bool (*)(const char *,const char *);
+static UnsceneReveal unsceneReveal(){
+    auto *module=obs_get_module("unscene");auto *library=module?obs_get_module_lib(module):nullptr;
+    return library?reinterpret_cast<UnsceneReveal>(os_dlsym(library,"unscene_reveal_placement_v1")):nullptr;
+}
+static bool revealQuickFindPlacement(const augment::QuickFindEntry &entry){
+    const auto reveal=unsceneReveal();if(!reveal)return false;
+    for(const auto &placement:entry.placements)
+        if(placement.key==entry.revealKey&&placement.mainCanvas&&placement.revealable&&augment::validateQuickFindPlacement(entry,placement))
+            return reveal(placement.rootId.toUtf8().constData(),placement.key.toUtf8().constData());
+    return false;
+}
 static void showQuickFind(){
     if(!uiActive||!frontendReady)return;
     auto *main=qobject_cast<QMainWindow*>(static_cast<QWidget*>(obs_frontend_get_main_window()));
@@ -375,9 +388,12 @@ static void showQuickFind(){
                 if(action==augment::QuickFind::PinSource)return pinSourceDock(hit);
                 if(action==augment::QuickFind::Performance)return configureSourcePerformance(hit);
                 if(action==augment::QuickFind::Note)return openEntryNote(hit);
+                if(action==augment::QuickFind::RevealPlacement)return revealQuickFindPlacement(hit);
                 return augment::performObsQuickFind(hit,action);
             },nativeSourceDockPin()!=nullptr||sourceDockManagerAction()!=nullptr,contextNotes!=nullptr);
+        quickFind->setChangeProvider(augment::quickFindGeneration,[](bool active){if(active)augment::startQuickFindWatch();else augment::stopQuickFindWatch();});
     }
+    quickFind->setRevealAvailable(unsceneReveal()!=nullptr);
     quickFind->open();
 }
 // OBS owns the keybinding and user-defined shortcut. No default global
@@ -591,6 +607,7 @@ static void stopCustomUi(){
     nativeNotes.reset();
     contextNotes.reset();
     if(sourceInspector){obs_frontend_remove_dock("aftermarket-source-inspector-dock");sourceInspector.clear();}
+    augment::stopQuickFindWatch();
     delete quickFind.data();
     if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
     nativeSettings.reset(); // remove only plugin page from any open native Settings
@@ -811,6 +828,8 @@ static void cleanupUi(){
     dockLayouts.reset();
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
+    if(quickFind&&(event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING||event==OBS_FRONTEND_EVENT_SCENE_COLLECTION_CLEANUP))
+        quickFind->invalidateCollection();
     switch(event){
       case OBS_FRONTEND_EVENT_STREAMING_STARTING:case OBS_FRONTEND_EVENT_STREAMING_STOPPING:restartingOutputs|=1;break;
       case OBS_FRONTEND_EVENT_STREAMING_STARTED:case OBS_FRONTEND_EVENT_STREAMING_STOPPED:restartingOutputs&=~1u;break;

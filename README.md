@@ -212,7 +212,7 @@ context-menu action without a marker. [Notes guide](docs/user-guide.md#contextua
 Click outside either the compact Add Source picker or the Quick Find popup to dismiss it.
 
 Open **Tools → Aftermarket → Find Sources…** to search the current scene
-collection by source, scene, filter, type, file path, or URL. Open native
+collection across named canvases by source, scene, filter, type, file path, or URL. Filter by scope, discovered type or canvas; inspect individual usages, reveal supported placements in Unscene without changing the live scene, and see live updates while the popup is open. Open native
 Properties or Filters, or jump to the scene. Studio Mode navigation targets
 the preview rather than the on-air program. Assign an OBS hotkey or add the
 palette to the Action Strip for faster access.

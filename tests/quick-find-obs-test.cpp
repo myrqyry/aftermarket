@@ -36,7 +36,23 @@ int main(int argc,char**argv){
     auto *filter=obs_source_create(filterInfo.id,"Optical Blur",nullptr,nullptr);
     REQUIRE(filter);
     obs_source_filter_add(source,filter);
+    auto *canvas=obs_canvas_create("Portrait fixture",nullptr,SCENE_REF);
+    REQUIRE(canvas);
+    auto *vertical=obs_canvas_scene_create(canvas,"Portrait scene");
+    REQUIRE(vertical);
+    auto *verticalItem=obs_scene_add(vertical,source);REQUIRE(verticalItem);
+    auto *duplicate=obs_scene_add(scene,source);REQUIRE(duplicate);
+    auto *unused=obs_source_create(info.id,"Unused fixture",nullptr,nullptr);REQUIRE(unused);
+    augment::startQuickFindWatch();
     const auto all=augment::collectObsQuickFind();
+    bool portrait=false,unplaced=false;
+    augment::QuickFindEntry sourceHit;
+    for(const auto &entry:all){
+      if(entry.name=="Portrait scene"){REQUIRE(!entry.mainCanvas&&entry.canvasNames.contains("Portrait fixture"));portrait=true;}
+      if(entry.id==id){sourceHit=entry;REQUIRE(entry.placements.size()==3&&entry.canvasNames.contains("Portrait fixture"));REQUIRE(entry.placements[0].key!=entry.placements[1].key);}
+      if(entry.name=="Unused fixture"){REQUIRE(entry.unplaced);unplaced=true;}
+    }
+    REQUIRE(portrait&&unplaced);
     const auto scenes=augment::QuickFind::search(all,"quickfind");
     bool foundScene=false,foundSource=false,foundFilter=false;
     augment::QuickFindEntry filterHit;
@@ -63,9 +79,19 @@ int main(int argc,char**argv){
     REQUIRE(augment::QuickFind::search(all,"optical blur").size()==1);
     REQUIRE(!augment::performObsQuickFind({augment::QuickFindEntry::Source, "stale",{},"","",{}, {},{}},
         augment::QuickFind::Filters));
+    const auto generation=augment::quickFindGeneration();
+    REQUIRE(!sourceHit.placements.isEmpty());
+    for(const auto &placement:sourceHit.placements)REQUIRE(augment::validateQuickFindPlacement(sourceHit,placement));
     obs_source_filter_remove(source,filter);
+    REQUIRE(augment::quickFindGeneration()!=generation);
     REQUIRE(!augment::performObsQuickFind(filterHit,augment::QuickFind::Filters));
     obs_source_release(filter);
+    const auto afterFilter=augment::quickFindGeneration();
+    obs_sceneitem_remove(verticalItem);
+    REQUIRE(augment::quickFindGeneration()!=afterFilter);
+    for(const auto &placement:sourceHit.placements)if(!placement.mainCanvas)REQUIRE(!augment::validateQuickFindPlacement(sourceHit,placement));
+    augment::stopQuickFindWatch();
+    obs_sceneitem_remove(duplicate);obs_scene_release(vertical);obs_canvas_remove(canvas);obs_canvas_release(canvas);obs_source_remove(unused);obs_source_release(unused);
     obs_sceneitem_remove(item);
     obs_source_remove(source);
     obs_source_release(source);

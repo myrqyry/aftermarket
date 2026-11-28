@@ -799,18 +799,17 @@ silently overwritten. No new polling or rendering thread is used.
 Open **Tools → Aftermarket → Find Sources…** to search the current OBS scene
 collection in a compact, temporary palette. The search matches **source,
 scene, and filter names**, OBS source types, and common source file paths or
-URLs. Results show a parent-scene context when known. Filtering is local to
+URLs. Results include named canvases, friendly source types, distinct placement and root-scene counts, and complete usage paths in the tooltip and Used in menu. Scope, source type, and canvas selectors filter the popup; only types present in the current scope are offered. The No scene placements scope is a conservative candidate list, not proof that a source is safe to delete. Filtering is local to
 OBS; it doesn't send content elsewhere. Click outside the palette or press
 Escape to dismiss it; opening its result context menu does not dismiss
 the palette.
 
-- **Enter** opens the selected result: a scene/source with an available parent
-  scene navigates to that scene, while a filter opens its **owning source's**
-  native Filters dialog. When Studio Mode is on, scene navigation targets
+- **Enter** opens the selected result: a main-canvas scene or a source with one main-canvas placement navigates to that scene. Shared sources open Properties instead of arbitrarily choosing an occurrence. A filter or secondary-canvas scene opens native Filters. When Studio Mode is on, scene navigation targets
   the **preview**, not the on-air program.
 - **Properties**, **Filters**, and **Go to scene** are independent actions.
   Typing in the search box does not change the live scene or source settings.
-  **Refresh** rebuilds the source index if something changed while it was open.
+  Changes to sources, filters, canvases and scene items trigger coalesced refresh while Quick Find is visible. Refresh also rebuilds manually; opening the popup always gets a fresh catalog. No refresh timer or scene subscriptions run while Quick Find is closed.
+- **Used in…** lists individual placement paths. Select a main-canvas occurrence to Go to scene, or Reveal in Unscene without changing the program/preview when a compatible Unscene is installed and the path is supported. Copy placement path is available for every listed occurrence. Secondary-canvas navigation is not implemented through the main frontend; properties/filters and paths are still available. Traversal and displayed usage are bounded; nested-scene routes can be reached through their separately indexed owning main scene but Unscene currently expands groups rather than embedded scenes. Command Center shares the upgraded catalog and ranking when opened; its separate popup does not have the Quick Find facets or live-refresh timer.
 - When Source Dock is loaded, **Pin to workspace** creates a native source or scene dock without switching scenes. Right-click eligible asynchronous video results for **Off-air frame limit…** if Frame Interleave Filter is loaded. See the optional integration sections above.
 - For one-click entry, add **Find sources** in the existing
   **Aftermarket → Workspace → Action strip → Edit buttons and status readouts… → Add… → search** editor.

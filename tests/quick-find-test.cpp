@@ -45,6 +45,15 @@ int main(int argc,char**argv){
     REQUIRE(augment::QuickFind::search(data,"",2).size()==2);
     REQUIRE(augment::QuickFind::search(data,"game",1).size()==1);
     REQUIRE(augment::QuickFind::search(data,"game",0).isEmpty());
+    data[2].typeName="Browser";
+    data[2].canvasNames={"Portrait"};data[2].canvasIds={"portrait"};
+    data[4].unplaced=true;
+    augment::QuickFindFilter facets;facets.scope=augment::QuickFindFilter::Filters;
+    REQUIRE(names(augment::QuickFind::search(data,"",80,facets))==QStringList{"filter-a"});
+    facets.scope=augment::QuickFindFilter::All;facets.type="browser_source";facets.canvas="portrait";
+    REQUIRE(names(augment::QuickFind::search(data,"Browser",80,facets))==QStringList{"source-b"});
+    facets={};facets.scope=augment::QuickFindFilter::Unplaced;
+    REQUIRE(names(augment::QuickFind::search(data,"",80,facets))==QStringList{"source-c"});
     QMainWindow main;
     augment::QuickFind palette(&main,[&]{return data;},[&](const QuickFindEntry &hit,augment::QuickFind::Action action){
         return hit.id=="filter-a"&&action==augment::QuickFind::Filters;
