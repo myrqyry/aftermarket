@@ -612,7 +612,7 @@ static void stopCustomUi(){
     if(cueDeck){cueDeck->cancel();cueDeck->closeManager();}
     nativeSettings.reset(); // remove only plugin page from any open native Settings
     healthStats.reset();setHealthResources(false);
-    sourcePicker.reset(); // existing native source dialogs finish normally
+    sourcePicker.reset(); // existing native picker dialogs finish normally
     if(panels)panels->restoreAll();
     mixerRetry.reset();
     actionStrip.reset(); // preserve desired state, restore Settings corner
