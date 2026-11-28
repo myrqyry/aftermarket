@@ -36,6 +36,9 @@
 #include "obs-settings-page.h"
 #include "source-picker.h"
 #include "health-stats.h"
+#include "restart-request.h"
+#include <QProcess>
+#include <QScopedValueRollback>
 #include "health-resources.h"
 #include "native-plugin-icons.h"
 #include <obs.hpp>
@@ -137,6 +140,12 @@ static augment::HealthSample sampleHealth(){
     return s;
 }
 static obs_hotkey_id quickFindHotkey=OBS_INVALID_HOTKEY_ID;
+static obs_hotkey_id restartHotkey=OBS_INVALID_HOTKEY_ID;
+static augment::RestartRequest restartRequest;
+static QString restartHelper,restartExecutable,restartCwd;
+static QStringList restartArgs;
+static unsigned restartingOutputs=0;
+static bool restartPrompt=false;
 // OBS frontend_save posts SaveProjectDeferred. Its callback receives module
 // data, not the whole scene JSON, so wait for that save to finish before
 // reading the native scene file. Never derive a filename from the UI label.
@@ -389,6 +398,57 @@ static void quickFindHotkeyState(obs_data_t *data,bool saving,void *){
         auto *bindings=obs_data_get_array(data,key);
         if(bindings){obs_hotkey_load(quickFindHotkey,bindings);obs_data_array_release(bindings);}
     }
+}
+static void restartHotkeyState(obs_data_t *data,bool saving,void *){
+    if(restartHotkey==OBS_INVALID_HOTKEY_ID||!data)return;
+    constexpr auto key="aftermarket.restart_obs.hotkey";
+    if(saving){
+        auto *bindings=obs_hotkey_save(restartHotkey);
+        if(bindings){obs_data_set_array(data,key,bindings);obs_data_array_release(bindings);}
+    }else{
+        auto *bindings=obs_data_get_array(data,key);
+        if(bindings){obs_hotkey_load(restartHotkey,bindings);obs_data_array_release(bindings);}
+    }
+}
+static bool outputsBusy(){
+    return restartingOutputs||obs_frontend_streaming_active()||obs_frontend_recording_active()||
+        obs_frontend_replay_buffer_active()||obs_frontend_virtualcam_active();
+}
+static void requestRestart(){
+    if(!frontendReady||!uiActive||restartPrompt||QApplication::activeModalWidget())return;
+    auto *main=static_cast<QWidget*>(obs_frontend_get_main_window());
+    if(!main)return;
+    QScopedValueRollback<bool> guard(restartPrompt,true);
+    if(outputsBusy()){
+        QMessageBox::information(main,"Restart OBS","Stop streaming, recording, replay buffer and virtual camera before restarting OBS.");
+        return;
+    }
+    // Sandboxed/temporary-mount launches require the original package
+    // launcher and a host-side handoff, not the inner OBS executable.
+    if(QFileInfo::exists("/.flatpak-info")||qEnvironmentVariableIsSet("APPIMAGE")||qEnvironmentVariableIsSet("SNAP")){
+        QMessageBox::information(main,"Restart OBS","Automatic restart is not available for this packaged OBS launch. Close OBS and reopen it using its launcher.");
+        return;
+    }
+    auto helper=QFileInfo(QString::fromUtf8(obs_get_module_binary_path(obs_current_module()))).absoluteDir().filePath("aftermarket-restart-helper"
+#ifdef Q_OS_WIN
+        ".exe"
+#endif
+    );
+    const auto executable=QCoreApplication::applicationFilePath();
+    if(!QFileInfo(helper).isExecutable()||!QFileInfo(executable).isExecutable()){
+        QMessageBox::warning(main,"Restart OBS","The restart helper or OBS executable is unavailable. Reinstall the complete Aftermarket package.");
+        return;
+    }
+    if(QMessageBox::question(main,"Restart OBS","Close and reopen OBS? Your current workspace will be saved by OBS. Outputs will not start automatically.",
+        QMessageBox::Yes|QMessageBox::Cancel,QMessageBox::Cancel)!=QMessageBox::Yes)return;
+    if(outputsBusy()||!frontendReady||!uiActive)return;
+    restartHelper=helper;restartExecutable=executable;restartCwd=QDir::currentPath();
+    restartArgs=augment::restartArguments(QCoreApplication::arguments().mid(1));
+    restartRequest.request([main]{return main->close();});
+}
+static void restartHotkeyCallback(void *,obs_hotkey_id,obs_hotkey_t *,bool pressed){
+    if(pressed)if(auto *app=QCoreApplication::instance())
+        QMetaObject::invokeMethod(app,[]{requestRestart();},Qt::QueuedConnection);
 }
 static bool setHamburgerMenuBar(bool enabled) {
     if(!compactBar)return false;
@@ -751,6 +811,15 @@ static void cleanupUi(){
     dockLayouts.reset();
 }
 static void frontendEvent(enum obs_frontend_event event, void *) {
+    switch(event){
+      case OBS_FRONTEND_EVENT_STREAMING_STARTING:case OBS_FRONTEND_EVENT_STREAMING_STOPPING:restartingOutputs|=1;break;
+      case OBS_FRONTEND_EVENT_STREAMING_STARTED:case OBS_FRONTEND_EVENT_STREAMING_STOPPED:restartingOutputs&=~1u;break;
+      case OBS_FRONTEND_EVENT_RECORDING_STARTING:case OBS_FRONTEND_EVENT_RECORDING_STOPPING:restartingOutputs|=2;break;
+      case OBS_FRONTEND_EVENT_RECORDING_STARTED:case OBS_FRONTEND_EVENT_RECORDING_STOPPED:restartingOutputs&=~2u;break;
+      case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTING:case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPING:restartingOutputs|=4;break;
+      case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STARTED:case OBS_FRONTEND_EVENT_REPLAY_BUFFER_STOPPED:restartingOutputs&=~4u;break;
+      default:break;
+    }
     if(nativeActions&&event!=OBS_FRONTEND_EVENT_EXIT)nativeActions->onFrontendEvent(event);
     if(nativeNotes&&event!=OBS_FRONTEND_EVENT_EXIT)nativeNotes->schedule();
     if(sourceInspector){
@@ -769,6 +838,13 @@ static void frontendEvent(enum obs_frontend_event event, void *) {
             mixerRetry->start();
     }
     if (event==OBS_FRONTEND_EVENT_EXIT) {
+        restartRequest.exitAccepted([]{
+            const QStringList args=QStringList{QString::number(QCoreApplication::applicationPid()),restartExecutable,restartCwd}+restartArgs;
+            const bool launched=QProcess::startDetached(restartHelper,args,restartCwd);
+            blog(launched?LOG_INFO:LOG_ERROR,"[aftermarket] Restart helper %s",launched?"launched":"could not launch");
+            return launched;
+        });
+        frontendReady=false;
         cleanupUi();
         if(controller){controller->setMeterProvider({});controller->setAudioProvider({});}
         audio.reset();
@@ -824,6 +900,8 @@ MODULE_EXPORT bool obs_module_load(void) {
     quickFindHotkey=obs_hotkey_register_frontend("aftermarket.quick_find",
         "Aftermarket: Quick Find sources and filters",quickFindHotkeyCallback,nullptr);
     obs_frontend_add_save_callback(quickFindHotkeyState,nullptr);
+    restartHotkey=obs_hotkey_register_frontend("aftermarket.restart_obs","Aftermarket: Restart OBS",restartHotkeyCallback,nullptr);
+    obs_frontend_add_save_callback(restartHotkeyState,nullptr);
     auto *main=static_cast<QWidget*>(obs_frontend_get_main_window());
     emergency=std::make_unique<augment::EmergencyRecovery>(
         QDir(folder).filePath("safe-mode.flag"),main,
@@ -878,6 +956,8 @@ MODULE_EXPORT bool obs_module_load(void) {
         // The tools menu can still be closing when this signal arrives.
         QTimer::singleShot(0,[]{showQuickFind();});
     });
+    if(auto *restartAction=toolsMenu->action(Command::Restart))
+        QObject::connect(restartAction,&QAction::triggered,controller,[]{QTimer::singleShot(0,[]{requestRestart();});});
     auto *emergencyAction=toolsMenu->action(Command::Emergency);
     if(emergencyAction)QObject::connect(emergencyAction,&QAction::triggered,controller,[]{
         if(emergency&&!emergency->engage()&&!emergency->active())
@@ -903,6 +983,8 @@ MODULE_EXPORT bool obs_module_load(void) {
 MODULE_EXPORT void obs_module_unload(void) {
     obs_frontend_remove_event_callback(frontendEvent,nullptr);
     obs_frontend_remove_save_callback(quickFindHotkeyState,nullptr);
+    obs_frontend_remove_save_callback(restartHotkeyState,nullptr);
+    if(restartHotkey!=OBS_INVALID_HOTKEY_ID){obs_hotkey_unregister(restartHotkey);restartHotkey=OBS_INVALID_HOTKEY_ID;}
     if(quickFindHotkey!=OBS_INVALID_HOTKEY_ID){
         obs_hotkey_unregister(quickFindHotkey);
         quickFindHotkey=OBS_INVALID_HOTKEY_ID;

@@ -367,3 +367,5 @@ OBS Studio, Qt, and separately installed companion plugins retain their own
 licenses. This license does not imply endorsement by their maintainers.
 
 Conditional performance alerts show only when OBS detects new frame loss, stream connection problems or sustained CPU/GPU/render pressure. The status-bar indicator hides after recovery and exposes detailed metrics on demand.
+
+Optional Restart OBS command (Tools → Aftermarket, configurable native hotkey, or action-strip button) uses OBS's ordinary close and a separate process that waits for the original instance to exit before relaunching.

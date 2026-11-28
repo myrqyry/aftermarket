@@ -8,7 +8,7 @@ namespace augment {
 // Never moves or deletes third-party/native actions.
 class ToolsMenu final {
 public:
-    enum class Command { Workspace, Find, CommandCenter, Emergency, Resume };
+    enum class Command { Workspace, Find, CommandCenter, Emergency, Resume, Restart };
     explicit ToolsMenu(QAction *anchor);
     ~ToolsMenu();
     ToolsMenu(const ToolsMenu&)=delete;

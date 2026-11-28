@@ -5,6 +5,8 @@ build="$(realpath -m "$root/build")"
 if (( $# )); then build="$1"; fi
 src="$build/aftermarket.so"
 [[ -s "$src" ]] || { echo "Build the plugin first: $src" >&2; exit 1; }
+helper="$build/aftermarket-restart-helper"
+[[ -x "$helper" ]] || { echo "Build the restart helper first: $helper" >&2; exit 1; }
 config="${XDG_CONFIG_HOME:-$HOME/.config}/obs-studio"
 plugins="$config/plugins"
 dest="$plugins/aftermarket/bin/64bit"
@@ -33,6 +35,8 @@ if [[ -e "$legacy" || -L "$legacy" ]]; then
 fi
 install -Dm644 "$root/LICENSE" "$plugins/aftermarket/data/LICENSE"
 install -Dm644 "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$plugins/aftermarket/data/THIRD_PARTY_NOTICES.txt"
+install -m 755 "$helper" "$dest/.aftermarket-restart-helper.new"
+mv -f -- "$dest/.aftermarket-restart-helper.new" "$dest/aftermarket-restart-helper"
 mv -f -- "$temp" "$dest/aftermarket.so"
 published=true
 echo "Installed $dest/aftermarket.so"

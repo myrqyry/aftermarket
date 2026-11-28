@@ -20,6 +20,6 @@ jobs:
       module: aftermarket
       profile: full
       driver: caller
-      minimum-tests: 48
+      minimum-tests: 49
       source-package: false
       upload-artifacts: true
