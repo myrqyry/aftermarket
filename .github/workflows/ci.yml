@@ -15,12 +15,12 @@ concurrency:
 
 jobs:
   build:
-    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@73cc0ec83c3182cb471fc977d2de676416194852
+    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@5fa9df365362a023a404d5bb4b276e62ec906043
     with:
       module: aftermarket
       profile: full
       driver: caller
-      engine-revision: 73cc0ec83c3182cb471fc977d2de676416194852
+      engine-revision: 5fa9df365362a023a404d5bb4b276e62ec906043
       linux-sdk-cache: true
       required-paths: |
         .github/scripts/ci-project.sh

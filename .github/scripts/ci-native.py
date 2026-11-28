@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 from native_caller import layout, verify_payload
+import native_sdk as sdk
 
 MODULE = "aftermarket"
 
@@ -10,6 +11,15 @@ def configure(root, work, target, version):
     # gate; POSIX-specific installer and GUI tests need separate native ports.
     return ["-DBUILD_TESTING=OFF",
             "-DAFTERMARKET_PACKAGE_LAYOUT=" + ("legacy" if version=="32.2.0" else "modern")]
+
+def sign_restart_helper(helper, target):
+    # Intel executables are not automatically ad-hoc signed like arm64.
+    # Sign the explicit nested executable before the shared driver signs
+    # the enclosing plugin, never use blanket codesign --deep signing.
+    sdk.run(*sdk.mac_arch_command(helper, target))
+    sdk.run("otool", "-L", helper)
+    sdk.run("codesign", "--force", "--sign", "-", helper)
+    sdk.run("codesign", "--verify", "--strict", helper)
 
 def stage(root, installed, payload, target, version):
     binary, data, notice = layout(payload, MODULE, target, version)
@@ -36,4 +46,6 @@ def stage(root, installed, payload, target, version):
     shutil.copy2(source_helper, helper)
     if helper.read_bytes() != source_helper.read_bytes():
         raise ValueError("Restart helper changed during staging")
+    if mac:
+        sign_restart_helper(helper, target)
     return verified

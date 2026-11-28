@@ -2,7 +2,7 @@
 
 ## Current qualification contract
 
-The full shared matrix uses pinned workflow and engine `73cc0ec` with
+The full shared matrix uses pinned workflow and engine `5fa9df3` with
 caller preflight, four engine builds, and verified Linux SDK-only caching.
 Both Linux legs retain the specialized verifier and 49-test minimum.
 The package allowlist requires the module, its adjacent restart helper,
@@ -167,3 +167,10 @@ Red compile checks for new monitoring and header-fit interfaces,
 five focused tests, and the complete 46/46 local OBS32/Qt6.4.2 test
 suite passed after the fix. OBS33 and Qt6.10.2 still require hosted
 qualification; no native runtime acceptance is claimed for other hosts.
+
+The restored SDK receipt is checked before caller compilation; an invalid
+restore is quarantined and rebuilt from pinned OBS sources. Only a verified
+cache miss is saved, before the caller runs. On macOS the adjacent restart
+helper is architecture-checked, ad-hoc signed and independently verified
+before the enclosing plugin bundle is signed. The Intel signing regression
+was observed in run 46110039221; new hosted signing remains to qualify.

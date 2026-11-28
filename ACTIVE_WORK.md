@@ -4250,3 +4250,16 @@ skips/failures, and the four-file archive was inspected and checksum
 verified. Shared driver source matches the pinned revision. Hosted OBS33
 and Windows/macOS runtime verification remains outstanding. No production
 installation or OBS restart during this reconciliation.
+
+## Hosted follow-up to 47b181d
+Run 46110039221: plan, four engine builds, both Windows, both Apple
+Silicon and Linux OBS32 passed. Intel macOS both compiled, failed bundle
+signing because the nested restart helper was unsigned. Explicit helper
+architecture, linkage and ad-hoc signing/verification before enclosing
+bundle signing; fixture and command-order tests pass. Linux OBS33 restored
+an exact cache key, but receipt rejected its contents; exact cause of
+original mismatch unavailable from old diagnostics. Updated shared workflow
+pin for quarantine/rebuild, pre-caller save and detailed receipt diagnostics.
+Real local OBS32 cache rejection recovery and tar roundtrip passed in
+shared engine; local OBS33 source configure blocked by FFmpeg 6.1 vs 8.0.
+No user runtime/system package changes. New hosted matrix pending.
