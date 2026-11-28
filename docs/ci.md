@@ -1,5 +1,21 @@
 # CI and package verification
 
+## Current qualification contract
+
+The full shared matrix uses pinned workflow and engine `73cc0ec` with
+caller preflight, four engine builds, and verified Linux SDK-only caching.
+Both Linux legs retain the specialized verifier and 49-test minimum.
+The package allowlist requires the module, its adjacent restart helper,
+GPL license and libebur128 notices (plus bundle metadata on macOS).
+Linux verifies both executables' dependencies, rejects embedded runtime
+search paths, and compares their extracted bytes and helper execute mode.
+Native Windows/macOS fixtures reject missing helpers, unexpected files,
+and missing licenses. Hosted runtime execution of the helper is not
+established by these fixtures. The following sections record the earlier
+pilot history.
+
+## Original pilot
+
 The initial Linux CI pilot adapts the pinned OBS SDK build from Framerot
 (commit 16d1ece8), the strict test gate and version-specific build approach
 from Timeline, and the package/content integrity checks from both.

@@ -304,7 +304,7 @@ ctest --test-dir build --output-on-failure
 ./scripts/install.sh
 ```
 
-Restart OBS. Existing themes and configuration are preserved by the installer. For same-name upgrades, back up the previous module outside the plugin directory before installing. Optional companion plugins are installed separately.
+Restart OBS. The installer places the required restart helper beside the plugin binary and preserves existing themes and configuration. For same-name upgrades, back up the previous module outside the plugin directory before installing. Optional companion plugins are installed separately.
 The module and configuration directory are now named aftermarket. The Linux installer moves the legacy obs-ui-augment package outside OBS’s search path; existing settings migrate as a complete directory on the next launch. See the [upgrade guide](docs/user-guide.md#upgrading-from-obs-ui-augment).
 
 **Compatibility:** Runtime verification currently covers Linux/X11,
@@ -318,22 +318,22 @@ DPI configurations, and OBS versions need additional verification.
 
 The [shared CI workflow](.github/workflows/ci.yml) selects eight OBS
 32.2.0 and 33.0.3 build targets: Linux x86-64, Windows x64, macOS Intel
-and macOS Apple Silicon. Both Linux legs require all 46 native tests
-without skips. Windows and macOS build and inspect production packages;
-native interactive runtime qualification remains separate.
-Packages are downloadable CI artifacts, not automatic releases.
+and macOS Apple Silicon. Both Linux legs require at least 49 native CTests
+without skips. The shared engine is revision-verified and reused across
+OBS versions; Linux SDK caching verifies the exact build environment and
+installed SDK receipt before reuse. Windows and macOS build and inspect
+production packages; native interactive runtime qualification remains separate.
 
-At commit `77a6d4a`, [hosted run 45929248597](https://github.com/myrqyry/aftermarket/actions/runs/45929248597)
-produced seven successful native binary packages. Linux OBS33 compiled
-but failed four runtime regression tests. The follow-up addresses
-the OBS33 monitoring API change, compact native dock geometry and
-Qt 6.10.2 menu adapter. The complete local OBS32/Qt6.4.2 suite passed
-46/46; the new hosted OBS33 result remains to be verified.
+Packages are downloadable CI test artifacts, not automatic releases.
+Keep the restart helper alongside the plugin binary and preserve the GPL
+license and bundled libebur128 notices. Download the package matching your
+OBS version and platform. Restart-helper runtime behavior has been verified
+on Linux; Windows/macOS native execution remains unverified.
 
-For a local build using matching development headers, use the commands
-above. The same CI validation driver can also run against an explicit
-installed SDK (see [CI guide](docs/ci.md)). The temporary module-only
-archive is for verification and testing, not an automatic release.
+The [Actions history](https://github.com/myrqyry/aftermarket/actions)
+records exact-candidate hosted results. The local combined feature
+checkpoint passed all 49 CTests. See the [CI guide](docs/ci.md) for package
+verification, SDK setup and historical qualification details.
 
 ## Recovery and documentation
 

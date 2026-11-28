@@ -1,4 +1,6 @@
+import os
 import shutil
+from pathlib import Path
 from native_caller import layout, verify_payload
 
 MODULE = "aftermarket"
@@ -11,9 +13,27 @@ def configure(root, work, target, version):
 
 def stage(root, installed, payload, target, version):
     binary, data, notice = layout(payload, MODULE, target, version)
-    if target.startswith("macos-"):
-        shutil.copytree(installed/"aftermarket.plugin", payload/"aftermarket.plugin")
-    else:
-        shutil.copytree(installed, payload/MODULE)
+    # The shared verifier checks the exact original module/assets allowlist.
+    # Validate the known auxiliary executable separately.
+    mac = target.startswith("macos-")
+    source_root = installed / "aftermarket.plugin" if mac else installed
+    destination_root = payload / ("aftermarket.plugin" if mac else MODULE)
+    helper_name = "aftermarket-restart-helper" + (".exe" if target == "windows-x64" else "")
+    helper = binary.with_name(helper_name)
+    source_helper = source_root / helper.relative_to(destination_root)
+    if (source_helper.is_symlink() or not source_helper.is_file()
+            or source_helper.stat().st_size == 0
+            or (mac and not os.access(source_helper, os.X_OK))):
+        raise ValueError("Missing or invalid restart helper")
+    if source_root.is_symlink() or any(p.is_symlink() for p in source_root.rglob("*")):
+        raise ValueError("Unexpected symlink")
+    def ignore_helper(directory, names):
+        return [helper_name] if Path(directory) == source_helper.parent and helper_name in names else []
+    shutil.copytree(source_root, destination_root, ignore=ignore_helper)
     expected = (root/"third_party/libebur128/THIRD_PARTY_NOTICES.txt").read_bytes()
-    return verify_payload(payload,MODULE,target,version,{"THIRD_PARTY_NOTICES.txt":expected,"LICENSE":(root/"LICENSE").read_bytes()},None)
+    verified = verify_payload(payload, MODULE, target, version,
+        {"THIRD_PARTY_NOTICES.txt": expected, "LICENSE": (root/"LICENSE").read_bytes()}, None)
+    shutil.copy2(source_helper, helper)
+    if helper.read_bytes() != source_helper.read_bytes():
+        raise ValueError("Restart helper changed during staging")
+    return verified

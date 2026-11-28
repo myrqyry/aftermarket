@@ -26,6 +26,9 @@ class Test(unittest.TestCase):
                         data=installed/"data"
                         binary.parent.mkdir(parents=True)
                     binary.write_bytes(b"module")
+                    helper=binary.with_name("aftermarket-restart-helper" + (".exe" if target=="windows-x64" else ""))
+                    helper.write_bytes(b"helper")
+                    helper.chmod(0o755)
                     data.mkdir()
                     (data/"LICENSE").write_bytes((ROOT/"LICENSE").read_bytes())
                     notice=data/"THIRD_PARTY_NOTICES.txt"
@@ -33,6 +36,18 @@ class Test(unittest.TestCase):
                     out=hook.stage(ROOT,installed,work/"package",target,version)
                     self.assertEqual(out.read_bytes(),b"module")
                     self.assertTrue(out.is_file())
+                    packaged=out.with_name(helper.name)
+                    self.assertEqual(packaged.read_bytes(),b"helper")
+                    helper.unlink()
+                    with self.assertRaisesRegex(ValueError,"Missing or invalid restart helper"):
+                        hook.stage(ROOT,installed,work/"missing-helper",target,version)
+                    helper.write_bytes(b"helper")
+                    helper.chmod(0o755)
+                    extra=helper.with_name("unexpected")
+                    extra.write_bytes(b"extra")
+                    with self.assertRaisesRegex(ValueError,"Unexpected native package files"):
+                        hook.stage(ROOT,installed,work/"extra-file",target,version)
+                    extra.unlink()
                     (data/"LICENSE").unlink()
                     with self.assertRaisesRegex(ValueError,"Missing or changed asset: LICENSE"):
                         hook.stage(ROOT,installed,work/"missing-license",target,version)

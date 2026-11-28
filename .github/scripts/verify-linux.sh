@@ -74,7 +74,11 @@ test -s "$binary"
 # or build outputs accidentally enter this preliminary plugin package.
 expected=$(printf '%s\n' "$module/$rel")
 if [[ "$module" == aftermarket ]]; then
-  expected=$(printf '%s\n' "$module/$rel" "$module/data/LICENSE" "$module/data/THIRD_PARTY_NOTICES.txt")
+  helper_rel="$(dirname "$rel")/aftermarket-restart-helper"
+  helper_rel="${helper_rel#./}"
+  helper="$stage/$module/$helper_rel"
+  test -s "$helper" && test -x "$helper"
+  expected=$(printf '%s\n' "$module/$rel" "$module/$helper_rel" "$module/data/LICENSE" "$module/data/THIRD_PARTY_NOTICES.txt")
   cmp "$root/LICENSE" "$stage/$module/data/LICENSE"
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$stage/$module/data/THIRD_PARTY_NOTICES.txt"
 fi
@@ -84,6 +88,13 @@ if readelf -d "$binary" | grep -E '(RPATH|RUNPATH)' ; then
   exit 1
 fi
 ldd "$binary" > "$work/dependencies.txt"
+if [[ "$module" == aftermarket ]]; then
+  if readelf -d "$helper" | grep -E '(RPATH|RUNPATH)'; then
+    echo "Unexpected restart helper runtime search path" >&2
+    exit 1
+  fi
+  ldd "$helper" >> "$work/dependencies.txt"
+fi
 if grep -F "not found" "$work/dependencies.txt"; then exit 1; fi
 tar -C "$stage" -czf "$work/$archive_name" "$module"
 tar -tzf "$work/$archive_name" > "$work/package-members.txt"
@@ -94,6 +105,8 @@ tar -xzf "$work/$archive_name" -C "$work/extracted"
 test "$(find "$work/extracted" -mindepth 1 ! -type d -printf '%P\n' | sort)" = "$(printf '%s\n' "$expected" | sort)"
 cmp "$binary" "$work/extracted/$module/$rel"
 if [[ "$module" == aftermarket ]]; then
+  test -x "$work/extracted/$module/$helper_rel"
+  cmp "$helper" "$work/extracted/$module/$helper_rel"
   cmp "$root/LICENSE" "$work/extracted/$module/data/LICENSE"
   cmp "$root/third_party/libebur128/THIRD_PARTY_NOTICES.txt" "$work/extracted/$module/data/THIRD_PARTY_NOTICES.txt"
 fi

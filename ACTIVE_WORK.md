@@ -4235,3 +4235,18 @@ Kept popup (no dock). Public named canvas enumeration and all public sources; bo
 ## Shared CI verified SDK-only cache
 
 Opt in to shared workflow/engine 73cc0ec, retaining the unchanged specialized Linux verifier and all eight matrix rows. Local clean OBS 32.2.0 cache-miss pilot built the plugin and all 48 registered native CTests passed; exact staged/extracted module and both license files verified, archive SHA-256 checked and native ELF exports inspected. Restoring only the installed SDK and receipt at the same prefix passed the actual SDK-only verifier with the same receipt and no SDK compile or source fetch. Hosted cache hit, OBS33 cache-specific build and Windows/macOS jobs still require hosted qualification; no runtime UI changes or local installation.
+
+## 2026-11-27 local feature reconciliation
+Combined all three outstanding feature commits and the pre-existing comment
+correction with current remote main, retaining the 73cc0ec shared workflow,
+SDK-only cache, and 49-test floor. Restart helper packaging had been
+missing from the exact allowlist; six Windows/macOS layout fixtures
+reproduced the rejection, now pass with missing helper/license and extra
+file rejection. Linux verifies the adjacent executable, dependency
+resolution, no embedded runtime search paths, archive execute mode and
+byte-identical extraction. Full existing local suite 49/49; independent
+clean Release build using the pinned OBS32 SDK passed 49/49, with no
+skips/failures, and the four-file archive was inspected and checksum
+verified. Shared driver source matches the pinned revision. Hosted OBS33
+and Windows/macOS runtime verification remains outstanding. No production
+installation or OBS restart during this reconciliation.
