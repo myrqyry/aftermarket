@@ -15,11 +15,20 @@ concurrency:
 
 jobs:
   build:
-    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@e9eb704437e606721ee92d7d064c4b8168fd8f53
+    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@8e154829826b6832ea197f78566577bc6acffa1b
     with:
       module: aftermarket
       profile: full
       driver: caller
+      engine-revision: 8e154829826b6832ea197f78566577bc6acffa1b
+      required-paths: |
+        .github/scripts/verify-linux.sh
+        .github/scripts/ci-native.py
+        .github/scripts/test-native-caller.py
+        .github/scripts/test-readme-links.py
+        .github/scripts/check_readme_links.py
+        LICENSE
+        third_party/libebur128/THIRD_PARTY_NOTICES.txt
       minimum-tests: 48
       source-package: false
       upload-artifacts: true
