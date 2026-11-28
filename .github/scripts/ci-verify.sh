@@ -2,14 +2,10 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 [[ "$MODULE" == aftermarket && "$PUBLIC_NAME" == aftermarket ]]
-pin=e9eb704437e606721ee92d7d064c4b8168fd8f53
-engine="$RUNNER_TEMP/obs-ci-engine"
-git init -q "$engine"
-git -C "$engine" fetch --depth=1 https://github.com/myrqyry/obs-plugin-ci.git "$pin"
-git -C "$engine" checkout --detach FETCH_HEAD
+# Use the revision-verified executable restored by the shared workflow.
+engine="${OBS_CI_ENGINE_ROOT:?Missing verified shared engine}"
+pin="${ENGINE_REVISION:?Missing immutable shared engine revision}"
 [[ "$(git -C "$engine" rev-parse HEAD)" == "$pin" ]]
-rustup toolchain install 1.93.1 --profile minimal
-cargo +1.93.1 build --release --locked --manifest-path "$engine/Cargo.toml"
 export OBS_CI_SCRIPTS="$engine/scripts"
 python "$root/.github/scripts/test-native-caller.py"
 if [[ "$TARGET" != linux-x86_64 ]]; then
@@ -21,12 +17,17 @@ fi
     echo "Expected aftermarket-linux-x86_64-obs$OBS_VERSION-test.tar.gz, got $ARCHIVE" >&2
     exit 1
 }
-sdk="${AFTERMARKET_LOCAL_SDK:-$RUNNER_TEMP/obs-sdk/sdk}"
-if [[ -z "${AFTERMARKET_LOCAL_SDK:-}" ]]; then
-    bash "$engine/scripts/prepare-linux-sdk.sh" "$RUNNER_TEMP/obs-sdk" "$OBS_VERSION"
+if [[ "${OBS_CI_LINUX_SDK_CACHE:-false}" == true ]]; then
+    [[ -z "${AFTERMARKET_LOCAL_SDK:-}" ]]
+    bash "$engine/scripts/run-linux-caller.sh" "$root" --sdk-only
+    sdk="$RUNNER_TEMP/caller-work/obs/sdk"
 else
-    # Hosted jobs must use the pinned prepared SDK, not a local override.
-    [[ "${GITHUB_ACTIONS:-}" != true ]]
+    sdk="${AFTERMARKET_LOCAL_SDK:-$RUNNER_TEMP/obs-sdk/sdk}"
+    if [[ -z "${AFTERMARKET_LOCAL_SDK:-}" ]]; then
+        bash "$engine/scripts/prepare-linux-sdk.sh" "$RUNNER_TEMP/obs-sdk" "$OBS_VERSION"
+    else
+        [[ "${GITHUB_ACTIONS:-}" != true ]]
+    fi
 fi
 bash "$root/.github/scripts/verify-linux.sh" "$sdk" "$RUNNER_TEMP/plugin-ci" "$MODULE" "$MINIMUM_TESTS"
 "$engine/target/release/obs-ci" inspect-module "$RUNNER_TEMP/plugin-ci/$ARCHIVE" --module "$MODULE" --target "$TARGET" --obs-version "$OBS_VERSION"
