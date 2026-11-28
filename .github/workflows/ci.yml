@@ -15,13 +15,15 @@ concurrency:
 
 jobs:
   build:
-    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@8e154829826b6832ea197f78566577bc6acffa1b
+    uses: myrqyry/obs-plugin-ci/.github/workflows/build.yml@73cc0ec83c3182cb471fc977d2de676416194852
     with:
       module: aftermarket
       profile: full
       driver: caller
-      engine-revision: 8e154829826b6832ea197f78566577bc6acffa1b
+      engine-revision: 73cc0ec83c3182cb471fc977d2de676416194852
+      linux-sdk-cache: true
       required-paths: |
+        .github/scripts/ci-project.sh
         .github/scripts/verify-linux.sh
         .github/scripts/ci-native.py
         .github/scripts/test-native-caller.py

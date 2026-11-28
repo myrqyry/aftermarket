@@ -17,12 +17,17 @@ fi
     echo "Expected aftermarket-linux-x86_64-obs$OBS_VERSION-test.tar.gz, got $ARCHIVE" >&2
     exit 1
 }
-sdk="${AFTERMARKET_LOCAL_SDK:-$RUNNER_TEMP/obs-sdk/sdk}"
-if [[ -z "${AFTERMARKET_LOCAL_SDK:-}" ]]; then
-    bash "$engine/scripts/prepare-linux-sdk.sh" "$RUNNER_TEMP/obs-sdk" "$OBS_VERSION"
+if [[ "${OBS_CI_LINUX_SDK_CACHE:-false}" == true ]]; then
+    [[ -z "${AFTERMARKET_LOCAL_SDK:-}" ]]
+    bash "$engine/scripts/run-linux-caller.sh" "$root" --sdk-only
+    sdk="$RUNNER_TEMP/caller-work/obs/sdk"
 else
-    # Hosted jobs must use the pinned prepared SDK, not a local override.
-    [[ "${GITHUB_ACTIONS:-}" != true ]]
+    sdk="${AFTERMARKET_LOCAL_SDK:-$RUNNER_TEMP/obs-sdk/sdk}"
+    if [[ -z "${AFTERMARKET_LOCAL_SDK:-}" ]]; then
+        bash "$engine/scripts/prepare-linux-sdk.sh" "$RUNNER_TEMP/obs-sdk" "$OBS_VERSION"
+    else
+        [[ "${GITHUB_ACTIONS:-}" != true ]]
+    fi
 fi
 bash "$root/.github/scripts/verify-linux.sh" "$sdk" "$RUNNER_TEMP/plugin-ci" "$MODULE" "$MINIMUM_TESTS"
 "$engine/target/release/obs-ci" inspect-module "$RUNNER_TEMP/plugin-ci/$ARCHIVE" --module "$MODULE" --target "$TARGET" --obs-version "$OBS_VERSION"
